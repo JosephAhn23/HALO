@@ -41,6 +41,10 @@ dependencies = [
     "langchain-core>=0.2.0",
     "langchain-openai>=0.1.0",
     "langgraph>=0.1.0",
+    # ragas<=0.4.3 imports langchain_community.chat_models.vertexai at module load
+    # time; that submodule was removed in langchain-community 0.4.2. Pin below that
+    # until ragas drops the import (unreleased upstream fix as of this writing).
+    "langchain-community>=0.2.0,<0.4.2",
 
     # Evaluation
     "ragas>=0.1.0",

@@ -4,7 +4,7 @@ from agents.multi_agent.cross_provider_consensus import (
     CrossProviderConsensusResult,
     ProviderAnswer,
 )
-from agents.orchestrator import Pipeline, after_behavioral, should_continue
+from agents.orchestrator import Pipeline, after_behavioral, after_cost_route, should_continue
 
 
 # ─── Existing tests ────────────────────────────────────────────
@@ -24,6 +24,11 @@ def test_after_behavioral_skips_rag_when_flagged() -> None:
     assert after_behavioral({"skip_rag": False}) == "retrieve"
 
 
+def test_after_cost_route_skips_synthesis_when_flagged() -> None:
+    assert after_cost_route({"skip_rag": True}) == "__end__"
+    assert after_cost_route({"skip_rag": False}) == "synthesize"
+
+
 # ─── Pipeline.run() ────────────────────────────────────────────
 
 def _make_pipeline(
@@ -37,6 +42,8 @@ def _make_pipeline(
     constitutional_classifier=None,
     enable_behavioral_gate: bool = False,
     enable_policy_enforcement: bool = False,
+    cost_router=None,
+    synthesizer_tiers=None,
 ) -> Pipeline:
     retriever = MagicMock()
     if retrieve_side_effect:
@@ -72,6 +79,8 @@ def _make_pipeline(
         enable_attribution=enable_attribution,
         enable_behavioral_gate=enable_behavioral_gate,
         enable_policy_enforcement=enable_policy_enforcement,
+        cost_router=cost_router,
+        synthesizer_tiers=synthesizer_tiers,
     )
 
 
@@ -217,3 +226,71 @@ def test_pipeline_run_nested_mlflow_when_active_run_exists() -> None:
         pipeline.run("query")
     # nested=True must be passed when there is an active run
     mock_mlflow.start_run.assert_called_once_with(nested=True)
+
+
+# ─── Cost router gate ──────────────────────────────────────────
+
+def _make_router(abstain: bool, complexity_tier=None, model=None, reasoning="mock"):
+    from agents.multi_agent.cost_router import RouterDecision
+
+    router = MagicMock()
+    router.route.return_value = RouterDecision(
+        abstain=abstain,
+        complexity_tier=complexity_tier,
+        model=model,
+        retrieval_top_score=0.9 if not abstain else 0.1,
+        n_retrieved=1,
+        reasoning=reasoning,
+    )
+    return router
+
+
+def test_pipeline_cost_router_abstains_without_calling_synthesizer() -> None:
+    pipeline = _make_pipeline(cost_router=_make_router(abstain=True, reasoning="no relevant docs"))
+    with patch("agents.orchestrator.mlflow"):
+        result = pipeline.run("what's a good pancake recipe substitute?")
+    assert result["error"] == ""
+    assert result["response"]["abstained"] is True
+    assert result["response"]["tokens_used"] == 0
+    pipeline.synthesizer.synthesize.assert_not_called()
+
+
+def test_pipeline_cost_router_routes_to_tier_synthesizer() -> None:
+    tier_synth = MagicMock()
+    tier_synth.synthesize.return_value = {
+        "answer": "premium answer",
+        "sources": ["s.md"],
+        "tokens_used": 50,
+        "prompt_tokens": 40,
+        "completion_tokens": 10,
+    }
+    pipeline = _make_pipeline(
+        cost_router=_make_router(abstain=False, complexity_tier="high", model="gpt-4o"),
+        synthesizer_tiers={"high": tier_synth},
+    )
+    with patch("agents.orchestrator.mlflow"):
+        result = pipeline.run("compare tradeoffs of two approaches")
+    assert result["response"]["answer"] == "premium answer"
+    tier_synth.synthesize.assert_called_once()
+    pipeline.synthesizer.synthesize.assert_not_called()
+
+
+def test_pipeline_cost_router_falls_back_to_default_synthesizer_for_unmapped_tier() -> None:
+    pipeline = _make_pipeline(
+        cost_router=_make_router(abstain=False, complexity_tier="low", model="gpt-4o-mini"),
+        synthesizer_tiers={},  # no tier registered -> should fall back to self.synthesizer
+    )
+    with patch("agents.orchestrator.mlflow"):
+        result = pipeline.run("what is a vector database?")
+    assert result["response"]["answer"] == "42"
+    pipeline.synthesizer.synthesize.assert_called_once()
+
+
+def test_pipeline_without_cost_router_is_unaffected() -> None:
+    """cost_router=None (the default) must behave exactly as before this
+    feature existed — no route_decision, no abstention possible."""
+    pipeline = _make_pipeline()
+    with patch("agents.orchestrator.mlflow"):
+        result = pipeline.run("query")
+    assert "route_decision" not in result or result.get("route_decision") is None
+    assert result["response"]["answer"] == "42"

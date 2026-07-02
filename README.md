@@ -83,6 +83,8 @@
 | Throughput | `0.9 QPS` | Single node, sequential. Bottleneck is the external LLM API call, not the retrieval stack. Parallelising requests or switching to a local vLLM backend removes this ceiling. |
 | vLLM fp16 | `~1,500 tok/s` | Architecture target based on published A100 benchmarks |
 | vLLM int4-AWQ | `~3,000 tok/s` | Architecture target based on published A100 benchmarks |
+| Cost-aware router savings | `80.5%` vs. always-`gpt-4o` | `n=40` eval queries; see [RESULTS.md](RESULTS.md#cost-aware-router) for method and caveats |
+| Retrieval ablation (bi-encoder vs. +reranker) | reranking did **not** win on this eval | `n=22` labeled queries; see [RESULTS.md](RESULTS.md#retrieval-ablation-bi-encoder-vs-bi-encoder--cross-encoder-reranking) |
 
 ### RAGAS Quality Scores
 
@@ -104,7 +106,8 @@ Every component maps to a concrete business outcome.
 | Capability | Business Problem Solved | Measurable Impact |
 |:---|:---|:---|
 | **RAGAS CI gate** | Regressions reach production silently and erode user trust | Catch quality drops before merge, not after user complaints |
-| **Two-stage retrieval** | Embedding similarity alone misses 15-25% of relevant results | Cross-encoder reranking recovers precision without full-scan cost |
+| **Two-stage retrieval** | Embedding similarity alone misses 15-25% of relevant results | Cross-encoder reranking is intended to recover precision without full-scan cost — **the one ablation run against a labeled set found it didn't, on `n=22` queries; see [RESULTS.md](RESULTS.md#retrieval-ablation-bi-encoder-vs-bi-encoder--cross-encoder-reranking)** |
+| **Cost-aware model routing** | Every query paying for the strongest model wastes money on simple questions, and irrelevant retrieval still gets answered instead of declined | `80.5%` cost reduction vs. always-`gpt-4o` and `100%` abstention recall on out-of-domain queries in a `n=40` eval; see [RESULTS.md](RESULTS.md#cost-aware-router) |
 | **Context engineering** | Long-context LLM calls cost 5-10x more than necessary | 35% token reduction via extractive compression, same RAGAS scores |
 | **Sequential testing (O'Brien-Fleming)** | Fixed-horizon tests waste compute on obvious winners/losers | Early stopping cuts experiment duration by 30-50% without inflating false positive rate |
 | **CUPED variance reduction** | Standard A/B tests need large samples for noisy metrics | Pre-experiment covariate adjustment reduces required sample size by 30-50% |
@@ -143,7 +146,7 @@ The multi-agent supervisor emits traces for each pipeline run, including routing
 A chain runs top-to-bottom and stops. LangGraph is a directed graph where each node can inspect the full state, decide which node to call next, and recover from failures without restarting. That matters when retrieval returns nothing useful (route to fallback) or when the safety check fires mid-pipeline (short-circuit before generation).
 
 **Why two-stage retrieval (bi-encoder + cross-encoder)?**
-Bi-encoders (FAISS) are fast but approximate. They compare embeddings independently, missing subtle relevance signals. Cross-encoders read the query and document together, catching nuance the bi-encoder misses. Running cross-encoding only on the top-50 FAISS results keeps end-to-end latency under 50ms while improving precision.
+Bi-encoders (FAISS) are fast but approximate. They compare embeddings independently, missing subtle relevance signals. Cross-encoders read the query and document together, catching nuance the bi-encoder misses. Running cross-encoding only on the top-50 FAISS results keeps end-to-end latency under 50ms while improving precision — that's the design intent. It had never actually been tested against a labeled dataset until `benchmarks/run_retrieval_ablation.py`, and on that measurement (`n=22` hand-labeled queries against the real `BiEncoderEmbedder`/`CrossEncoderReranker` classes) reranking did *not* improve precision or recall, and was ~17x slower. See [RESULTS.md](RESULTS.md#retrieval-ablation-bi-encoder-vs-bi-encoder--cross-encoder-reranking) for the numbers and the most likely explanations (small `n`, possible domain mismatch between `ms-marco-MiniLM-L-6-v2` and this corpus). Treat the claim above as the original design rationale, not a verified result.
 
 **Why FAISS over a managed vector database?**
 FAISS runs in-process: no network hop, no managed service cost, no vendor lock-in. The distributed shard design (4 shards + async fan-out aggregator) gives horizontal scale without changing the query interface. Trade-off: no real-time updates as cleanly as Pinecone or Weaviate. For a research assistant with periodic re-indexing, that is acceptable.

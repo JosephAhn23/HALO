@@ -1,0 +1,691 @@
+{
+  "classifier_held_out_accuracy": {
+    "accuracy": 0.8636363636363636,
+    "n_test": 22,
+    "per_label_accuracy": {
+      "low": 0.875,
+      "medium": 0.75,
+      "high": 1.0
+    },
+    "confusion": {
+      "low": {
+        "low": 7,
+        "medium": 1,
+        "high": 0
+      },
+      "medium": {
+        "low": 1,
+        "medium": 6,
+        "high": 1
+      },
+      "high": {
+        "low": 0,
+        "medium": 0,
+        "high": 6
+      }
+    }
+  },
+  "abstain_threshold": 0.18,
+  "similarity_scores": {
+    "answerable": {
+      "min": 0.16140465438365936,
+      "max": 0.5916514992713928,
+      "mean": 0.3237414536151019
+    },
+    "unanswerable": {
+      "min": 0.03854050114750862,
+      "max": 0.17391528189182281,
+      "mean": 0.10601191015707122
+    }
+  },
+  "n_eval": 40,
+  "n_answerable": 22,
+  "n_unanswerable": 18,
+  "naive_cost_usd_total": 0.21719999999999987,
+  "router_cost_usd_total": 0.04224539999999999,
+  "cost_reduction_pct": 80.54999999999998,
+  "abstention_recall": 1.0,
+  "false_abstain_rate": 0.09090909090909091,
+  "per_query": [
+    {
+      "query": "Define perplexity in the context of language models.",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.2473,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.24726024270057678,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "Is Celery used for background jobs in this project?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.1648,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.16477292776107788,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.165 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What does CI/CD stand for?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.181,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.181003600358963,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "What is the health endpoint's URL path?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.1614,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.16140465438365936,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.161 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What is a healthcheck in Docker Compose?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.4631,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.46313297748565674,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "What is a cross-encoder?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.3732,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.37318161129951477,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "What does RLHF stand for?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.3125,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.3125203847885132,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "Is bitsandbytes used for quantization?",
+      "gold_label": "low",
+      "kind": "answerable",
+      "similarity_score": 0.2712,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.2711586654186249,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "How would a client poll for batch job completion?",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.2645,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.2644653022289276,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "How does session_id get used for ResearchLog injection?",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.2394,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "medium",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.2393503189086914,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'medium' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "How does the reranker's cross-encoder score get combined with the retrieval score?",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.5521,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "medium",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.55207759141922,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'medium' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "Explain how the adversarial consensus step differs from the truth committee gate.",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.2801,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "medium",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.28010982275009155,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'medium' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "How would I add a new field to the /query response?",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.1828,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "medium",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.18281897902488708,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'medium' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "How does the reranker improve retrieval quality over raw FAISS search?",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.5917,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "medium",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.5916514992713928,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'medium' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "Explain how the distributed FAISS aggregator combines shard results.",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.3886,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "medium",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.3886488080024719,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'medium' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "Explain how the flower dashboard monitors Celery workers.",
+      "gold_label": "medium",
+      "kind": "answerable",
+      "similarity_score": 0.1882,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "low",
+        "model": "gpt-4o-mini",
+        "retrieval_top_score": 0.18824075162410736,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'low' complexity -> routed to gpt-4o-mini."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00032579999999999995
+    },
+    {
+      "query": "Analyze how query complexity classification could introduce systematic bias against certain phrasing styles.",
+      "gold_label": "high",
+      "kind": "answerable",
+      "similarity_score": 0.5373,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.5372872948646545,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "What are the tradeoffs between the consensus quality gate and the adversarial consensus step, and when would you use one over the other?",
+      "gold_label": "high",
+      "kind": "answerable",
+      "similarity_score": 0.3464,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.34635329246520996,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "Compare the shard-based distributed FAISS design against a single large index \u2014 when does sharding actually pay off?",
+      "gold_label": "high",
+      "kind": "answerable",
+      "similarity_score": 0.4311,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.43108558654785156,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "Explain the reasoning behind choosing weighted-confidence consensus over majority-vote for the multi-agent supervisor.",
+      "gold_label": "high",
+      "kind": "answerable",
+      "similarity_score": 0.2212,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.22116774320602417,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "Analyze what would break if two API replicas behind a load balancer both try to write to the same local FAISS index concurrently.",
+      "gold_label": "high",
+      "kind": "answerable",
+      "similarity_score": 0.3066,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.3065674602985382,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "Design a rollback plan for a cost router that starts misrouting complex queries to the cheap tier in production.",
+      "gold_label": "high",
+      "kind": "answerable",
+      "similarity_score": 0.4181,
+      "decision": {
+        "abstain": false,
+        "complexity_tier": "high",
+        "model": "gpt-4o",
+        "retrieval_top_score": 0.41805246472358704,
+        "n_retrieved": 1,
+        "reasoning": "Classified 'high' complexity -> routed to gpt-4o."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.00543
+    },
+    {
+      "query": "What's a good substitute for buttermilk in a pancake recipe?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1555,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.1555173248052597,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.156 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "Who won the World Cup in 2018?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0921,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.09207036346197128,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.092 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's the best hiking trail near Denver?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1256,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.12557466328144073,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.126 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "How do I remove a red wine stain from a carpet?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.09,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.08997169882059097,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.090 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's the capital of Mongolia?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0565,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.05645449832081795,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.056 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "Can you recommend a good sci-fi novel from the 1960s?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1051,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.10513320565223694,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.105 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's the difference between a violin and a viola?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1265,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.12651577591896057,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.127 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "How long should I marinate chicken before grilling it?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0808,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.08083992451429367,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.081 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's a good name for a golden retriever puppy?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1269,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.12691360712051392,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.127 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "Is it going to rain in Seattle this weekend?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0928,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.0927969440817833,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.093 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's the offside rule in soccer?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1739,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.17391528189182281,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.174 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "How do I train for a half marathon in 12 weeks?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1325,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.13247904181480408,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.132 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's the best way to propagate a pothos plant?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1471,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.14710241556167603,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.147 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "Who painted the Sistine Chapel ceiling?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.1089,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.10889643430709839,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.109 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's a fair price for a used 2018 Honda Civic?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0934,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.09342608600854874,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.093 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "How do I get red wine out of a white shirt?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0645,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.06445655971765518,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.064 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "What's the tallest mountain in South America?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0976,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.09761005640029907,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.098 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    },
+    {
+      "query": "Can you suggest a birthday gift for a 10-year-old?",
+      "gold_label": null,
+      "kind": "unanswerable",
+      "similarity_score": 0.0385,
+      "decision": {
+        "abstain": true,
+        "complexity_tier": null,
+        "model": null,
+        "retrieval_top_score": 0.03854050114750862,
+        "n_retrieved": 1,
+        "reasoning": "Top retrieval score 0.039 below abstain threshold 0.180."
+      },
+      "naive_cost_usd": 0.00543,
+      "router_cost_usd": 0.0
+    }
+  ]
+}

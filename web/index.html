@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLMOps Research Assistant — API Test Console</title>
+<style>
+  :root {
+    --bg: #0c0f19;
+    --card: #131828;
+    --card-border: #28374a;
+    --input: #1d2335;
+    --accent: #6366f1;
+    --text: #ece eef3;
+    --text-dim: #94a1b5;
+    --green: #33d48c;
+    --orange: #fba64d;
+    --red: #f26d6d;
+    --mono: #9ed8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: #ecedf3;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    padding: 48px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  h1 { margin: 0; font-size: 24px; }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+  .pills { display: flex; gap: 8px; }
+  .pill {
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #333;
+    color: #eee;
+  }
+  .pill.ok { background: var(--green); color: #06210f; }
+  .pill.bad { background: var(--red); color: #2a0808; }
+  .pill.pending { background: #4a5468; color: #dde; }
+
+  .apikey-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .apikey-row label { font-size: 12px; color: var(--text-dim); }
+  input[type="text"], input[type="number"], textarea {
+    background: var(--input);
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    color: #ecedf3;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  input[type="text"]#apiKey { width: 380px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 1000px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .method {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    color: #111;
+  }
+  .method.GET { background: var(--green); }
+  .method.POST { background: var(--orange); }
+  .path { color: var(--mono); font-size: 13px; font-weight: 500; }
+  .card h3 { margin: 0 0 6px 0; font-size: 16px; }
+  .card p.desc { margin: 0 0 14px 0; color: var(--text-dim); font-size: 12px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+  .field input, .field textarea { width: 100%; }
+  .field textarea { resize: vertical; min-height: 70px; }
+
+  button {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: 0.5; cursor: wait; }
+
+  .response {
+    margin-top: 14px;
+    background: #09101d;
+    border: 1px solid var(--card-border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-height: 40px;
+  }
+  .response .label { font-size: 10px; font-weight: 700; color: var(--text-dim); letter-spacing: 0.04em; }
+  .response pre {
+    margin: 6px 0 0 0;
+    font-size: 12px;
+    color: var(--mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: "SF Mono", Menlo, monospace;
+  }
+  .response pre.error { color: var(--red); }
+  .status-line { font-size: 11px; color: var(--text-dim); margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>LLMOps Research Assistant</h1>
+    <div class="subtitle">API test console — <span id="baseUrlLabel"></span></div>
+  </div>
+  <div class="pills">
+    <span id="apiPill" class="pill pending">● api checking…</span>
+    <span id="redisPill" class="pill pending">● redis checking…</span>
+  </div>
+</header>
+
+<div class="apikey-row">
+  <label for="apiKey">X-API-Key</label>
+  <input type="text" id="apiKey" placeholder="optional — leave blank if API_KEY is unset">
+  <label style="margin-left:16px;">Base URL</label>
+  <input type="text" id="baseUrl" value="http://localhost:8000" style="width:220px;">
+</div>
+
+<div class="grid">
+  <div class="col">
+
+    <div class="card">
+      <div class="card-header"><span class="method GET">GET</span><span class="path">/health</span></div>
+      <h3>Health Check</h3>
+      <p class="desc">No auth. Verifies API + Redis connectivity.</p>
+      <button onclick="callHealth()">Check Health</button>
+      <div class="response" id="resp-health"><div class="label">RESPONSE</div><pre>—</pre></div>
+    </div>
+
+    <div style="height:24px;"></div>
+
+    <div class="card">
+      <div class="card-header"><span class="method POST">POST</span><span class="path">/query</span></div>
+      <h3>Realtime Query</h3>
+      <p class="desc">Runs the full agent pipeline synchronously and returns an answer with sources.</p>
+      <div class="field"><label>query</label><textarea id="query-text" placeholder="e.g. What is retrieval-augmented generation?"></textarea></div>
+      <div class="field"><label>session_id (optional)</label><input type="text" id="query-session" placeholder="sess-123"></div>
+      <button onclick="callQuery()">Send Query</button>
+      <div class="response" id="resp-query"><div class="label">RESPONSE</div><pre>—</pre></div>
+    </div>
+
+    <div style="height:24px;"></div>
+
+    <div class="card">
+      <div class="card-header"><span class="method POST">POST</span><span class="path">/retrieve</span></div>
+      <h3>Retrieve Documents</h3>
+      <p class="desc">Retrieves (and optionally reranks) chunks from the FAISS index.</p>
+      <div class="field"><label>query</label><input type="text" id="retrieve-query" placeholder="search text"></div>
+      <div class="field"><label>top_k</label><input type="number" id="retrieve-topk" value="5" min="1" max="100"></div>
+      <button onclick="callRetrieve()">Retrieve</button>
+      <div class="response" id="resp-retrieve"><div class="label">RESPONSE</div><pre>—</pre></div>
+    </div>
+
+  </div>
+
+  <div class="col">
+
+    <div class="card">
+      <div class="card-header"><span class="method POST">POST</span><span class="path">/ingest</span></div>
+      <h3>Ingest Document</h3>
+      <p class="desc">Chunks and indexes a document into FAISS.</p>
+      <div class="field"><label>content</label><textarea id="ingest-content" placeholder="paste document text"></textarea></div>
+      <div class="field"><label>chunk_size</label><input type="number" id="ingest-chunksize" value="512" min="1"></div>
+      <button onclick="callIngest()">Ingest</button>
+      <div class="response" id="resp-ingest"><div class="label">RESPONSE</div><pre>—</pre></div>
+    </div>
+
+    <div style="height:24px;"></div>
+
+    <div class="card">
+      <div class="card-header"><span class="method POST">POST</span><span class="path">/batch</span></div>
+      <h3>Submit Batch</h3>
+      <p class="desc">Queues up to 100 queries as a background Celery job.</p>
+      <div class="field"><label>queries (one per line)</label><textarea id="batch-queries" placeholder="query 1&#10;query 2&#10;query 3"></textarea></div>
+      <button onclick="callBatchSubmit()">Submit Batch</button>
+      <div class="response" id="resp-batch"><div class="label">RESPONSE</div><pre>—</pre></div>
+    </div>
+
+    <div style="height:24px;"></div>
+
+    <div class="card">
+      <div class="card-header"><span class="method GET">GET</span><span class="path">/batch/{job_id}</span></div>
+      <h3>Check Batch Status</h3>
+      <p class="desc">Polls job status/results by job_id.</p>
+      <div class="field"><label>job_id</label><input type="text" id="batch-jobid" placeholder="paste job_id from above"></div>
+      <button onclick="callBatchStatus()">Check Status</button>
+      <div class="response" id="resp-batch-status"><div class="label">RESPONSE</div><pre>—</pre></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+function baseUrl() {
+  return document.getElementById('baseUrl').value.replace(/\/$/, '');
+}
+
+function authHeaders(extra) {
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+  const key = document.getElementById('apiKey').value.trim();
+  if (key) headers['X-API-Key'] = key;
+  return headers;
+}
+
+function showResponse(id, status, data, isError) {
+  const el = document.getElementById(id);
+  const pre = el.querySelector('pre');
+  pre.className = isError ? 'error' : '';
+  pre.textContent = (typeof data === 'string') ? data : JSON.stringify(data, null, 2);
+  let statusLine = el.querySelector('.status-line');
+  if (!statusLine) {
+    statusLine = document.createElement('div');
+    statusLine.className = 'status-line';
+    el.appendChild(statusLine);
+  }
+  statusLine.textContent = status ? `HTTP ${status}` : '';
+}
+
+async function callApi(id, path, opts) {
+  showResponse(id, '', 'loading…', false);
+  try {
+    const res = await fetch(baseUrl() + path, opts);
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch (e) { data = text; }
+    showResponse(id, res.status, data, !res.ok);
+    return { ok: res.ok, data };
+  } catch (err) {
+    showResponse(id, '', `Request failed: ${err.message}\n\nIs the API running at ${baseUrl()}? (docker compose up -d redis api)`, true);
+    return { ok: false, data: null };
+  }
+}
+
+async function callHealth() {
+  const { ok, data } = await callApi('resp-health', '/health', { method: 'GET' });
+  updateHealthPills(ok, data);
+}
+
+function updateHealthPills(ok, data) {
+  const apiPill = document.getElementById('apiPill');
+  const redisPill = document.getElementById('redisPill');
+  if (ok && data && data.checks) {
+    apiPill.textContent = `● api ${data.checks.api}`;
+    apiPill.className = 'pill ' + (data.checks.api === 'ok' ? 'ok' : 'bad');
+    redisPill.textContent = `● redis ${data.checks.redis}`;
+    redisPill.className = 'pill ' + (data.checks.redis === 'ok' ? 'ok' : 'bad');
+  } else {
+    apiPill.textContent = '● api unreachable';
+    apiPill.className = 'pill bad';
+    redisPill.textContent = '● redis unknown';
+    redisPill.className = 'pill bad';
+  }
+}
+
+async function callQuery() {
+  const body = {
+    query: document.getElementById('query-text').value,
+    session_id: document.getElementById('query-session').value || null
+  };
+  await callApi('resp-query', '/query', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+}
+
+async function callRetrieve() {
+  const body = {
+    query: document.getElementById('retrieve-query').value,
+    top_k: parseInt(document.getElementById('retrieve-topk').value, 10) || 5,
+    rerank: true
+  };
+  await callApi('resp-retrieve', '/retrieve', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+}
+
+async function callIngest() {
+  const body = {
+    content: document.getElementById('ingest-content').value,
+    chunk_size: parseInt(document.getElementById('ingest-chunksize').value, 10) || 512,
+    metadata: {}
+  };
+  await callApi('resp-ingest', '/ingest', { method: 'POST', headers: authHeaders(), body: JSON.stringify(body) });
+}
+
+async function callBatchSubmit() {
+  const queries = document.getElementById('batch-queries').value
+    .split('\n').map(s => s.trim()).filter(Boolean);
+  const { ok, data } = await callApi('resp-batch', '/batch', {
+    method: 'POST', headers: authHeaders(), body: JSON.stringify({ queries })
+  });
+  if (ok && data && data.job_id) {
+    document.getElementById('batch-jobid').value = data.job_id;
+  }
+}
+
+async function callBatchStatus() {
+  const jobId = document.getElementById('batch-jobid').value.trim();
+  if (!jobId) { showResponse('resp-batch-status', '', 'Enter a job_id first.', true); return; }
+  await callApi('resp-batch-status', `/batch/${encodeURIComponent(jobId)}`, {
+    method: 'GET', headers: authHeaders()
+  });
+}
+
+document.getElementById('baseUrlLabel').textContent = 'hits ' + baseUrl();
+document.getElementById('baseUrl').addEventListener('change', () => {
+  document.getElementById('baseUrlLabel').textContent = 'hits ' + baseUrl();
+});
+
+// Auto-check health on load.
+callHealth();
+</script>
+
+</body>
+</html>

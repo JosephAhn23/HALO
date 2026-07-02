@@ -18,6 +18,7 @@ from mlops.compat import mlflow
 if TYPE_CHECKING:
     from agents.multi_agent.consensus_orchestrator import ConsensusOrchestrator
     from agents.multi_agent.cross_provider_consensus import CrossProviderConsensusNode
+    from agents.multi_agent.cost_router import CostAwareRouter
     from governance.constitution import ConstitutionalClassifier
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,7 @@ class AgentState(TypedDict):
     response: Dict[str, Any]
     error: str
     skip_rag: NotRequired[bool]
+    route_decision: NotRequired[Dict[str, Any]]
 
 
 class Pipeline:
@@ -62,6 +64,8 @@ class Pipeline:
         enable_policy_enforcement: bool = False,
         adversarial_orchestrator: Optional["ConsensusOrchestrator"] = None,
         enable_paragraph_provenance: bool = False,
+        cost_router: Optional["CostAwareRouter"] = None,
+        synthesizer_tiers: Optional[Dict[str, Synthesizer]] = None,
     ) -> None:
         self.retriever = retriever
         self.reranker = reranker
@@ -73,6 +77,12 @@ class Pipeline:
         self.enable_policy_enforcement = enable_policy_enforcement
         self.adversarial_orchestrator = adversarial_orchestrator
         self.enable_paragraph_provenance = enable_paragraph_provenance
+        # Optional cost-aware routing: abstain on low-relevance retrieval, or
+        # pick a model tier from synthesizer_tiers (keyed by "low"/"medium"/
+        # "high"). When cost_router is None this is fully inert — self.synthesizer
+        # is used unconditionally, same as before this feature existed.
+        self.cost_router = cost_router
+        self.synthesizer_tiers = synthesizer_tiers or {}
 
     # -- graph nodes (bound to self so they close over injected agents) --
 
@@ -121,17 +131,50 @@ class Pipeline:
             logger.warning("rerank failed: %s", exc)
             return {**state, "error": str(exc)}
 
+    def _cost_route_gate(self, state: AgentState) -> AgentState:
+        """
+        Abstain when retrieval found nothing relevant; otherwise pick a model
+        tier. Runs after reranking so it sees rerank_score, the more precise
+        Stage-2 relevance signal (falls back to retrieval_score if absent).
+        """
+        if self.cost_router is None or state.get("error") or state.get("skip_rag"):
+            return state
+        from agents.multi_agent.cost_router import ABSTAIN_ANSWER
+
+        chunks = state.get("reranked_chunks") or state.get("retrieved_chunks") or []
+        decision = self.cost_router.route(state["query"], chunks)
+
+        if decision.abstain:
+            return {
+                **state,
+                "skip_rag": True,
+                "route_decision": decision.to_dict(),
+                "response": {
+                    "answer": ABSTAIN_ANSWER,
+                    "sources": [],
+                    "tokens_used": 0,
+                    "abstained": True,
+                    "abstain_reason": decision.reasoning,
+                },
+            }
+        return {**state, "route_decision": decision.to_dict()}
+
     def _synthesize(self, state: AgentState) -> AgentState:
         if state.get("error") or state.get("skip_rag"):
             return state
         try:
             q = state["query"]
             chunks = state["reranked_chunks"]
+            route_decision = state.get("route_decision")
+            synthesizer = self.synthesizer
+            if route_decision and not route_decision.get("abstain"):
+                tier = route_decision.get("complexity_tier")
+                synthesizer = self.synthesizer_tiers.get(tier, self.synthesizer)
             feedback_suffix = ""
             response: Dict[str, Any] = {}
             max_c = 3 if self.constitutional_classifier else 1
             for attempt in range(max_c):
-                response = self.synthesizer.synthesize(q + feedback_suffix, chunks)
+                response = synthesizer.synthesize(q + feedback_suffix, chunks)
                 if not self.constitutional_classifier:
                     break
                 gr = self.constitutional_classifier.grade(response.get("answer", ""))
@@ -261,7 +304,7 @@ class Pipeline:
         return {**state, "response": new_resp}
 
     def _attribution_step(self, state: AgentState) -> AgentState:
-        if state.get("error") or not self.enable_attribution:
+        if state.get("error") or not self.enable_attribution or state.get("skip_rag"):
             return state
         resp = state.get("response") or {}
         if resp.get("behavioral_blocked"):
@@ -332,6 +375,7 @@ class Pipeline:
                 graph.add_node("behavioral", self._behavioral_gate)
                 graph.add_node("retrieve", self._retrieve)
                 graph.add_node("rerank", self._rerank)
+                graph.add_node("cost_route", self._cost_route_gate)
                 graph.add_node("synthesize", self._synthesize)
                 graph.add_node("policy_gate", self._policy_enforcement)
                 graph.add_node("adversarial", self._adversarial_consensus_step)
@@ -348,7 +392,12 @@ class Pipeline:
                     should_continue,
                     {"rerank": "rerank", "__end__": END},
                 )
-                graph.add_edge("rerank", "synthesize")
+                graph.add_edge("rerank", "cost_route")
+                graph.add_conditional_edges(
+                    "cost_route",
+                    after_cost_route,
+                    {"synthesize": "synthesize", "__end__": END},
+                )
                 graph.add_edge("synthesize", "policy_gate")
                 graph.add_edge("policy_gate", "adversarial")
                 graph.add_edge("adversarial", "consensus_gate")
@@ -361,8 +410,10 @@ class Pipeline:
                         self._adversarial_consensus_step(
                             self._policy_enforcement(
                                 self._synthesize(
-                                    self._rerank(
-                                        self._retrieve(self._behavioral_gate(initial))
+                                    self._cost_route_gate(
+                                        self._rerank(
+                                            self._retrieve(self._behavioral_gate(initial))
+                                        )
                                     )
                                 )
                             )
@@ -375,6 +426,21 @@ class Pipeline:
                 mlflow.log_metric("sources_retrieved", len(result["reranked_chunks"]))
                 if self.truth_committee is None:
                     mlflow.log_param("consensus_gate", "disabled")
+                route_decision = result.get("route_decision")
+                if route_decision:
+                    from agents.multi_agent.cost_router import estimate_cost_usd
+
+                    mlflow.log_param("cost_router_abstain", "1" if route_decision["abstain"] else "0")
+                    if not route_decision["abstain"]:
+                        mlflow.log_param("cost_router_tier", route_decision["complexity_tier"])
+                        mlflow.log_param("cost_router_model", route_decision["model"])
+                        resp = result["response"]
+                        cost = estimate_cost_usd(
+                            route_decision["model"],
+                            resp.get("prompt_tokens", 0),
+                            resp.get("completion_tokens", 0),
+                        )
+                        mlflow.log_metric("estimated_cost_usd", cost)
             return result
 
 
@@ -384,6 +450,10 @@ def should_continue(state: AgentState) -> str:
 
 def after_behavioral(state: AgentState) -> str:
     return "__end__" if state.get("skip_rag") else "retrieve"
+
+
+def after_cost_route(state: AgentState) -> str:
+    return "__end__" if state.get("skip_rag") else "synthesize"
 
 
 # ---------------------------------------------------------------------------
@@ -467,6 +537,25 @@ def get_pipeline() -> Pipeline:
                     "yes",
                 )
 
+                cost_router = None
+                synthesizer_tiers: Dict[str, Any] = {}
+                if os.getenv("ENABLE_COST_ROUTER", "").lower() in ("1", "true", "yes"):
+                    try:
+                        from agents.multi_agent.cost_router import (
+                            TIER_MODEL_MAP,
+                            CostAwareRouter,
+                        )
+
+                        cost_router = CostAwareRouter()
+                        # One SynthesizerAgent per distinct model in the tier map, so
+                        # "low"/"medium" sharing gpt-4o-mini don't spin up duplicate
+                        # OpenAI clients.
+                        by_model = {model: SynthesizerAgent(model=model) for model in set(TIER_MODEL_MAP.values())}
+                        synthesizer_tiers = {tier: by_model[model] for tier, model in TIER_MODEL_MAP.items()}
+                    except Exception as exc:
+                        logger.warning("Cost router requested but init failed: %s", exc)
+                        cost_router = None
+
                 _default_pipeline = Pipeline(
                     retriever=RetrieverAgent(top_k=10),
                     reranker=RerankerAgent(top_k=5),
@@ -478,6 +567,8 @@ def get_pipeline() -> Pipeline:
                     enable_policy_enforcement=enable_pol,
                     adversarial_orchestrator=adversarial,
                     enable_paragraph_provenance=enable_para,
+                    cost_router=cost_router,
+                    synthesizer_tiers=synthesizer_tiers,
                 )
     return _default_pipeline
 
