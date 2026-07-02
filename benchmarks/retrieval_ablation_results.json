@@ -3,25 +3,30 @@
   "n_documents": 38,
   "precision_at_3": {
     "bi_only": 0.484848484848485,
-    "two_stage": 0.43939393939393945
+    "two_stage": 0.43939393939393945,
+    "hybrid_rrf": 0.42424242424242425
   },
   "recall_at_3": {
     "bi_only": 0.9545454545454546,
-    "two_stage": 0.8636363636363636
+    "two_stage": 0.8636363636363636,
+    "hybrid_rrf": 0.8409090909090909
   },
   "precision_at_5": {
     "bi_only": 0.30000000000000004,
-    "two_stage": 0.27272727272727276
+    "two_stage": 0.27272727272727276,
+    "hybrid_rrf": 0.28181818181818186
   },
   "recall_at_5": {
     "bi_only": 0.9772727272727273,
-    "two_stage": 0.8863636363636364
+    "two_stage": 0.8863636363636364,
+    "hybrid_rrf": 0.9318181818181818
   },
   "latency_ms_p50": {
-    "bi_only": 54.485563006892335,
-    "two_stage": 942.6602919993456
+    "bi_only": 23.245770498760976,
+    "two_stage": 594.252521499584,
+    "hybrid_rrf": 23.567749492940493
   },
-  "embed_corpus_s": 0.7415300419961568,
+  "embed_corpus_s": 0.44848774999263696,
   "per_query": [
     {
       "query": "Why does this project use two-stage retrieval instead of raw embedding search?",
@@ -43,21 +48,32 @@
         "arch_01",
         "wid_01"
       ],
+      "hybrid_rrf_top5": [
+        "biz_02",
+        "wid_02",
+        "arch_02",
+        "arch_01",
+        "wid_01"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -80,21 +96,32 @@
         "arch_03",
         "biz_03"
       ],
+      "hybrid_rrf_top5": [
+        "arch_04",
+        "wid_04",
+        "biz_14",
+        "biz_01",
+        "arch_03"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -116,21 +143,32 @@
         "arch_01",
         "biz_10"
       ],
+      "hybrid_rrf_top5": [
+        "arch_07",
+        "biz_13",
+        "wid_15",
+        "wid_03",
+        "arch_01"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -152,21 +190,32 @@
         "wid_01",
         "arch_01"
       ],
+      "hybrid_rrf_top5": [
+        "arch_03",
+        "arch_02",
+        "wid_02",
+        "arch_06",
+        "arch_01"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -189,21 +238,32 @@
         "biz_10",
         "biz_09"
       ],
+      "hybrid_rrf_top5": [
+        "biz_01",
+        "biz_12",
+        "wid_05",
+        "biz_10",
+        "biz_09"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -226,21 +286,32 @@
         "biz_14",
         "biz_02"
       ],
+      "hybrid_rrf_top5": [
+        "biz_13",
+        "wid_14",
+        "biz_03",
+        "biz_05",
+        "biz_11"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -263,21 +334,32 @@
         "biz_01",
         "arch_08"
       ],
+      "hybrid_rrf_top5": [
+        "biz_09",
+        "biz_01",
+        "wid_11",
+        "wid_13",
+        "arch_08"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 0.5
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -300,21 +382,32 @@
         "biz_07",
         "biz_10"
       ],
+      "hybrid_rrf_top5": [
+        "biz_06",
+        "arch_05",
+        "biz_01",
+        "wid_09",
+        "biz_07"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -337,21 +430,32 @@
         "biz_02",
         "biz_08"
       ],
+      "hybrid_rrf_top5": [
+        "biz_04",
+        "arch_06",
+        "wid_09",
+        "biz_08",
+        "biz_06"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -373,21 +477,32 @@
         "wid_10",
         "biz_02"
       ],
+      "hybrid_rrf_top5": [
+        "biz_05",
+        "wid_09",
+        "arch_05",
+        "biz_08",
+        "wid_10"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -410,21 +525,32 @@
         "biz_07",
         "biz_10"
       ],
+      "hybrid_rrf_top5": [
+        "biz_06",
+        "biz_07",
+        "arch_05",
+        "wid_09",
+        "biz_13"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.0
+        "two_stage": 0.0,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 0.0
+        "two_stage": 0.0,
+        "hybrid_rrf": 0.5
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 0.5
+        "two_stage": 0.5,
+        "hybrid_rrf": 0.5
       }
     },
     {
@@ -446,21 +572,32 @@
         "biz_09",
         "wid_07"
       ],
+      "hybrid_rrf_top5": [
+        "biz_08",
+        "wid_09",
+        "arch_06",
+        "arch_05",
+        "arch_07"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -483,21 +620,32 @@
         "wid_03",
         "biz_05"
       ],
+      "hybrid_rrf_top5": [
+        "biz_13",
+        "arch_07",
+        "wid_15",
+        "wid_03",
+        "biz_12"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.6666666666666666
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -520,21 +668,32 @@
         "biz_12",
         "biz_08"
       ],
+      "hybrid_rrf_top5": [
+        "biz_10",
+        "biz_09",
+        "wid_04",
+        "biz_01",
+        "arch_04"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 0.5,
-        "two_stage": 0.5
+        "two_stage": 0.5,
+        "hybrid_rrf": 0.5
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 0.5,
-        "two_stage": 0.5
+        "two_stage": 0.5,
+        "hybrid_rrf": 0.5
       }
     },
     {
@@ -557,21 +716,32 @@
         "biz_01",
         "biz_13"
       ],
+      "hybrid_rrf_top5": [
+        "biz_11",
+        "wid_07",
+        "biz_01",
+        "biz_09",
+        "biz_13"
+      ],
       "precision_at_3": {
         "bi_only": 0.6666666666666666,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 0.5
+        "two_stage": 0.5,
+        "hybrid_rrf": 0.5
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 0.5
+        "two_stage": 0.5,
+        "hybrid_rrf": 0.5
       }
     },
     {
@@ -594,21 +764,32 @@
         "wid_05",
         "biz_06"
       ],
+      "hybrid_rrf_top5": [
+        "biz_12",
+        "biz_06",
+        "biz_01",
+        "wid_10",
+        "wid_08"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.6666666666666666
+        "two_stage": 0.6666666666666666,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 0.5,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 0.5
       },
       "precision_at_5": {
         "bi_only": 0.4,
-        "two_stage": 0.4
+        "two_stage": 0.4,
+        "hybrid_rrf": 0.4
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -630,21 +811,32 @@
         "arch_06",
         "arch_04"
       ],
+      "hybrid_rrf_top5": [
+        "arch_01",
+        "arch_05",
+        "wid_03",
+        "arch_04",
+        "arch_03"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -666,21 +858,32 @@
         "arch_03",
         "biz_10"
       ],
+      "hybrid_rrf_top5": [
+        "arch_08",
+        "wid_13",
+        "arch_07",
+        "arch_03",
+        "arch_01"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -702,21 +905,32 @@
         "wid_04",
         "arch_04"
       ],
+      "hybrid_rrf_top5": [
+        "biz_14",
+        "biz_03",
+        "wid_03",
+        "arch_04",
+        "wid_14"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -738,21 +952,32 @@
         "wid_02",
         "biz_08"
       ],
+      "hybrid_rrf_top5": [
+        "wid_01",
+        "biz_11",
+        "biz_09",
+        "biz_08",
+        "biz_01"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -774,21 +999,32 @@
         "arch_05",
         "biz_06"
       ],
+      "hybrid_rrf_top5": [
+        "arch_04",
+        "biz_10",
+        "wid_03",
+        "wid_06",
+        "wid_13"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.0
+        "two_stage": 0.0,
+        "hybrid_rrf": 0.0
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 0.0
+        "two_stage": 0.0,
+        "hybrid_rrf": 0.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.0
+        "two_stage": 0.0,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 0.0
+        "two_stage": 0.0,
+        "hybrid_rrf": 1.0
       }
     },
     {
@@ -810,21 +1046,32 @@
         "wid_02",
         "wid_14"
       ],
+      "hybrid_rrf_top5": [
+        "wid_12",
+        "biz_02",
+        "wid_02",
+        "arch_02",
+        "wid_14"
+      ],
       "precision_at_3": {
         "bi_only": 0.3333333333333333,
-        "two_stage": 0.3333333333333333
+        "two_stage": 0.3333333333333333,
+        "hybrid_rrf": 0.3333333333333333
       },
       "recall_at_3": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       },
       "precision_at_5": {
         "bi_only": 0.2,
-        "two_stage": 0.2
+        "two_stage": 0.2,
+        "hybrid_rrf": 0.2
       },
       "recall_at_5": {
         "bi_only": 1.0,
-        "two_stage": 1.0
+        "two_stage": 1.0,
+        "hybrid_rrf": 1.0
       }
     }
   ]

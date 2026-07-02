@@ -91,48 +91,59 @@ token counts, so it's a cost *model*, not a measurement of live traffic. Re-run
 `benchmarks/run_cost_router_eval.py` and re-tune the threshold once a real corpus is
 ingested — the `0.18` default is a documented starting point, not a permanent answer.
 
-## Retrieval Ablation: Bi-Encoder vs. Bi-Encoder + Cross-Encoder Reranking
+## Retrieval Ablation: Bi-Encoder vs. Cross-Encoder Reranking vs. BM25+Dense RRF
 
 This project's own architecture rationale claims cross-encoder reranking "improves
 precision" (see the Architecture Decisions section below). That claim had never been
 tested against a labeled dataset — it's an assumption inherited from general RAG practice,
-not a measurement of this pipeline specifically. `benchmarks/run_retrieval_ablation.py`
-tests it directly using the real production classes (`BiEncoderEmbedder`,
-`CrossEncoderReranker` from `agents/reranker.py`) against a hand-labeled corpus (`n=38`
+not a measurement of this pipeline specifically. A later proposal argued for replacing the
+cross-encoder with BM25 + dense hybrid search fused via Reciprocal Rank Fusion (RRF),
+claiming it would recover precision without the reranker's latency cost — also asserted,
+not measured. `benchmarks/run_retrieval_ablation.py` tests both against the real production
+classes (`BiEncoderEmbedder`, `CrossEncoderReranker` from `agents/reranker.py`) and
+`rank_bm25.BM25Okapi` (already a core dependency), against a hand-labeled corpus (`n=38`
 documents pulled from this README, `n=22` queries with hand-labeled relevant-document sets
 — see `benchmarks/retrieval_ablation_data.py`).
 
-| Metric | Bi-encoder only | + Cross-encoder rerank | Delta |
+| Metric | Bi-encoder only | + Cross-encoder rerank | BM25 + dense (RRF) |
 |:---|---:|---:|---:|
-| Precision@3 | `0.485` | `0.439` | `-0.045` |
-| Recall@3 | `0.955` | `0.864` | `-0.091` |
-| Precision@5 | `0.300` | `0.273` | `-0.027` |
-| Recall@5 | `0.977` | `0.886` | `-0.091` |
-| Latency p50 | `54.5 ms` | `942.7 ms` | `17.3x slower` |
+| Precision@3 | `0.485` | `0.439` | `0.424` |
+| Recall@3 | `0.955` | `0.864` | `0.841` |
+| Precision@5 | `0.300` | `0.273` | `0.282` |
+| Recall@5 | `0.977` | `0.886` | `0.932` |
+| Latency p50 | `23.3 ms` | `594.3 ms` (25.5x) | `23.6 ms` (~1.0x) |
 
-**Finding, stated plainly: on this eval set, cross-encoder reranking did not improve
-precision or recall — it made both slightly worse, and was over an order of magnitude
-slower.** This measurement contradicts this project's own stated rationale for two-stage
-retrieval. Spot-checking the per-query rankings (`benchmarks/retrieval_ablation_results.json`)
-shows this isn't a scoring bug — both rankings are sane and mostly agree on the top result;
-the reranker just reorders the tail differently, and on `n=22` queries that reordering
-happened to hurt more often than it helped.
+**Finding, stated plainly: neither "improvement" beat plain bi-encoder cosine similarity on
+this eval set.** Bi-encoder-only wins or ties on every precision/recall metric against both
+cross-encoder reranking and BM25+dense RRF fusion. The hybrid approach is at least as cheap
+as bi-encoder-only (RRF fusion overhead is negligible; no cross-encoder forward passes), so
+it doesn't carry the reranker's latency penalty — but it also doesn't deliver the accuracy
+gain it was proposed to deliver, on this measurement. Spot-checking per-query rankings
+(`benchmarks/retrieval_ablation_results.json`) shows this isn't a scoring bug in either
+method — all three rankings are sane and mostly agree on the top-1 result; they diverge in
+how they reorder the tail, and on `n=22` queries the reordering happened to hurt precision/
+recall slightly more often than it helped, for both alternatives to plain bi-encoder search.
 
 Plausible explanations, not yet distinguished by this data: (1) `n=22` is small enough that
 this could reverse with more queries — the deltas are modest relative to likely
 query-to-query variance; (2) `cross-encoder/ms-marco-MiniLM-L-6-v2` was trained on MS MARCO
 web-search query/passage pairs, a real domain mismatch against this corpus's short
-technical-documentation-style text, where the general-purpose bi-encoder may simply be
-better suited; (3) several queries have two "equally relevant" gold documents covering the
-same fact from different angles (e.g. an architecture-rationale doc and a business-impact
-doc both about two-stage retrieval), which may not be the kind of relevance distinction a
-web-search-trained cross-encoder is well calibrated for.
+technical-documentation-style text; (3) the eval queries were written as close natural-
+language paraphrases of their target documents (by construction, since they were hand-
+labeled by reading the docs), which favors a semantic bi-encoder and may under-reward BM25's
+lexical-overlap signal relative to how it would perform on messier real user queries;
+(4) several queries have two "equally relevant" gold documents covering the same fact from
+different angles, which may not be the kind of relevance distinction either alternative
+method is well calibrated for.
 
-What would resolve this: a larger labeled set (100+ queries) with a paired significance
-test (e.g. a paired t-test or bootstrap on the per-query precision deltas), and ideally
-validation against a real ingested corpus instead of this 38-document proxy. Until that
-exists, the honest conclusion is: **this pipeline's two-stage retrieval claim is unverified
-at production scale, and the one measurement that does exist doesn't support it.**
+What would resolve this: a larger labeled set (100+ queries, ideally sourced from real user
+queries rather than paraphrase-style hand-labeling) with a paired significance test (e.g. a
+paired t-test or bootstrap on the per-query precision deltas), and validation against a real
+ingested corpus instead of this 38-document proxy. Until that exists, the honest conclusion
+is: **neither this pipeline's original two-stage retrieval design nor the proposed BM25+RRF
+hybrid alternative is verified at production scale, and the one measurement that exists
+favors doing neither** — plain bi-encoder cosine similarity, the simplest and cheapest
+option, is what actually wins on this eval.
 
 ## How To Reproduce
 
