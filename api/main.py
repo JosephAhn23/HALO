@@ -13,12 +13,16 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+import time
+import torch
 
 from agents.orchestrator import run_pipeline
 from api.batch import enqueue_batch_job
 from api.websocket_streaming import router as websocket_router
 from inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
+from simulation import batch_simulate, QualityGates, track_to_mlflow
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +124,31 @@ class TritonDispatchResponse(BaseModel):
     hardware: Dict[str, Any]
     status: str
     message: str
+
+
+class PhysicsSimulationRequest(BaseModel):
+    """Request for batched physics simulation."""
+    batch_size: int = Field(default=10, ge=1, le=1000)
+    num_steps: int = Field(default=10000, ge=100, le=100000)
+    initial_conditions: Optional[list] = Field(default=None, description="(batch, 7) initial states")
+    B_field_schedule: Optional[Dict] = Field(default=None, description="B0 rate schedule")
+    alpha_schedule: Optional[Dict] = Field(default=None, description="Mirror field schedule")
+    particle_mass: float = Field(default=0.938, description="GeV/c^2")
+    edm_eta: float = Field(default=1e-3, description="EDM coupling strength")
+
+
+class PhysicsSimulationResponse(BaseModel):
+    """Response from physics simulation."""
+    run_id: str
+    batch_size: int
+    num_steps: int
+    quality_score: float
+    diagnostics: Dict[str, Any]
+    hardware_used: str
+    wall_clock_time_sec: float
+    estimated_cost_usd: float
+    gates_passed: bool
+    status: str
 
 
 @app.post("/retrieve", dependencies=[Security(_require_api_key)])
@@ -265,6 +294,99 @@ async def dispatch_triton(request: TritonDispatchRequest):
 
     except Exception as e:
         logger.error(f"Dispatch error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/simulate", dependencies=[Security(_require_api_key)])
+async def simulate_physics(request: PhysicsSimulationRequest):
+    """
+    Batched relativistic spin transport simulation.
+
+    Runs N particle trajectories in parallel using:
+    - RK4 integrator (proper-time evolution)
+    - Thomas-BMT spin transport with EDM coupling
+    - Variational sensitivity tensors
+    - Quality gates (energy/spin conservation)
+    - Hardware dispatch via cuda-morph
+
+    Returns trajectories + diagnostics + quality score + hardware info + estimated cost.
+    """
+    run_id = str(uuid.uuid4())
+    start_time = time.time()
+
+    try:
+        hardware_info = get_hardware_info()
+        logger.info(f"Physics simulation {run_id}: batch_size={request.batch_size}, "
+                   f"hardware={hardware_info.get('device_name', 'cpu')}")
+
+        # Convert initial conditions to torch tensor
+        initial_conditions = None
+        if request.initial_conditions:
+            initial_conditions = torch.tensor(request.initial_conditions, dtype=torch.float32)
+
+        # Build params dict
+        params = {
+            "q": 1.0,
+            "m": request.particle_mass,
+            "c": 299.792458,
+            "anomaly": 1.793,
+            "edm_eta": request.edm_eta,
+            "L": 0.5,
+            "B0_initial": 1.0,
+            "dtau": 1e-3,
+            "n_steps": request.num_steps,
+            "sensitivity_eps": 1e-6,
+            "shape_sensitivity_eps": 1e-6,
+            "diagnostic_time": 0.0,
+        }
+
+        # Run simulation
+        result = await asyncio.to_thread(
+            batch_simulate,
+            request.batch_size,
+            request.B_field_schedule,
+            request.alpha_schedule,
+            initial_conditions,
+            params,
+            request.num_steps,
+        )
+
+        wall_clock_time = time.time() - start_time
+
+        # Quality validation
+        gates_passed, reason, quality_score = QualityGates.validate(result.get("diagnostics", {}))
+
+        # MLflow logging
+        await asyncio.to_thread(
+            track_to_mlflow,
+            run_id,
+            {**result, "batch_size": request.batch_size, "num_steps": request.num_steps},
+            hardware_info,
+            wall_clock_time,
+        )
+
+        estimated_cost = (wall_clock_time / 3600.0) * 2.0  # $2/hr for A100
+
+        response = PhysicsSimulationResponse(
+            run_id=run_id,
+            batch_size=request.batch_size,
+            num_steps=request.num_steps,
+            quality_score=quality_score,
+            diagnostics=result.get("diagnostics", {}),
+            hardware_used=hardware_info.get("device_name", "cpu"),
+            wall_clock_time_sec=wall_clock_time,
+            estimated_cost_usd=estimated_cost,
+            gates_passed=gates_passed,
+            status="ok" if gates_passed else "quality_warning",
+        )
+
+        logger.info(f"Simulation {run_id} complete: quality={quality_score:.3f}, "
+                   f"time={wall_clock_time:.2f}s, cost=${estimated_cost:.2f}")
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Simulation {run_id} failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
