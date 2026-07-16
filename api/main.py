@@ -18,6 +18,7 @@ from typing import Any, Dict
 from agents.orchestrator import run_pipeline
 from api.batch import enqueue_batch_job
 from api.websocket_streaming import router as websocket_router
+from inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +107,19 @@ class IngestRequest(BaseModel):
         if not v.strip():
             raise ValueError("content must not be empty or whitespace-only")
         return v
+
+
+class TritonDispatchRequest(BaseModel):
+    """Request to compile + dispatch inference through Triton kernels."""
+    use_triton: bool = Field(default=True, description="Use Triton backend")
+    operation: str = Field(default="info", description="'info' to get hardware, 'dispatch' to compile")
+
+
+class TritonDispatchResponse(BaseModel):
+    """Response with hardware info and dispatch status."""
+    hardware: Dict[str, Any]
+    status: str
+    message: str
 
 
 @app.post("/retrieve", dependencies=[Security(_require_api_key)])
@@ -210,6 +224,48 @@ async def get_batch_status(job_id: str):
     if status.get("error"):
         raise HTTPException(status_code=404, detail=status["error"])
     return status
+
+
+@app.post("/dispatch/triton", dependencies=[Security(_require_api_key)])
+async def dispatch_triton(request: TritonDispatchRequest):
+    """
+    Dispatch inference through Triton kernels (cuda-morph integration).
+
+    - operation='info': Get available hardware
+    - operation='dispatch': Compile a test model
+    """
+    try:
+        hardware = get_hardware_info()
+
+        if request.operation == "info":
+            return TritonDispatchResponse(
+                hardware=hardware,
+                status="ok",
+                message="Hardware info retrieved"
+            )
+        elif request.operation == "dispatch":
+            if not request.use_triton:
+                return TritonDispatchResponse(
+                    hardware=hardware,
+                    status="ok",
+                    message="Triton dispatch disabled"
+                )
+
+            logger.info("Testing Triton backend compilation...")
+            test_model = torch.nn.Linear(128, 64)
+            compiled = dispatch_model(test_model, use_triton=True)
+
+            return TritonDispatchResponse(
+                hardware=hardware,
+                status="ok",
+                message="Model compiled with morphos_backend_phase3"
+            )
+        else:
+            raise ValueError(f"Unknown operation: {request.operation}")
+
+    except Exception as e:
+        logger.error(f"Dispatch error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/health")
