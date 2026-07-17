@@ -23,6 +23,8 @@ from api.batch import enqueue_batch_job
 from api.websocket_streaming import router as websocket_router
 from inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
 from simulation import batch_simulate, QualityGates, track_to_mlflow
+from scheduling import FleetReconciler, parse_fleet_config
+from scheduling.metrics import SchedulingMetrics, track_dispatch_plan
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,26 @@ class PhysicsSimulationResponse(BaseModel):
     wall_clock_time_sec: float
     estimated_cost_usd: float
     gates_passed: bool
+    status: str
+
+
+class SchedulingRequest(BaseModel):
+    """Request for fleet scheduling reconciliation."""
+    workers: list = Field(..., description="Worker definitions with id, cpu, memory, labels, blackouts")
+    jobs: list = Field(..., description="Job definitions with timezone, weekdays, times, dependencies, etc.")
+    window_start: str = Field(..., description="RFC 3339 UTC window start (e.g., 2025-01-01T00:00:00Z)")
+    window_end: str = Field(..., description="RFC 3339 UTC window end")
+    failed_attempts: Optional[list] = Field(default=None, description="Simulated failures for testing")
+
+
+class SchedulingResponse(BaseModel):
+    """Response from fleet scheduling."""
+    run_id: str
+    dispatch_count: int
+    quality_score: float
+    summary: Dict[str, Any]
+    dispatches: list
+    terminal: list
     status: str
 
 
@@ -387,6 +409,78 @@ async def simulate_physics(request: PhysicsSimulationRequest):
 
     except Exception as e:
         logger.error(f"Simulation {run_id} failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/schedule", dependencies=[Security(_require_api_key)])
+async def schedule_fleet(request: SchedulingRequest):
+    """
+    Deterministic fleet timer reconciliation.
+
+    Converts job calendars (with timezone-aware schedules, DST handling, retry policies)
+    and worker constraints into an exact dispatch plan with:
+    - All releases expanded from local wall times to UTC
+    - Dependency resolution (job A must complete before job B starts)
+    - Resource contention resolution (CPU/memory allocation across workers)
+    - Mutex exclusion (jobs that cannot run simultaneously)
+    - Retry scheduling with exponential backoff
+    - Deadline enforcement and missed job detection
+
+    Input: fleet config with workers, jobs, scheduling window
+    Output: dispatch plan with execution order, terminal states, summary metrics
+    """
+    run_id = str(uuid.uuid4())
+    start_time = time.time()
+
+    try:
+        logger.info(f"Fleet scheduling {run_id}: {len(request.jobs)} jobs, "
+                   f"{len(request.workers)} workers")
+
+        # Build fleet config
+        fleet_config = parse_fleet_config(
+            workers=request.workers,
+            jobs=request.jobs,
+            window_start=request.window_start,
+            window_end=request.window_end,
+            failed_attempts=request.failed_attempts,
+        )
+
+        # Run reconciliation
+        reconciler = FleetReconciler()
+        plan = await asyncio.to_thread(reconciler.reconcile, fleet_config)
+
+        wall_clock_time = time.time() - start_time
+
+        # Extract metrics
+        quality_score = SchedulingMetrics.dispatch_quality_score(plan)
+        summary = plan.get("summary", {})
+
+        # Log to MLflow
+        await asyncio.to_thread(
+            track_dispatch_plan,
+            run_id,
+            plan,
+            request.window_start,
+            request.window_end,
+        )
+
+        response = SchedulingResponse(
+            run_id=run_id,
+            dispatch_count=summary.get("dispatch_count", 0),
+            quality_score=quality_score,
+            summary=summary,
+            dispatches=plan.get("dispatches", []),
+            terminal=plan.get("terminal", []),
+            status="ok" if quality_score > 0 else "degraded",
+        )
+
+        logger.info(f"Scheduling {run_id} complete: quality={quality_score:.3f}, "
+                   f"time={wall_clock_time:.2f}s, dispatches={summary.get('dispatch_count', 0)}")
+
+        return response
+
+    except Exception as e:
+        logger.error(f"Scheduling {run_id} failed: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

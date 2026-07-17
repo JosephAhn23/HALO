@@ -63,6 +63,7 @@
 | **Experiment** | Hash-based A/B router, O'Brien-Fleming sequential testing (no alpha inflation), CUPED variance reduction, Double ML for unbiased ATE, sample size calculator, SRM detection, automated markdown reports. | Locally. |
 | **Causal** | Uplift modeling (T-Learner), DoWhy-style propensity score matching, Double ML cross-fitting, CUPED variance reduction, synthetic experiment simulator with confounders. | Locally. |
 | **Physics** | Batched RK4 integrator for relativistic spin transport. Thomas-BMT equation + EDM coupling. Variational sensitivity tensors for parameter derivatives. Quality gates: energy/spin conservation + magnetic moment adiabatic invariance. Hardware dispatch via cuda-morph (NVIDIA Triton). RAGAS trajectory stability evaluation. | Requires PyTorch. GPU accelerated via torch.compile. |
+| **Scheduling** | Fleet timer reconciler: deterministic scheduler for job calendars + worker constraints. IANA timezone expansion (UTC conversion across DST transitions). Dependency resolution, resource contention, mutex exclusion. Retry scheduling with exponential backoff. Exact tie-break for reproducibility. | Locally. Handles DST gaps/folds, arbitrary timezones. |
 | **Data** | Delta Lake medallion pipeline (bronze/silver/gold), feature store with point-in-time correct joins, MLflow model registry with gated promotion and rollback. | Locally (mock Spark). Requires Databricks/EMR for distributed. |
 | **Recommend** | Hybrid retrieval + LightGBM learn-to-rank, SHAP feature importance, MMR diversity reranking, offline NDCG/MAP/MRR evaluation. | Locally. |
 | **Stream** | Stateful stream processor for Kafka/Kinesis events, Page-Hinkley + ADWIN drift detection, PSI distribution monitoring, online embedding refresh. | Locally. Kafka: requires broker. |
@@ -270,6 +271,135 @@ pytest tests/test_physics_integration.py -v
 # test_sensitivity_tensor_validity — variational output shapes
 ```
 
+## Fleet Scheduling
+
+Deterministic job scheduler for worker fleets with timezone-aware calendars, resource constraints, and failure recovery:
+
+```bash
+# Direct Python API
+from scheduling import FleetReconciler, parse_fleet_config
+
+fleet_config = parse_fleet_config(
+    workers=[
+        {"id": "w1", "cpu": 8, "memory": 16, "labels": ["compute"], "blackouts": []},
+        {"id": "w2", "cpu": 4, "memory": 8, "labels": ["io"], "blackouts": []},
+    ],
+    jobs=[
+        {
+            "id": "job_daily",
+            "timezone": "America/New_York",           # Timezone-aware scheduling
+            "weekdays": [0, 1, 2, 3, 4],              # Monday-Friday
+            "times": ["09:00", "17:00"],              # Twice daily
+            "fold_policy": "first",                   # DST fall: pick earlier UTC
+            "gap_policy": "shift",                    # DST spring: adjust nonexistent times
+            "duration_sec": 3600,
+            "cpu": 2,
+            "memory": 4,
+            "labels": ["compute"],
+            "priority": 100,
+            "max_lateness_sec": 3600,                 # Can start up to 1hr late
+            "mutex": None,
+            "dependencies": ["upstream_job"],         # Requires upstream to complete
+            "max_attempts": 3,
+            "retry_delay_sec": 60,                    # Exponential: 60s, 120s, 240s
+            "coalesce": True,                         # Skip older runs when new one releases
+        }
+    ],
+    window_start="2025-01-01T00:00:00Z",
+    window_end="2025-01-31T23:59:59Z",
+    failed_attempts=[],                               # Simulate failures: [{occurrence, attempt}]
+)
+
+reconciler = FleetReconciler()
+plan = reconciler.reconcile(fleet_config)
+# Returns: {dispatches, terminal, summary}
+```
+
+### Scheduling Pipeline
+
+1. **Calendar Expansion** — Convert job local times to UTC, handling IANA timezone rules
+2. **DST Handling** — Ambiguous fall transitions (pick first/second/both), nonexistent spring gaps (skip/shift)
+3. **Release Materialization** — Generate occurrence IDs (job@UTC_release_time)
+4. **Dependency Fixation** — Lock dependency targets at release time
+5. **Event-Driven Replay** — Process completions → retries → releases → deadlines in order
+6. **Batch Selection** — At each event, lexicographically optimize:
+   - Sum of job priorities
+   - Sum of waiting time (how long jobs have waited)
+   - Number of dispatches
+7. **Resource Allocation** — Respect CPU, memory, labels, blackouts, mutexes
+8. **Terminal Transitions** — Record succeeded/failed/missed/blocked/coalesced states
+9. **Fence Counting** — Monotonic counter per job for idempotency/replay safety
+
+### Scheduling Output
+
+**Dispatch record:**
+```json
+{
+  "time": "2025-01-01T09:15:00Z",
+  "occurrence": "job_daily@2025-01-01T14:00:00Z",  // job@release_utc
+  "attempt": 1,
+  "worker": "w1",
+  "fence": 5  // This job's dispatch #5
+}
+```
+
+**Terminal record:**
+```json
+{
+  "time": "2025-01-01T10:15:00Z",
+  "occurrence": "job_daily@2025-01-01T14:00:00Z",
+  "state": "succeeded|failed|missed|blocked|coalesced",
+  "attempts": 1  // Total attempts for this occurrence
+}
+```
+
+**Summary:**
+```json
+{
+  "dispatch_count": 42,
+  "succeeded": 40,
+  "failed": 1,
+  "missed": 0,
+  "blocked": 1,
+  "coalesced": 0,
+  "unfinished": 0
+}
+```
+
+### HTTP API
+
+```bash
+curl -X POST http://localhost:8000/api/schedule \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{
+    "workers": [...],
+    "jobs": [...],
+    "window_start": "2025-01-01T00:00:00Z",
+    "window_end": "2025-01-31T23:59:59Z"
+  }'
+# Returns: {run_id, dispatch_count, quality_score, summary, dispatches, terminal, status}
+```
+
+### Metrics & Observability
+
+Tracked in MLflow:
+- `scheduling_quality_score` — 1.0 if all jobs succeeded, 0.0 if any failed/missed
+- `scheduling_dispatch_count` — Total dispatches
+- `scheduling_success_rate` — Succeeded / Dispatched
+- `scheduling_dispatch_latency_mean_sec` — Avg time from release to dispatch
+- `scheduling_dispatch_latency_p95_sec` — 95th percentile latency
+
+**Tests:**
+```bash
+pytest tests/test_scheduling_integration.py -v
+# test_reconcile_basic — sample fleet config
+# test_reconcile_output_structure — verify spec compliance
+# test_quality_score_all_succeeded — 1.0 when all pass
+# test_quality_score_partial_failure — correct scoring
+# test_timezone_aware_scheduling — DST handling
+```
+
 ### MCP Integration
 
 ```json
@@ -332,6 +462,8 @@ recsys/               Learn-to-rank (LightGBM), SHAP explainability, NDCG/MAP/MR
 rl/                   RLHF pipeline (TRL), GRPO reasoning fine-tuning, Gym environments
 safety/               Adversarial tests, semantic safety, ML classifiers, behavioral classifiers
 sandbox/              Docker-based sandboxed code execution with static analysis
+scheduling/           Fleet timer reconciler: IANA timezone expansion, DST handling,
+                      deterministic job dispatch, dependency resolution, resource allocation
 simulation/           Physics simulator: batched RK4 integrator, Thomas-BMT spin transport,
                       variational sensitivities, quality gates (energy/spin conservation)
 spark_ml/             Delta Lake medallion pipeline, feature store, MLflow model registry
@@ -339,7 +471,7 @@ storage/              Delta Lake physics results ingestion, feature store querie
 streaming/            Kafka + Kinesis producers/consumers, drift detection, online embeddings
 tokenization/         BPE/WordPiece from scratch, SentencePiece, multilingual analysis
 infra/                Kubernetes, Terraform (AWS), Azure Bicep/Terraform, SageMaker
-tests/                120 tests: unit, integration, adversarial, multi-agent, physics
+tests/                130 tests: unit, integration, adversarial, multi-agent, physics, scheduling
 ```
 
 ---
