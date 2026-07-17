@@ -15,8 +15,11 @@ class TestBatchSimulate:
         result = batch_simulate(
             batch_size=5,
             num_steps=100,
-            particle_mass=0.938,
-            edm_eta=1e-3,
+            params={
+                "q": 1.0, "m": 0.938, "c": 299.792458, "anomaly": 1.793,
+                "edm_eta": 1e-3, "L": 0.5, "B0_initial": 1.0, "dtau": 1e-3,
+                "sensitivity_eps": 1e-6, "shape_sensitivity_eps": 1e-6,
+            },
         )
 
         assert "trajectories" in result
@@ -40,8 +43,9 @@ class TestBatchSimulate:
 
     def test_batch_simulate_with_initial_conditions(self):
         """Simulate with custom initial conditions."""
+        # Columns: x, y, z, vx, vy, vz, spin_z (spin seeds along z; batch_simulate
+        # normalizes the derived 3D spin vector internally).
         ic = torch.randn(3, 7) * 0.1
-        ic[:, 6] /= torch.norm(ic[:, 6], dim=1, keepdim=True)  # Normalize spin
 
         result = batch_simulate(
             batch_size=3,
@@ -222,7 +226,11 @@ class TestEdgeCases:
         result = batch_simulate(
             batch_size=1,
             num_steps=50,
-            edm_eta=0.0,
+            params={
+                "q": 1.0, "m": 0.938, "c": 299.792458, "anomaly": 1.793,
+                "edm_eta": 0.0, "L": 0.5, "B0_initial": 1.0, "dtau": 1e-3,
+                "sensitivity_eps": 1e-6, "shape_sensitivity_eps": 1e-6,
+            },
         )
 
         assert result["quality_score"] >= 0.0
