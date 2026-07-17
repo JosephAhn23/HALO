@@ -133,7 +133,7 @@ def benchmark_batch_throughput(n_queries: int = 100) -> Dict:
 
 
 def run_all_benchmarks():
-    print("=== LLMOps Research Assistant Benchmarks ===\n")
+    print("=== HALO Benchmarks ===\n")
 
     print("1. Realtime latency (50 sequential requests)...")
     latency_results = benchmark_realtime_latency(n_runs=50)

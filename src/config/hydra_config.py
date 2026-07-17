@@ -1,5 +1,5 @@
 """
-Hydra-based hierarchical configuration system for LLMOps Research Assistant.
+Hydra-based hierarchical configuration system for HALO.
 
 Provides:
   - Structured configs with dataclass validation

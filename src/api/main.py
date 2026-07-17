@@ -70,7 +70,7 @@ def _constitutional_api_gate(text: str, endpoint: str) -> None:
         raise HTTPException(status_code=400, detail=r.to_http_detail())
 
 
-app = FastAPI(title="LLMOps Research Assistant")
+app = FastAPI(title="HALO")
 
 app.add_middleware(
     CORSMiddleware,

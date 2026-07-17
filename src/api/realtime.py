@@ -14,7 +14,7 @@ class QueryRequest(BaseModel):
     top_k: int = 5
 
 
-app = FastAPI(title="LLMOps Research Assistant Realtime API")
+app = FastAPI(title="HALO Realtime API")
 
 
 @app.get("/health")

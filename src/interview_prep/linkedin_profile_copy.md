@@ -7,7 +7,7 @@ ML Engineer | Production LLMOps/RAG Systems | Evaluation, Causal Experimentation
 ## About Section
 
 I build production-oriented LLM systems with measurable quality, latency, and cost trade-offs.  
-My current project, `LLMOps Research Assistant`, is a full RAG + experimentation stack with:
+My current project, `HALO`, is a full RAG + experimentation stack with:
 
 - `<5 ms` FAISS retrieval and `~40-47 ms` reranking (`n=50` benchmark queries).
 - RAGAS quality gate in CI (`faithfulness=0.847`, held-out baseline set, `n=8`).
@@ -20,7 +20,7 @@ I focus on systems that are **auditable and reproducible**: every metric include
 
 | Item | Copy to paste |
 |:---|:---|
-| Project link | "Live demo + full code: LLMOps Research Assistant (RAG, eval CI gates, experimentation, multi-agent reliability)." |
+| Project link | "Live demo + full code: HALO (RAG, eval CI gates, experimentation, multi-agent reliability)." |
 | Results link | "Reproducible benchmark methodology with latency, RAGAS, and cost breakdowns (includes sample sizes and confidence intervals)." |
 | Case studies | "Two realistic scenarios: customer support QA flow and experimentation decision workflow with SRM/CUPED/sequential testing." |
 

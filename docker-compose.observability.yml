@@ -1,6 +1,6 @@
 version: "3.9"
 
-# Prometheus + Grafana observability stack for LLMOps Research Assistant.
+# Prometheus + Grafana observability stack for HALO.
 #
 # Usage:
 #   docker compose -f docker-compose.observability.yml up -d

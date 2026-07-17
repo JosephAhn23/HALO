@@ -1,5 +1,5 @@
 """
-Azure Deployment Module for LLMOps Research Assistant.
+Azure Deployment Module for HALO.
 
 Mirrors the existing AWS layer — adds Azure Container Apps + Azure ML + Azure OpenAI.
 Covers: Azure Container Apps, Azure ML, Azure OpenAI, Key Vault, Azure Monitor.
@@ -497,7 +497,7 @@ class _MockACAClient:
 # ---------------------------------------------------------------------------
 
 AZURE_TERRAFORM = '''
-# Azure infrastructure for LLMOps Research Assistant
+# Azure infrastructure for HALO
 # Mirrors infra/terraform/main.tf (AWS) — adds Azure path
 #
 # Deploy:

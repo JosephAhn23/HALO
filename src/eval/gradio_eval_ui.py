@@ -1,5 +1,5 @@
 """
-Gradio-based interactive evaluation UI for LLMOps Research Assistant.
+Gradio-based interactive evaluation UI for HALO.
 
 Enables researchers and non-technical stakeholders to:
   - Query the RAG pipeline interactively
@@ -165,7 +165,7 @@ def _mock_inference(
 
 class LLMOpsGradioUI:
     """
-    Five-tab Gradio evaluation UI for the LLMOps Research Assistant.
+    Five-tab Gradio evaluation UI for the HALO.
 
     Designed for both technical researchers (context inspection, quant benchmarks)
     and non-technical stakeholders (simple query interface, preference labelling).
@@ -322,13 +322,13 @@ class LLMOpsGradioUI:
             raise ImportError("gradio required: pip install gradio")
 
         with gr.Blocks(
-            title="LLMOps Research Assistant — Eval UI",
+            title="HALO — Eval UI",
             theme=gr.themes.Soft(),
             css=".gradio-container { max-width: 1200px !important }",
         ) as app:
 
             gr.Markdown(
-                "# LLMOps Research Assistant — Interactive Evaluation UI\n"
+                "# HALO — Interactive Evaluation UI\n"
                 "Compare models, inspect retrieval context, collect human feedback, "
                 "and monitor quality metrics."
             )

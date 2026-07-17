@@ -1,5 +1,5 @@
 """
-Production observability stack for LLMOps Research Assistant.
+Production observability stack for HALO.
 
 Components:
   - Prometheus metrics  — request latency, token counts, queue depth,
@@ -619,7 +619,7 @@ or histogram_quantile(0.99, sum(rate(llmops_request_latency_seconds_bucket[5m]))
     ]
 
     return {
-        "title": "LLMOps Research Assistant",
+        "title": "HALO",
         "uid": "llmops-main",
         "tags": ["llmops", "ml", "rag", "prometheus"],
         "refresh": "30s",

@@ -1,6 +1,8 @@
 <div align="center">
 
-# LLMOps Research Assistant
+# HALO
+
+LLMOps platform with batched physics simulation and deterministic fleet scheduling.
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -106,7 +108,7 @@ pytest tests/test_safety.py -v             # safety + red-team
 ```json
 {
   "mcpServers": {
-    "llmops": {
+    "halo": {
       "command": "python",
       "args": ["src/mcp_server/server.py"]
     }

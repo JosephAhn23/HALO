@@ -75,7 +75,7 @@ setup(
     name="llmops_kernels",
     version="0.1.0",
     description="Custom CUDA kernels for LLMOps inference pipeline",
-    author="LLMOps Research Assistant",
+    author="HALO",
     ext_modules=[
         CUDAExtension(
             name="llmops_kernels",

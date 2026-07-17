@@ -1,5 +1,5 @@
 """
-MCP (Model Context Protocol) Server for LLMOps Research Assistant.
+MCP (Model Context Protocol) Server for HALO.
 Closes gap: MCP server experience
 
 Exposes RAG pipeline capabilities as MCP tools so any MCP-compatible
