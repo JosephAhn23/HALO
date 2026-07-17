@@ -34,6 +34,42 @@ def dispatch_model(model: torch.nn.Module, use_triton: bool = True) -> torch.nn.
         return model
 
 
+def dispatch_physics(batch_size: int, num_steps: int, use_triton: bool = True) -> dict:
+    """
+    Dispatch physics simulation to optimal hardware.
+
+    Args:
+        batch_size: Number of particles to simulate
+        num_steps: Integration steps per trajectory
+        use_triton: Whether to use Triton-optimized kernels
+
+    Returns:
+        dict with compiled physics function and hardware info
+    """
+    hardware = get_hardware_info()
+    logger.info(f"Dispatching physics simulation: batch_size={batch_size}, "
+                f"num_steps={num_steps}, hardware={hardware.get('device_name', 'cpu')}")
+
+    def physics_wrapper(simulate_fn: Callable) -> Callable:
+        """Wrap physics simulator with hardware optimization."""
+        if not use_triton:
+            return simulate_fn
+
+        try:
+            compiled = torch.compile(simulate_fn, backend=morphos_backend_phase3)
+            logger.info("Physics simulator compiled with morphos_backend_phase3")
+            return compiled
+        except Exception as e:
+            logger.warning(f"Physics compilation failed: {e}. Using uncompiled version")
+            return simulate_fn
+
+    return {
+        "hardware_info": hardware,
+        "wrapper": physics_wrapper,
+        "device": "cuda" if hardware["cuda_available"] else "cpu",
+    }
+
+
 def get_hardware_info() -> dict:
     """Get current hardware configuration."""
     info = {

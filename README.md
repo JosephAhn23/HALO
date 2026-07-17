@@ -62,6 +62,7 @@
 | **Govern** | Model cards (Mitchell et al. standard), bias evaluation (statistical parity, equal opportunity), PII redaction (10 pattern types), SHA-256 cryptographic audit log, CI enforcement with `--exit-code` for GitHub Actions. | Locally. |
 | **Experiment** | Hash-based A/B router, O'Brien-Fleming sequential testing (no alpha inflation), CUPED variance reduction, Double ML for unbiased ATE, sample size calculator, SRM detection, automated markdown reports. | Locally. |
 | **Causal** | Uplift modeling (T-Learner), DoWhy-style propensity score matching, Double ML cross-fitting, CUPED variance reduction, synthetic experiment simulator with confounders. | Locally. |
+| **Physics** | Batched RK4 integrator for relativistic spin transport. Thomas-BMT equation + EDM coupling. Variational sensitivity tensors for parameter derivatives. Quality gates: energy/spin conservation + magnetic moment adiabatic invariance. Hardware dispatch via cuda-morph (NVIDIA Triton). RAGAS trajectory stability evaluation. | Requires PyTorch. GPU accelerated via torch.compile. |
 | **Data** | Delta Lake medallion pipeline (bronze/silver/gold), feature store with point-in-time correct joins, MLflow model registry with gated promotion and rollback. | Locally (mock Spark). Requires Databricks/EMR for distributed. |
 | **Recommend** | Hybrid retrieval + LightGBM learn-to-rank, SHAP feature importance, MMR diversity reranking, offline NDCG/MAP/MRR evaluation. | Locally. |
 | **Stream** | Stateful stream processor for Kafka/Kinesis events, Page-Hinkley + ADWIN drift detection, PSI distribution monitoring, online embedding refresh. | Locally. Kafka: requires broker. |
@@ -211,6 +212,64 @@ python -m governance.ci_enforcement --model-name rag-embedder --version 3 --exit
 python -c "from agents.multi_agent.supervisor import Supervisor; s=Supervisor(); t=s.run('What is RAG?'); print(t.final_answer)"
 ```
 
+## Physics Simulation
+
+Run batched relativistic spin transport simulations on any GPU:
+
+```bash
+# Direct Python API
+from simulation import batch_simulate
+result = batch_simulate(
+    batch_size=100,           # Simulate 100 particles in parallel
+    num_steps=10000,          # 10k RK4 integration steps each
+    particle_mass=0.938,      # Proton mass (GeV/c²)
+    edm_eta=1e-3,            # EDM coupling strength
+)
+print(f"Quality: {result['quality_score']:.3f}")
+print(f"Gates passed: {result['diagnostics']['gates_passed']}")
+
+# HTTP API (requires uvicorn api.main:app running)
+curl -X POST http://localhost:8000/api/simulate \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{
+    "batch_size": 1000,
+    "num_steps": 10000,
+    "particle_mass": 0.938,
+    "edm_eta": 1e-3
+  }'
+# Returns: trajectories, sensitivity tensors, quality_score, hardware_used, estimated_cost
+```
+
+### Physics Pipeline
+
+1. **Batched Integration** — RK4 proper-time evolution in 16-state variational space
+2. **Thomas-BMT Equation** — Relativistic spin precession with EDM coupling  
+3. **Quality Gates** — Energy conservation < 0.01%, spin-norm drift < 0.005%, magnetic moment adiabatic invariance
+4. **Hardware Dispatch** — Routes to CUDA via `torch.compile(backend=morphos_backend_phase3)`
+5. **MLflow Tracking** — Quality scores, diagnostics, hardware choice, cost per simulation
+6. **Delta Lake** — Ingests results for feature store; point-in-time correct joins for training data
+7. **RAGAS Evaluation** — Trajectory stability scoring; regression detection on quality baseline
+
+**Output schema:**
+- `trajectories`: (batch, num_steps, 7) — position + velocity + spin  
+- `sensitivity_W`: (batch, num_steps, 44) — variational sensitivities (W, dW/dB0, etc.)
+- `diagnostics`: energy drift %, spin norm drift %, magnetic moment check  
+- `quality_score`: 0-1 (1.0 if all gates pass, 0.0 if any fail)  
+- `gates_passed`: bool  
+- `hardware_used`: "cuda" or "cpu"  
+- `estimated_cost_usd`: based on $2/hr A100 amortization  
+
+**Tests:**
+```bash
+pytest tests/test_physics_integration.py -v
+# test_batch_simulate_basic — 5 particles, 100 steps
+# test_quality_gates_pass/fail — validation logic
+# test_spin_norm_conservation — < 1% drift
+# test_trajectory_continuity — no NaN/Inf
+# test_sensitivity_tensor_validity — variational output shapes
+```
+
 ### MCP Integration
 
 ```json
@@ -273,11 +332,14 @@ recsys/               Learn-to-rank (LightGBM), SHAP explainability, NDCG/MAP/MR
 rl/                   RLHF pipeline (TRL), GRPO reasoning fine-tuning, Gym environments
 safety/               Adversarial tests, semantic safety, ML classifiers, behavioral classifiers
 sandbox/              Docker-based sandboxed code execution with static analysis
+simulation/           Physics simulator: batched RK4 integrator, Thomas-BMT spin transport,
+                      variational sensitivities, quality gates (energy/spin conservation)
 spark_ml/             Delta Lake medallion pipeline, feature store, MLflow model registry
+storage/              Delta Lake physics results ingestion, feature store queries
 streaming/            Kafka + Kinesis producers/consumers, drift detection, online embeddings
 tokenization/         BPE/WordPiece from scratch, SentencePiece, multilingual analysis
 infra/                Kubernetes, Terraform (AWS), Azure Bicep/Terraform, SageMaker
-tests/                117 tests: unit, integration, adversarial, multi-agent
+tests/                120 tests: unit, integration, adversarial, multi-agent, physics
 ```
 
 ---

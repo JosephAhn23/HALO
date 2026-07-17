@@ -187,6 +187,60 @@ def build_eval_dataset(qa_pairs: list) -> Dataset:
     })
 
 
+class PhysicsEvaluator:
+    """Physics simulation quality evaluation via trajectory stability metrics."""
+
+    TRAJECTORY_STABILITY_THRESHOLD = 0.95  # 95% quality minimum
+
+    @staticmethod
+    def evaluate_trajectory_stability(results: dict, baseline_quality: float = 0.9) -> dict:
+        """
+        Evaluate physics simulation trajectory stability.
+
+        Args:
+            results: Output from batch_simulate()
+            baseline_quality: Expected minimum quality score
+
+        Returns:
+            dict with stability metrics
+        """
+        quality_score = results.get("quality_score", 0.0)
+        diagnostics = results.get("diagnostics", {})
+
+        spin_drift = diagnostics.get("spin_norm_drift_percent", 0.0)
+        mu_deviation = diagnostics.get("mu_max_rel_dev", 0.0)
+        gates_passed = diagnostics.get("gates_passed", False)
+
+        # Compute stability score (0-1)
+        stability = min(1.0, quality_score / baseline_quality)
+        regressed = stability < PhysicsEvaluator.TRAJECTORY_STABILITY_THRESHOLD
+
+        metrics = {
+            "physics_trajectory_stability": stability,
+            "physics_spin_drift_percent": spin_drift,
+            "physics_mu_deviation": mu_deviation,
+            "physics_gates_passed": float(gates_passed),
+            "physics_regressed": float(regressed),
+        }
+
+        logger.info(f"Physics trajectory stability: {stability:.3f}, "
+                    f"spin_drift={spin_drift:.6f}%, gates={'pass' if gates_passed else 'fail'}")
+
+        return metrics
+
+    @staticmethod
+    def log_to_mlflow(run_id: str, stability_metrics: dict):
+        """Log physics stability metrics to MLflow."""
+        try:
+            mlflow.start_run(run_name=f"physics-eval-{run_id}")
+            mlflow.log_metrics(stability_metrics)
+            mlflow.set_tag("evaluation_type", "physics_trajectory_stability")
+            mlflow.end_run()
+            logger.info(f"Logged physics stability metrics to MLflow")
+        except Exception as e:
+            logger.warning(f"Could not log physics metrics to MLflow: {e}")
+
+
 if __name__ == "__main__":
     tracker = RAGASTracker()
     sample_data = [
