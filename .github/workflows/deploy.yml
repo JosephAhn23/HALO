@@ -46,7 +46,7 @@ jobs:
       - name: Trigger SageMaker retraining (weekly)
         if: github.event_name == 'schedule'
         run: |
-          python infra/sagemaker_pipeline.py --trigger-execution
+          python src/infra/sagemaker_pipeline.py --trigger-execution
 
       - name: Notify on failure
         if: failure()

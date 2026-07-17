@@ -167,7 +167,7 @@ jobs:
           is_real_key = api_key and not api_key.startswith("sk-test")
 
           if is_real_key:
-              from mlops.ragas_tracker import RAGASTracker, build_eval_dataset
+              from src.mlops.ragas_tracker import RAGASTracker, build_eval_dataset
               EVAL_PAIRS = [
                   {
                       "question": "What is retrieval-augmented generation?",
@@ -190,7 +190,7 @@ jobs:
               ]
               tracker = RAGASTracker(
                   experiment_name=f"ci-ragas-{os.environ.get('GITHUB_SHA','local')[:8]}",
-                  baseline_path="./mlops/ragas_baseline.json",
+                  baseline_path="./src/mlops/ragas_baseline.json",
               )
               ds = build_eval_dataset(EVAL_PAIRS)
               scores = tracker.evaluate(ds, run_name=f"ci-{os.environ.get('GITHUB_SHA','local')[:8]}")
@@ -210,9 +210,9 @@ jobs:
       - name: Regression gate
         id: gate
         run: |
-          python cicd/ragas_gate.py \
+          python src/cicd/ragas_gate.py \
             --scores reports/ragas_scores.json \
-            --baseline mlops/ragas_baseline.json \
+            --baseline src/mlops/ragas_baseline.json \
             --tolerance 0.03
 
       - name: Upload RAGAS report
@@ -294,7 +294,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          docker build -t $ECR_REGISTRY/llmops-api:$IMAGE_TAG .
+          docker build -f src/infra/dockerfiles/api.Dockerfile -t $ECR_REGISTRY/llmops-api:$IMAGE_TAG .
           docker push $ECR_REGISTRY/llmops-api:$IMAGE_TAG
           echo "image=$ECR_REGISTRY/llmops-api:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
@@ -306,7 +306,7 @@ jobs:
             -e OPENAI_API_KEY=sk-test \
             --name smoke-test \
             $ECR_REGISTRY/llmops-api:${{ github.sha }} \
-            uvicorn api.main:app --host 0.0.0.0 --port 8000
+            uvicorn src.api.main:app --host 0.0.0.0 --port 8000
           sleep 5
           curl -f http://localhost:8000/health
           docker stop smoke-test
