@@ -77,7 +77,7 @@ curl -X POST http://localhost:8000/dispatch/triton \
 ### Python Integration
 
 ```python
-from inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
+from src.inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
 import torch
 
 # Get hardware info

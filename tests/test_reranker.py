@@ -1,4 +1,4 @@
-from agents.reranker import RerankerAgent
+from src.agents.reranker import RerankerAgent
 
 
 def test_reranker_fallback_preserves_input_order() -> None:

@@ -1,10 +1,10 @@
 from unittest.mock import MagicMock, patch
 
-from agents.multi_agent.cross_provider_consensus import (
+from src.agents.multi_agent.cross_provider_consensus import (
     CrossProviderConsensusResult,
     ProviderAnswer,
 )
-from agents.orchestrator import Pipeline, after_behavioral, after_cost_route, should_continue
+from src.agents.orchestrator import Pipeline, after_behavioral, after_cost_route, should_continue
 
 
 # ─── Existing tests ────────────────────────────────────────────
@@ -231,7 +231,7 @@ def test_pipeline_run_nested_mlflow_when_active_run_exists() -> None:
 # ─── Cost router gate ──────────────────────────────────────────
 
 def _make_router(abstain: bool, complexity_tier=None, model=None, reasoning="mock"):
-    from agents.multi_agent.cost_router import RouterDecision
+    from src.agents.multi_agent.cost_router import RouterDecision
 
     router = MagicMock()
     router.route.return_value = RouterDecision(

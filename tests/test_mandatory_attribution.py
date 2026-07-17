@@ -1,6 +1,6 @@
 """Mandatory attribution IDs and grounding confidence."""
 
-from context_engineering.mandatory_attribution import (
+from src.context_engineering.mandatory_attribution import (
     build_attribution_footer,
     compute_grounding_confidence,
     enrich_chunks_with_attribution_ids,

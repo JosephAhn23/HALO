@@ -3,8 +3,8 @@
 import pytest
 import torch
 import numpy as np
-from simulation import batch_simulate, QualityGates, track_to_mlflow
-from inference.cuda_dispatch.dispatcher import get_hardware_info
+from src.simulation import batch_simulate, QualityGates, track_to_mlflow
+from src.inference.cuda_dispatch.dispatcher import get_hardware_info
 
 
 class TestBatchSimulate:

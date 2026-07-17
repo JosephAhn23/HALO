@@ -154,26 +154,26 @@ pip install -r requirements.txt
 export OPENAI_API_KEY=your_key
 
 # 1) RAGAS baseline (n=8 synthetic held-out QA pairs)
-python benchmarks/run_ragas.py
+python src/benchmarks/run_ragas.py
 
 # 2) API latency/throughput benchmark (requires API up)
 docker compose up -d
-uvicorn api.main:app --reload
-python benchmarks/run_benchmarks.py
+uvicorn src.api.main:app --reload
+python src/benchmarks/run_benchmarks.py
 
 # 3) vLLM benchmark (requires GPU + model weights)
-python benchmarks/vllm_benchmarks.py --model meta-llama/Llama-3.1-8B-Instruct
+python src/benchmarks/vllm_benchmarks.py --model meta-llama/Llama-3.1-8B-Instruct
 
 # 4) Optional experiment reporting flow
 python -m experimentation.ab_router
 
 # 5) Cost-aware router eval (no API key or GPU needed — trains the
 #    classifier and computes real similarity scores locally)
-python benchmarks/run_cost_router_eval.py
+python src/benchmarks/run_cost_router_eval.py
 
 # 6) Retrieval ablation: bi-encoder-only vs. +cross-encoder reranking
 #    (no API key needed — CPU-only, real embedding + cross-encoder models)
-python benchmarks/run_retrieval_ablation.py
+python src/benchmarks/run_retrieval_ablation.py
 ```
 
 Artifacts generated:

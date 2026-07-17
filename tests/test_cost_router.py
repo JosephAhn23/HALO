@@ -6,7 +6,7 @@ accuracy, so they should stay fast and not load the embedding model.
 """
 from unittest.mock import MagicMock
 
-from agents.multi_agent.cost_router import (
+from src.agents.multi_agent.cost_router import (
     MODEL_PRICING_USD_PER_1K,
     TIER_MODEL_MAP,
     CostAwareRouter,

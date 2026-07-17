@@ -1,6 +1,6 @@
 import time
 
-from api import shard_aggregator as aggregator
+from src.api import shard_aggregator as aggregator
 
 
 def test_search_one_returns_empty_on_timeout(monkeypatch) -> None:

@@ -10,7 +10,7 @@ import pytest
 class TestShardBuilding:
     def test_build_creates_correct_n_shards(self):
         pytest.importorskip("faiss")
-        from infra.distributed_faiss_service import build_shard_indexes
+        from src.infra.distributed_faiss_service import build_shard_indexes
 
         embeddings = np.random.randn(400, 64).astype(np.float32)
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)

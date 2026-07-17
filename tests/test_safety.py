@@ -25,7 +25,7 @@ class TestSemanticDetector:
         return embedder, adversarial_emb, benign_emb
 
     def test_high_similarity_flagged(self):
-        from safety.semantic_safety import SemanticSafetyDetector
+        from src.safety.semantic_safety import SemanticSafetyDetector
 
         with patch.object(SemanticSafetyDetector, "_build_or_load"):
             detector = SemanticSafetyDetector.__new__(SemanticSafetyDetector)
@@ -39,7 +39,7 @@ class TestSemanticDetector:
             assert method == "similarity_high_confidence"
 
     def test_low_similarity_benign(self):
-        from safety.semantic_safety import SemanticSafetyDetector
+        from src.safety.semantic_safety import SemanticSafetyDetector
 
         with patch.object(SemanticSafetyDetector, "_build_or_load"):
             detector = SemanticSafetyDetector.__new__(SemanticSafetyDetector)
@@ -52,7 +52,7 @@ class TestSemanticDetector:
             assert method == "benign"
 
     def test_fusion_both_signals(self):
-        from safety.semantic_safety import SemanticSafetyDetector
+        from src.safety.semantic_safety import SemanticSafetyDetector
 
         with patch.object(SemanticSafetyDetector, "_build_or_load"):
             detector = SemanticSafetyDetector.__new__(SemanticSafetyDetector)
@@ -65,7 +65,7 @@ class TestSemanticDetector:
             assert method == "similarity_anomaly_fusion"
 
     def test_anomaly_only_uncertain(self):
-        from safety.semantic_safety import SemanticSafetyDetector
+        from src.safety.semantic_safety import SemanticSafetyDetector
 
         with patch.object(SemanticSafetyDetector, "_build_or_load"):
             detector = SemanticSafetyDetector.__new__(SemanticSafetyDetector)
@@ -79,7 +79,7 @@ class TestSemanticDetector:
             assert method == "anomaly_detection"
 
     def test_evaluation_metrics_computed(self):
-        from safety.semantic_safety import SemanticSafetyDetector
+        from src.safety.semantic_safety import SemanticSafetyDetector
 
         with patch.object(SemanticSafetyDetector, "_build_or_load"), \
              patch.object(SemanticSafetyDetector, "_ensure_initialized"), \
@@ -111,7 +111,7 @@ class TestSemanticDetector:
 
 class TestAttackLibrary:
     def test_similarity_search_returns_top_k(self):
-        from safety.semantic_safety import AttackEmbeddingLibrary
+        from src.safety.semantic_safety import AttackEmbeddingLibrary
 
         library = AttackEmbeddingLibrary.__new__(AttackEmbeddingLibrary)
         library.attack_embeddings = np.random.randn(25, 384).astype(np.float32)
@@ -127,7 +127,7 @@ class TestAttackLibrary:
         assert scores == sorted(scores, reverse=True)
 
     def test_add_attack_increases_library(self):
-        from safety.semantic_safety import AttackEmbeddingLibrary
+        from src.safety.semantic_safety import AttackEmbeddingLibrary
 
         library = AttackEmbeddingLibrary.__new__(AttackEmbeddingLibrary)
         library.attack_embeddings = np.random.randn(5, 384).astype(np.float32)
@@ -144,7 +144,7 @@ class TestAttackLibrary:
 
 class TestHybridDetector:
     def test_rule_stage_fires_first(self):
-        from safety.semantic_safety import HybridSafetyDetector
+        from src.safety.semantic_safety import HybridSafetyDetector
 
         with patch("safety.semantic_safety.SemanticSafetyDetector") as mock_sem, patch(
             "safety.adversarial_tests.PromptInjectionDetector"
@@ -164,7 +164,7 @@ class TestHybridDetector:
             mock_sem_inst.detect.assert_not_called()
 
     def test_semantic_stage_fires_for_subtle_attack(self):
-        from safety.semantic_safety import HybridSafetyDetector
+        from src.safety.semantic_safety import HybridSafetyDetector
 
         with patch("safety.semantic_safety.SemanticSafetyDetector") as mock_sem, patch(
             "safety.adversarial_tests.PromptInjectionDetector"

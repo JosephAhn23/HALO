@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from sandbox.code_sandbox import ExecutionResult
-from sandbox.debug_loop import AutonomousDebugLoop, default_artifact_ok
+from src.sandbox.code_sandbox import ExecutionResult
+from src.sandbox.debug_loop import AutonomousDebugLoop, default_artifact_ok
 
 
 def test_default_artifact_ok_csv_and_marker():

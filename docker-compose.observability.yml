@@ -15,8 +15,8 @@ services:
     image: prom/prometheus:v2.51.0
     container_name: llmops-prometheus
     volumes:
-      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./observability/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./src/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./src/observability/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheus_data:/prometheus
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -42,8 +42,8 @@ services:
       GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/llmops.json
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./observability/grafana_dashboard.json:/var/lib/grafana/dashboards/llmops.json:ro
-      - ./observability/grafana_provisioning:/etc/grafana/provisioning:ro
+      - ./src/observability/grafana_dashboard.json:/var/lib/grafana/dashboards/llmops.json:ro
+      - ./src/observability/grafana_provisioning:/etc/grafana/provisioning:ro
     ports:
       - "3000:3000"
     depends_on:
@@ -59,7 +59,7 @@ services:
     image: prom/alertmanager:v0.27.0
     container_name: llmops-alertmanager
     volumes:
-      - ./observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ./src/observability/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
       - "9093:9093"
     restart: unless-stopped

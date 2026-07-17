@@ -196,14 +196,7 @@ llmops-config   = "config.hydra_config:main"
 # ── Tool configuration ─────────────────────────────────────────────────────────
 
 [tool.hatch.build.targets.wheel]
-packages = [
-    "agents", "analysis", "api", "causal", "cicd", "compile", "config", "context_engineering",
-    "prompt_registry",
-    "cuda_ext", "eval", "experiments", "finetune", "governance", "inference", "ingestion", "interpretability",
-    "mcp_server", "microservices", "mlops", "monitoring",
-    "multimodal", "observability", "recsys", "rl", "safety",
-    "sandbox", "spark_ml", "streaming", "tokenization",
-]
+packages = ["src"]
 
 [tool.ruff]
 line-length = 100
@@ -227,7 +220,7 @@ addopts = "--cov=. --cov-report=term-missing --cov-report=xml -v"
 filterwarnings = ["ignore::DeprecationWarning"]
 
 [tool.coverage.run]
-omit = ["tests/*", "notebooks/*", "benchmarks/*", "conf/*", "outputs/*"]
+omit = ["tests/*", "notebooks/*", "src/benchmarks/*", "src/conf/*", "outputs/*"]
 
 [tool.uv]
 dev-dependencies = [

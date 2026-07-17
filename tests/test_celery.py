@@ -24,7 +24,7 @@ class TestProcessQueryTask:
             "error": "",
         }
 
-        batch_mod = importlib.import_module("api.batch")
+        batch_mod = importlib.import_module("src.api.batch")
         with patch.object(batch_mod, "run_pipeline", return_value=mock_result), patch.object(
             batch_mod, "redis_client"
         ) as mock_redis, patch.object(batch_mod, "_get_cw", return_value=MagicMock()):
@@ -35,7 +35,7 @@ class TestProcessQueryTask:
             mock_redis.hset.assert_called()
 
     def test_failed_task_retries_with_backoff(self):
-        batch_mod = importlib.import_module("api.batch")
+        batch_mod = importlib.import_module("src.api.batch")
         with patch.object(batch_mod, "run_pipeline", side_effect=Exception("connection error")), patch.object(
             batch_mod, "redis_client"
         ), patch.object(batch_mod, "_get_cw", return_value=MagicMock()), patch.object(batch_mod, "dead_letter_task"):
@@ -61,7 +61,7 @@ class TestProcessQueryTask:
 
 class TestJobTracking:
     def test_enqueue_sets_initial_status(self):
-        batch_mod = importlib.import_module("api.batch")
+        batch_mod = importlib.import_module("src.api.batch")
         with patch.object(batch_mod, "process_query_task") as mock_task, patch.object(
             batch_mod, "redis_client"
         ) as mock_redis:
@@ -72,7 +72,7 @@ class TestJobTracking:
             assert result["tasks"] == 3
 
     def test_get_job_status_progress(self):
-        batch_mod = importlib.import_module("api.batch")
+        batch_mod = importlib.import_module("src.api.batch")
         with patch.object(batch_mod, "redis_client") as mock_redis:
             mock_redis.hgetall.return_value = {
                 b"_status": b"processing",
@@ -87,7 +87,7 @@ class TestJobTracking:
             assert "progress" in status
 
     def test_get_job_status_not_found(self):
-        batch_mod = importlib.import_module("api.batch")
+        batch_mod = importlib.import_module("src.api.batch")
         with patch.object(batch_mod, "redis_client") as mock_redis:
             mock_redis.hgetall.return_value = {}
             status = batch_mod.get_job_status("nonexistent")
@@ -96,7 +96,7 @@ class TestJobTracking:
 
 class TestDeadLetterQueue:
     def test_dlq_stores_failed_task(self):
-        batch_mod = importlib.import_module("api.batch")
+        batch_mod = importlib.import_module("src.api.batch")
         with patch.object(batch_mod, "redis_client") as mock_redis, patch.object(batch_mod, "_get_cw", return_value=MagicMock()):
             batch_mod.dead_letter_task.__wrapped__("job-fail", "bad query", "connection timeout", "task-xyz")
 

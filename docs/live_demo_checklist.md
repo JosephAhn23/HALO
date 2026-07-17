@@ -5,10 +5,10 @@ This checklist is for turning the local project into a hiring-manager-ready live
 | Step | Command / Action | Evidence to capture |
 |:---|:---|:---|
 | 1 | `docker compose up -d` | Services healthy screenshot |
-| 2 | `uvicorn api.main:app --host 0.0.0.0 --port 8000` | API startup log |
+| 2 | `uvicorn src.api.main:app --host 0.0.0.0 --port 8000` | API startup log |
 | 3 | Run one query through `/query` endpoint | JSON response with citations |
-| 4 | `python benchmarks/run_ragas.py` | `mlops/ragas_baseline.json` output |
-| 5 | `python benchmarks/run_benchmarks.py` | `benchmarks/results.json` output |
+| 4 | `python src/benchmarks/run_ragas.py` | `src/mlops/ragas_baseline.json` output |
+| 5 | `python src/benchmarks/run_benchmarks.py` | `src/benchmarks/results.json` output |
 | 6 | Record 20-30s GIF (query -> logs -> answer) and save `assets/quick_demo.gif` | Embedded GIF in README |
 | 7 | Deploy API to target host (Render/Fly.io/AWS/GCP) and update `Live Demo` badge URL in `README.md` | Public URL + working endpoint |
 

@@ -1,4 +1,4 @@
-from agents.attribution import attribute_answer_to_chunks
+from src.agents.attribution import attribute_answer_to_chunks
 
 
 def test_attribution_links_sentence_to_chunk():

@@ -23,7 +23,7 @@ curl -X POST http://localhost:8000/dispatch/triton \
 ### 2. Compile a Model
 
 ```python
-from inference.cuda_dispatch.dispatcher import dispatch_model
+from src.inference.cuda_dispatch.dispatcher import dispatch_model
 import torch
 
 model = torch.nn.Linear(1024, 512)

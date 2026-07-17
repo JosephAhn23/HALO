@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
-from sandbox.code_sandbox import ExecutionResult
-from sandbox.self_healing_loop import SelfHealingLoop
+from src.sandbox.code_sandbox import ExecutionResult
+from src.sandbox.self_healing_loop import SelfHealingLoop
 
 
 def test_self_healing_stops_on_green() -> None:

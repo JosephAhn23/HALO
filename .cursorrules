@@ -21,5 +21,5 @@ For every non-trivial task, you must output a "Business Impact Brief" before the
 - VALUE-BASED DEBUGGING: If a bug is in a "low-value" edge case, ask me if it's worth the engineering hours to fix it before proceeding.
 
 # PROJECT CONTEXT (LLMOps-Research-Assistant)
-- Prefer the existing stack: RAG pipeline (`agents/orchestrator.py`), governance gates (`governance/`, `cicd/`), sandbox (`sandbox/`), multi-agent (`agents/multi_agent/`). Extend these rather than adding parallel frameworks unless Build vs. Buy clearly favors it.
+- Prefer the existing stack: RAG pipeline (`src/agents/orchestrator.py`), governance gates (`src/governance/`, `src/cicd/`), sandbox (`src/sandbox/`), multi-agent (`src/agents/multi_agent/`). Extend these rather than adding parallel frameworks unless Build vs. Buy clearly favors it.
 - Respect user rules: minimal diffs, no unsolicited docs, run tests when changing behavior.

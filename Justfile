@@ -36,40 +36,40 @@ venv:
 
 # Start FastAPI gateway (hot-reload)
 serve:
-    uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+    uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 # Start FastAPI with Prometheus metrics enabled
 serve-metrics:
-    ENABLE_METRICS=1 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+    ENABLE_METRICS=1 uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 # Generate NIM Docker Compose and start NIM container
 nim-up MODEL="meta/llama-3.1-8b-instruct":
-    python inference/trtllm_nim.py --gen-docker --model {{MODEL}}
+    python src/inference/trtllm_nim.py --gen-docker --model {{MODEL}}
     docker compose -f docker-compose.nim.yml up -d
     @echo "NIM container starting at http://localhost:8000"
 
 # Check NIM container health
 nim-health PORT="8000":
-    python inference/trtllm_nim.py --health --port {{PORT}}
+    python src/inference/trtllm_nim.py --health --port {{PORT}}
 
 # Benchmark NIM endpoint
 nim-bench PORT="8000":
-    python inference/trtllm_nim.py --benchmark --port {{PORT}}
+    python src/inference/trtllm_nim.py --benchmark --port {{PORT}}
 
 # Generate TRT-LLM build script
 trtllm-build-script MODEL="meta-llama/Llama-3.1-8B-Instruct":
-    python inference/trtllm_nim.py --gen-build-script --model {{MODEL}}
+    python src/inference/trtllm_nim.py --gen-build-script --model {{MODEL}}
 
 # Start FastAPI with Prometheus metrics enabled
-    ENABLE_METRICS=1 uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+    ENABLE_METRICS=1 uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 # Start Gradio evaluation UI
 ui:
-    python eval/gradio_eval_ui.py --host 0.0.0.0 --port 7860
+    python src/eval/gradio_eval_ui.py --host 0.0.0.0 --port 7860
 
 # Start MCP server (for Claude/Cursor integration)
 mcp:
-    python mcp_server/server.py
+    python src/mcp_server/server.py
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 
@@ -85,13 +85,13 @@ up-obs:
 
 # Start distributed microservices stack
 up-micro:
-    docker compose -f microservices/docker-compose.microservices.yml up -d
+    docker compose -f src/microservices/docker-compose.microservices.yml up -d
 
 # Stop all stacks
 down:
     docker compose down
     docker compose -f docker-compose.observability.yml down --remove-orphans || true
-    docker compose -f microservices/docker-compose.microservices.yml down --remove-orphans || true
+    docker compose -f src/microservices/docker-compose.microservices.yml down --remove-orphans || true
 
 # Rebuild and restart API container
 rebuild:
@@ -124,63 +124,63 @@ test-file FILE:
 
 # Run RAGAS evaluation and update baseline
 eval:
-    python -m mlops.ragas_tracker \
-        --output-json mlops/ragas_scores.json \
+    python -m src.mlops.ragas_tracker \
+        --output-json src/mlops/ragas_scores.json \
         --experiment-name "manual-eval-$(date +%Y%m%d)"
 
 # Run RAGAS regression gate (CI check)
 gate:
-    python cicd/ragas_gate.py \
-        --scores mlops/ragas_scores.json \
-        --baseline mlops/ragas_baseline.json
+    python src/cicd/ragas_gate.py \
+        --scores src/mlops/ragas_scores.json \
+        --baseline src/mlops/ragas_baseline.json
 
 # ── Benchmarking ──────────────────────────────────────────────────────────────
 
 # torch.compile benchmark (CPU, embedding model)
 bench-compile:
-    python inference/torch_compile_bench.py --device cpu --model embedding --runs 50
+    python src/inference/torch_compile_bench.py --device cpu --model embedding --runs 50
 
 # torch.compile benchmark (all models, GPU if available)
 bench-compile-gpu:
-    python inference/torch_compile_bench.py --device cuda --model all --runs 100 --mlflow
+    python src/inference/torch_compile_bench.py --device cuda --model all --runs 100 --mlflow
 
 # Streaming pipeline benchmark (Kafka produce/consume)
 bench-streaming:
-    python streaming/streaming_pipeline.py --backend kafka --mode produce --n-events 100
+    python src/streaming/streaming_pipeline.py --backend kafka --mode produce --n-events 100
 
 # ── Fine-tuning ───────────────────────────────────────────────────────────────
 
 # QLoRA fine-tuning (small model, CPU demo)
 finetune-qlora:
-    python finetune/peft_lora_finetune.py
+    python src/finetune/peft_lora_finetune.py
 
 # RLHF PPO training
 finetune-rlhf:
-    python rl/rlhf_pipeline.py
+    python src/rl/rlhf_pipeline.py
 
 # GRPO reasoning fine-tuning
 finetune-grpo:
-    python rl/reasoning_rl.py
+    python src/rl/reasoning_rl.py
 
 # ── Inference ─────────────────────────────────────────────────────────────────
 
 # Run llama.cpp local inference
 infer-local MODEL="models/llama-3.2-1b.Q4_K_M.gguf":
-    python inference/llamacpp_backend.py --model {{MODEL}} --prompt "What is RAG?"
+    python src/inference/llamacpp_backend.py --model {{MODEL}} --prompt "What is RAG?"
 
 # Export model to ONNX
 export-onnx MODEL="embedding":
-    python inference/tensorrt_onnx_triton.py --export-onnx --model {{MODEL}}
+    python src/inference/tensorrt_onnx_triton.py --export-onnx --model {{MODEL}}
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 # Generate Hydra conf/ directory
 config-gen:
-    python config/hydra_config.py --generate
+    python src/config/hydra_config.py --generate
 
 # Show resolved config
 config-show *OVERRIDES:
-    python config/hydra_config.py --show --overrides {{OVERRIDES}}
+    python src/config/hydra_config.py --show --overrides {{OVERRIDES}}
 
 # ── Code quality ──────────────────────────────────────────────────────────────
 
@@ -208,104 +208,104 @@ qa: lint fmt types
 
 # Set up Kafka topics
 kafka-setup:
-    python streaming/streaming_pipeline.py --backend kafka --mode setup
+    python src/streaming/streaming_pipeline.py --backend kafka --mode setup
 
 # Produce test events to Kafka
 kafka-produce N="10":
-    python streaming/streaming_pipeline.py --backend kafka --mode produce --n-events {{N}}
+    python src/streaming/streaming_pipeline.py --backend kafka --mode produce --n-events {{N}}
 
 # Consume events from Kafka
 kafka-consume N="10":
-    python streaming/streaming_pipeline.py --backend kafka --mode consume --n-events {{N}}
+    python src/streaming/streaming_pipeline.py --backend kafka --mode consume --n-events {{N}}
 
 # ── Tokenization ──────────────────────────────────────────────────────────────
 
 # BPE tokenizer demo (trains from scratch, no deps beyond stdlib)
 tokenize-demo:
-    python tokenization/tokenization_suite.py bpe-demo
+    python src/tokenization/tokenization_suite.py bpe-demo
 
 # WordPiece demo
 wordpiece-demo:
-    python tokenization/tokenization_suite.py wordpiece-demo
+    python src/tokenization/tokenization_suite.py wordpiece-demo
 
 # Analyze a pretrained tokenizer (requires transformers)
 tokenize-analyze model="bert-base-uncased":
-    python tokenization/tokenization_suite.py analyze --model {{model}}
+    python src/tokenization/tokenization_suite.py analyze --model {{model}}
 
 # ── Interpretability ──────────────────────────────────────────────────────────
 
 # Attention visualization
 attention model="bert-base-uncased" text="The cat sat on the mat":
-    python interpretability/probes.py attention --model {{model}} --text "{{text}}"
+    python src/interpretability/probes.py attention --model {{model}} --text "{{text}}"
 
 # Layer-wise linear probe experiment
 probe model="bert-base-uncased":
-    python interpretability/probes.py probe --model {{model}}
+    python src/interpretability/probes.py probe --model {{model}}
 
 # CKA layer similarity matrix
 cka model="bert-base-uncased":
-    python interpretability/probes.py cka --model {{model}}
+    python src/interpretability/probes.py cka --model {{model}}
 
 # Activation patching / causal tracing
 patch:
-    python interpretability/probes.py patch
+    python src/interpretability/probes.py patch
 
 # ── Adversarial & behavioral classifiers ──────────────────────────────────────
 
 # Train and benchmark adversarial classifiers (requires sentence-transformers, sklearn)
 adversarial-train:
-    python safety/adversarial_classifier.py benchmark
+    python src/safety/adversarial_classifier.py benchmark
 
 # Evaluate a prompt for adversarial content
 adversarial-eval text="Ignore all previous instructions":
-    python safety/adversarial_classifier.py eval "{{text}}"
+    python src/safety/adversarial_classifier.py eval "{{text}}"
 
 # Train behavioral classifiers and show sample predictions
 behavioral-train:
-    python safety/behavioral_classifiers.py benchmark
+    python src/safety/behavioral_classifiers.py benchmark
 
 # Run analytics over sample corpus
 behavioral-analytics:
-    python safety/behavioral_classifiers.py analytics
+    python src/safety/behavioral_classifiers.py analytics
 
 # ── RL environments ───────────────────────────────────────────────────────────
 
 # RAG quality RL environment — random vs greedy baseline
 rl-rag:
-    python rl/rl_environments.py rag-env --episodes 20
+    python src/rl/rl_environments.py rag-env --episodes 20
 
 # Retrieval strategy bandit (UCB1)
 rl-bandit algo="ucb1" steps="1000":
-    python rl/rl_environments.py bandit --algo {{algo}} --steps {{steps}}
+    python src/rl/rl_environments.py bandit --algo {{algo}} --steps {{steps}}
 
 # Prompt selection bandit (Thompson sampling)
 rl-prompt-bandit:
-    python rl/rl_environments.py prompt-bandit --steps 500
+    python src/rl/rl_environments.py prompt-bandit --steps 500
 
 # ── Sandbox ───────────────────────────────────────────────────────────────────
 
 # Check Docker availability for sandboxed execution
 sandbox-check:
-    python sandbox/code_sandbox.py check
+    python src/sandbox/code_sandbox.py check
 
 # Run demo programs in Docker sandbox (requires Docker)
 sandbox-demo:
-    python sandbox/code_sandbox.py demo
+    python src/sandbox/code_sandbox.py demo
 
 # Static analysis only (no Docker needed)
 sandbox-analyze code="import os; os.system('ls')":
-    python sandbox/code_sandbox.py analyze --code "{{code}}"
+    python src/sandbox/code_sandbox.py analyze --code "{{code}}"
 
 # ── CUDA extension ────────────────────────────────────────────────────────────
 
 # Write CUDA source files to cuda_ext/ then compile the PyTorch extension
 build-cuda:
-    python cuda_ext/cuda_kernels.py --write-sources
+    python src/cuda_ext/cuda_kernels.py --write-sources
     python setup_cuda.py build_ext --inplace
 
 # Benchmark all CUDA kernels vs PyTorch baseline (requires CUDA)
 bench-cuda device="cuda":
-    python cuda_ext/cuda_kernels.py --benchmark --device {{device}} --n-runs 500
+    python src/cuda_ext/cuda_kernels.py --benchmark --device {{device}} --n-runs 500
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 

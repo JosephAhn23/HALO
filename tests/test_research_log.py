@@ -1,4 +1,4 @@
-from agents.multi_agent.research_log import ResearchLog
+from src.agents.multi_agent.research_log import ResearchLog
 
 
 def test_append_and_format(tmp_path):

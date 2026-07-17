@@ -16,16 +16,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agents.multi_agent.base_agent import AgentResult, AgentStatus, AgentTask, ToolRegistry
-from agents.multi_agent.consensus import (
+from src.agents.multi_agent.base_agent import AgentResult, AgentStatus, AgentTask, ToolRegistry
+from src.agents.multi_agent.consensus import (
     ConsensusResult,
     DebateRefinement,
     MajorityVote,
     WeightedConfidence,
     select_consensus_strategy,
 )
-from agents.multi_agent.critic_agent import CriticAgent
-from agents.multi_agent.failure_handling import (
+from src.agents.multi_agent.critic_agent import CriticAgent
+from src.agents.multi_agent.failure_handling import (
     CircuitBreaker,
     CircuitBreakerConfig,
     GracefulDegradation,
@@ -33,16 +33,16 @@ from agents.multi_agent.failure_handling import (
     RetryPolicy,
     TimeoutGuard,
 )
-from agents.multi_agent.memory import LongTermMemory, ShortTermMemory, WorkingMemory
-from agents.multi_agent.research_agent import ResearchAgent
-from agents.multi_agent.routing import (
+from src.agents.multi_agent.memory import LongTermMemory, ShortTermMemory, WorkingMemory
+from src.agents.multi_agent.research_agent import ResearchAgent
+from src.agents.multi_agent.routing import (
     CapabilityRouter,
     ComplexityRouter,
     classify_complexity,
     AgentCapability,
 )
-from agents.multi_agent.supervisor import Supervisor
-from agents.multi_agent.verifier_agent import VerifierAgent
+from src.agents.multi_agent.supervisor import Supervisor
+from src.agents.multi_agent.verifier_agent import VerifierAgent
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────────────

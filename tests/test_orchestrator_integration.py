@@ -1,4 +1,4 @@
-from agents.orchestrator import Pipeline
+from src.agents.orchestrator import Pipeline
 
 
 class _StubRetriever:
@@ -58,7 +58,7 @@ def test_pipeline_short_circuits_on_retriever_failure() -> None:
 
 
 def test_pipeline_protocols_are_satisfied() -> None:
-    from agents.protocols import Reranker, Retriever, Synthesizer
+    from src.agents.protocols import Reranker, Retriever, Synthesizer
 
     assert isinstance(_StubRetriever(), Retriever)
     assert isinstance(_StubReranker(), Reranker)

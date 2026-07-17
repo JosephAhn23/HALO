@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from prompt_registry.registry import PromptRegistry
+from src.prompt_registry.registry import PromptRegistry
 
 
 def test_load_skeptical_verifier_v1() -> None:

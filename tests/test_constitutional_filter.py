@@ -1,6 +1,6 @@
 """API constitutional / model-card edge gate."""
 
-from safety.constitutional_filter import constitutional_filter_query
+from src.safety.constitutional_filter import constitutional_filter_query
 
 
 def test_constitutional_allows_normal_query() -> None:

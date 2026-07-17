@@ -1,6 +1,6 @@
 """Scientific integrity / reward-hacking heuristics on VerifierAgent."""
-from agents.multi_agent.base_agent import AgentTask
-from agents.multi_agent.verifier_agent import VerifierAgent, scan_scientific_integrity
+from src.agents.multi_agent.base_agent import AgentTask
+from src.agents.multi_agent.verifier_agent import VerifierAgent, scan_scientific_integrity
 
 
 def test_scan_detects_hand_waving_and_plot():

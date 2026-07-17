@@ -16,7 +16,7 @@ pytest.importorskip("mlflow")
 
 class TestMLflowTracking:
     def test_track_pipeline_logs_latency(self):
-        tracking_mod = importlib.import_module("mlops.tracking")
+        tracking_mod = importlib.import_module("src.mlops.tracking")
         with patch.object(tracking_mod, "mlflow") as mock_mlflow:
             mock_run = MagicMock()
             mock_mlflow.start_run.return_value.__enter__ = MagicMock(return_value=mock_run)
@@ -31,7 +31,7 @@ class TestMLflowTracking:
             mock_mlflow.log_metric.assert_called()
 
     def test_log_evaluation_logs_all_metrics(self):
-        tracking_mod = importlib.import_module("mlops.tracking")
+        tracking_mod = importlib.import_module("src.mlops.tracking")
         with patch.object(tracking_mod, "mlflow") as mock_mlflow:
             mock_mlflow.start_run.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_mlflow.start_run.return_value.__exit__ = MagicMock(return_value=False)
@@ -54,17 +54,17 @@ class TestMLflowTracking:
 
 class TestEvaluatePipeline:
     def test_empty_test_cases_returns_empty_dict(self):
-        eval_mod = importlib.import_module("mlops.evaluate")
+        eval_mod = importlib.import_module("src.mlops.evaluate")
         result = eval_mod.evaluate_pipeline([])
         assert result == {}
 
     def test_missing_required_column_raises(self):
-        eval_mod = importlib.import_module("mlops.evaluate")
+        eval_mod = importlib.import_module("src.mlops.evaluate")
         with pytest.raises(ValueError, match="Missing required columns"):
             eval_mod.evaluate_pipeline([{"question": "q", "answer": "a"}])
 
     def test_successful_evaluation_logs_to_mlflow(self):
-        eval_mod = importlib.import_module("mlops.evaluate")
+        eval_mod = importlib.import_module("src.mlops.evaluate")
         fake_scores = {
             "faithfulness": 0.9,
             "answer_relevancy": 0.85,
@@ -94,7 +94,7 @@ class TestEvaluatePipeline:
 
     def test_nan_scores_are_filtered(self):
         import math
-        eval_mod = importlib.import_module("mlops.evaluate")
+        eval_mod = importlib.import_module("src.mlops.evaluate")
         fake_scores = {
             "faithfulness": float("nan"),
             "answer_relevancy": 0.85,
@@ -124,7 +124,7 @@ class TestEvaluatePipeline:
 
 class TestRAGASTracker:
     def _make_tracker(self, tmp_path: Path):
-        tracker_mod = importlib.import_module("mlops.ragas_tracker")
+        tracker_mod = importlib.import_module("src.mlops.ragas_tracker")
         return tracker_mod.RAGASTracker(
             baseline_path=tmp_path / "baseline.json",
             regression_threshold=0.05,
@@ -173,7 +173,7 @@ class TestEmbeddingAnalysis:
         embeddings = np.random.randn(200, 64).astype(np.float32)
         metadata = [{"source": "test", "text": f"text {i}"} for i in range(200)]
 
-        emb_mod = importlib.import_module("analysis.embedding_analysis")
+        emb_mod = importlib.import_module("src.analysis.embedding_analysis")
         with patch.object(emb_mod, "mlflow"), patch.object(emb_mod, "KMeans") as mock_km, patch.object(
             emb_mod, "silhouette_score", return_value=0.72
         ):

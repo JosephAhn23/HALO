@@ -1,4 +1,4 @@
-from mlops.evaluation import EvalSample, retrieval_hit_rate
+from src.mlops.evaluation import EvalSample, retrieval_hit_rate
 
 
 def test_retrieval_hit_rate() -> None:

@@ -6,13 +6,13 @@ sklearn — the whole point of this module is to report genuine held-out
 accuracy, so the test has to actually train and evaluate it. The MiniLM
 embedder is small enough that this stays fast.
 """
-from agents.multi_agent.cost_classifier import (
+from src.agents.multi_agent.cost_classifier import (
     ComplexityClassifier,
     LABELS,
     train_test_split,
     train_default_classifier,
 )
-from agents.multi_agent.cost_router_data import LABELED_QUERIES
+from src.agents.multi_agent.cost_router_data import LABELED_QUERIES
 
 
 def test_train_test_split_is_stratified_and_disjoint() -> None:

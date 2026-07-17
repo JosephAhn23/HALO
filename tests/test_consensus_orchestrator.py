@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock
 
-from agents.multi_agent.consensus_orchestrator import (
+from src.agents.multi_agent.consensus_orchestrator import (
     ConsensusOrchestrator,
     extract_floats,
     numeric_relative_conflict,

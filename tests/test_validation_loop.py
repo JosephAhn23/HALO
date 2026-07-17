@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
-from sandbox.code_sandbox import ExecutionResult
-from sandbox.validation_loop import ValidationLoop, default_claim_matcher
+from src.sandbox.code_sandbox import ExecutionResult
+from src.sandbox.validation_loop import ValidationLoop, default_claim_matcher
 
 
 def test_default_claim_matcher_numeric():

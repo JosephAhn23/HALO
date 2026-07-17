@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from simulation import batch_simulate
+from src.simulation import batch_simulate
 
 DYNAMO_DIR = Path(__file__).parent.parent / "dynamo-4fd5425-scientific-computing-and-domain-science"
 REFERENCE_SCRIPT = DYNAMO_DIR / "task/solution/simulate.py"
@@ -103,7 +103,7 @@ class TestBatchedSchedulesMatchReference:
     """Unit-level check: our vectorized schedule evaluators vs. the reference's scalar ones."""
 
     def test_b0_schedule_matches(self, ref_module, sample_data):
-        from simulation.batched_integrator import BatchedB0Schedule
+        from src.simulation.batched_integrator import BatchedB0Schedule
 
         params, b0_schedule, _ = sample_data
         t_nodes = b0_schedule["t"]
@@ -122,7 +122,7 @@ class TestBatchedSchedulesMatchReference:
             assert _close(dB0dt_batch[i].item(), dB0dt(t), rtol=1e-9, atol=1e-9)
 
     def test_alpha_schedule_matches(self, ref_module, sample_data):
-        from simulation.batched_integrator import BatchedAlphaSchedule
+        from src.simulation.batched_integrator import BatchedAlphaSchedule
 
         _, _, alpha_schedule = sample_data
         t_nodes = alpha_schedule["t"]

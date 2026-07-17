@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch
 
-from ingestion.data_quality import DataQualityFilter, Deduplicator
-from ingestion.pipeline import EmbeddingModel, chunk_text
+from src.ingestion.data_quality import DataQualityFilter, Deduplicator
+from src.ingestion.pipeline import EmbeddingModel, chunk_text
 
 
 # ─── Chunking Tests ───────────────────────────────────────────

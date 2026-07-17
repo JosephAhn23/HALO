@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from context_engineering.symbol_map import generate_symbol_map_text
+from src.context_engineering.symbol_map import generate_symbol_map_text
 
 
 def test_symbol_map_includes_class_and_method(tmp_path: Path) -> None:

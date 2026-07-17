@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from experiments.ab_framework import ABExperiment, Variant
+from src.experiments.ab_framework import ABExperiment, Variant
 
 
 # ---------------------------------------------------------------------------

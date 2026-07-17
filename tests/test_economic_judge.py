@@ -1,4 +1,4 @@
-from governance.economic_judge import EconomicJudge
+from src.governance.economic_judge import EconomicJudge
 
 
 def test_within_caps_no_hitl():

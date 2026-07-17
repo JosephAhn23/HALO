@@ -3,8 +3,8 @@
 import pytest
 import json
 from pathlib import Path
-from scheduling import FleetReconciler, parse_fleet_config
-from scheduling.metrics import SchedulingMetrics
+from src.scheduling import FleetReconciler, parse_fleet_config
+from src.scheduling.metrics import SchedulingMetrics
 
 
 class TestFleetReconciler:

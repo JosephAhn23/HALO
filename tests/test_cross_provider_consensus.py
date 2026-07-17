@@ -5,13 +5,13 @@ import concurrent.futures
 
 import pytest
 
-from agents.multi_agent.cross_provider_consensus import (
+from src.agents.multi_agent.cross_provider_consensus import (
     CrossProviderConsensusNode,
     LLMProvider,
     ProviderAnswer,
     text_agreement_score,
 )
-from agents.multi_agent.base_agent import AgentStatus
+from src.agents.multi_agent.base_agent import AgentStatus
 
 
 class _StubProvider(LLMProvider):

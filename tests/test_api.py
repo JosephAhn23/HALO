@@ -17,7 +17,7 @@ def client():
         mock_redis.ping.return_value = True
         mock_redis.hgetall.return_value = {}
 
-        from api.main import app
+        from src.api.main import app
         yield TestClient(app)
 
 
@@ -26,7 +26,7 @@ def authed_client(monkeypatch):
     """Client fixture with API_KEY set; all requests must include the key."""
     monkeypatch.setenv("API_KEY", "test-secret")
     # Force re-evaluation of the module-level _API_KEY constant.
-    import api.main as main_mod
+    import src.api.main as main_mod
     importlib.reload(main_mod)
     # Patch run_pipeline on the *reloaded* module so authenticated /query
     # requests don't hit the real pipeline (no FAISS index / OpenAI key in CI).

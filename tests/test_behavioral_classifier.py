@@ -1,6 +1,6 @@
 """Tests for fast behavioral / injection pre-check."""
 
-from safety.behavioral_classifier import (
+from src.safety.behavioral_classifier import (
     STANDARD_REFUSAL,
     BehavioralClassifier,
     classify_prompt_heuristic,

@@ -56,7 +56,7 @@ pytest --cov=agents --cov-report=term-missing
 ```bash
 ruff check .          # lint
 ruff format .         # format
-mypy agents/ --strict # type check
+mypy src/agents/ --strict # type check
 ```
 
 ## Adding a New Module

@@ -11,7 +11,7 @@ import pytest
 
 class TestRetrieverAgent:
     def _make_retriever(self, mock_metadata):
-        from agents.retriever import RetrieverAgent
+        from src.agents.retriever import RetrieverAgent
 
         agent = RetrieverAgent.__new__(RetrieverAgent)
         agent.top_k = 3
@@ -57,7 +57,7 @@ class TestRetrieverAgent:
 class TestRerankerAgent:
     @pytest.fixture
     def mock_reranker(self):
-        from agents.reranker import RerankerAgent
+        from src.agents.reranker import RerankerAgent
 
         agent = RerankerAgent.__new__(RerankerAgent)
         agent.top_k = 3
@@ -88,7 +88,7 @@ class TestRerankerAgent:
 
 class TestSynthesizerAgent:
     def test_synthesizer_returns_answer(self):
-        from agents.synthesizer import SynthesizerAgent
+        from src.agents.synthesizer import SynthesizerAgent
 
         agent = SynthesizerAgent.__new__(SynthesizerAgent)
         agent.model = "gpt-4o-mini"
@@ -109,7 +109,7 @@ class TestSynthesizerAgent:
         assert len(result["answer"]) > 0
 
     def test_synthesizer_returns_sources(self):
-        from agents.synthesizer import SynthesizerAgent
+        from src.agents.synthesizer import SynthesizerAgent
 
         agent = SynthesizerAgent.__new__(SynthesizerAgent)
         agent.backend = "openai"
@@ -129,7 +129,7 @@ class TestSynthesizerAgent:
         assert result["sources"] == ["doc1", "doc2"]
 
     def test_synthesizer_empty_context(self):
-        from agents.synthesizer import SynthesizerAgent
+        from src.agents.synthesizer import SynthesizerAgent
 
         agent = SynthesizerAgent.__new__(SynthesizerAgent)
         agent.backend = "openai"
@@ -153,7 +153,7 @@ class TestSynthesizerAgent:
 
 class TestOrchestrator:
     def test_pipeline_state_flow(self):
-        from agents.orchestrator import Pipeline
+        from src.agents.orchestrator import Pipeline
 
         mock_ret = MagicMock()
         mock_ret.retrieve.return_value = [{"text": "ctx", "source": "s1", "retrieval_score": 0.9}]
@@ -176,7 +176,7 @@ class TestOrchestrator:
         assert result["response"]["answer"] == "answer"
 
     def test_pipeline_handles_retriever_error(self):
-        from agents.orchestrator import Pipeline
+        from src.agents.orchestrator import Pipeline
 
         bad_retriever = MagicMock()
         bad_retriever.retrieve.side_effect = Exception("FAISS index not loaded")

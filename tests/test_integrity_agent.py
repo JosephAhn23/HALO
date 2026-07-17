@@ -1,7 +1,7 @@
 """Tests for governance.integrity_agent."""
 from __future__ import annotations
 
-from governance.integrity_agent import IntegrityAgent
+from src.governance.integrity_agent import IntegrityAgent
 
 
 def test_passes_clean_answer_with_citation():

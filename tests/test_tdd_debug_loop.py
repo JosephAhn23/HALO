@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from sandbox.tdd_debug_loop import TDDDebugLoop
+from src.sandbox.tdd_debug_loop import TDDDebugLoop
 
 
 @pytest.fixture

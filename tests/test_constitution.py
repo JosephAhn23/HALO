@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from governance.constitution import (
+from src.governance.constitution import (
     ConstitutionalClassifier,
     ConstitutionalResult,
     _parse_score,

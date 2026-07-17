@@ -2,8 +2,8 @@
 
 import pytest
 import torch
-from inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
-from inference.cuda_dispatch.triton_backend import morphos_backend_phase3, TRITON_AVAILABLE
+from src.inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
+from src.inference.cuda_dispatch.triton_backend import morphos_backend_phase3, TRITON_AVAILABLE
 
 
 class TestHardwareInfo:
@@ -28,7 +28,7 @@ class TestTritonBackend:
     @pytest.mark.skipif(not TRITON_AVAILABLE, reason="Triton not installed")
     def test_kernel_registry(self):
         """Test that Triton kernels are registered."""
-        from inference.cuda_dispatch.triton_backend import TRITON_KERNELS
+        from src.inference.cuda_dispatch.triton_backend import TRITON_KERNELS
         assert "add" in TRITON_KERNELS
         assert "mul" in TRITON_KERNELS
         assert "relu" in TRITON_KERNELS

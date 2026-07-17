@@ -2,8 +2,8 @@
 
 from unittest.mock import MagicMock
 
-from sandbox.code_sandbox import ExecutionResult
-from sandbox.strict_execution_orchestrator import StrictExecutionOrchestrator
+from src.sandbox.code_sandbox import ExecutionResult
+from src.sandbox.strict_execution_orchestrator import StrictExecutionOrchestrator
 
 
 def test_orchestrator_stops_on_first_success() -> None:

@@ -1,6 +1,6 @@
 """Traceable RAG provenance helpers."""
 
-from context_engineering.traceable_rag import (
+from src.context_engineering.traceable_rag import (
     append_paragraph_provenance,
     enrich_chunks_provenance,
     faithfulness_or_proxy,
