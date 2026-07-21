@@ -91,6 +91,30 @@ token counts, so it's a cost *model*, not a measurement of live traffic. Re-run
 `benchmarks/run_cost_router_eval.py` and re-tune the threshold once a real corpus is
 ingested — the `0.18` default is a documented starting point, not a permanent answer.
 
+## Retrieval Against a Real Ingested Corpus
+
+Every eval above this line runs against hand-written contexts or a small hand-labeled
+proxy corpus — no document had ever actually been ingested into this repo's FAISS index.
+`benchmarks/run_real_corpus_eval.py` closes that specific gap: it ingests 6 of this
+repo's own docs (README, RESULTS, and 4 files under `docs/`) through the real
+`IngestionPipeline` (real chunking, real `sentence-transformers/all-MiniLM-L6-v2`
+embeddings, a real on-disk FAISS index), then runs 8 real questions through the real
+`RetrieverAgent` and `RerankerAgent` — the retrieved contexts are whatever the pipeline
+actually found, never hand-written.
+
+| Metric | Value | Sample Size |
+|:---|---:|---:|
+| Recall@k (expected source doc reranked into top-3) | `1.000` (8/8) | `n=8` questions, `13` chunks |
+
+Caveats, stated plainly: `n=8` questions over a 6-document corpus is a smoke test, not a
+benchmark — it proves the ingest→retrieve→rerank chain works end-to-end on real data, not
+that it generalizes. The questions were written to be unambiguously answerable from one
+source doc each, which is easier than real-world query overlap across documents. Full
+RAGAS scoring (faithfulness, answer relevancy) additionally requires `OPENAI_API_KEY` to
+generate real answers and run the LLM judge — without it, the script honestly skips that
+step rather than reporting a number it can't back up. Set the key and re-run to get a real,
+non-proxy RAGAS score for the first time in this repo's history.
+
 ## Retrieval Ablation: Bi-Encoder vs. Cross-Encoder Reranking vs. BM25+Dense RRF
 
 This project's own architecture rationale claims cross-encoder reranking "improves

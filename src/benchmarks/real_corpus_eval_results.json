@@ -1,0 +1,95 @@
+{
+  "mode": "retrieval_only",
+  "recall_at_k_source_level": 1.0,
+  "n_questions": 8,
+  "results": [
+    {
+      "question": "Why does HALO use FAISS instead of a managed vector database?",
+      "expected_source": "docs/ARCHITECTURE.md",
+      "retrieved_sources": [
+        "docs/ARCHITECTURE.md",
+        "README.md",
+        "RESULTS.md"
+      ],
+      "top1_score": 0.7978096008300781,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "What did HALO's retrieval ablation actually find when comparing two-stage cross-encoder reranking and BM25+dense hybrid against plain bi-encoder retrieval?",
+      "expected_source": "docs/ARCHITECTURE.md",
+      "retrieved_sources": [
+        "docs/ARCHITECTURE.md",
+        "RESULTS.md",
+        "RESULTS.md"
+      ],
+      "top1_score": 0.9323346018791199,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "Why does HALO use QLoRA instead of full fine-tuning?",
+      "expected_source": "docs/ARCHITECTURE.md",
+      "retrieved_sources": [
+        "docs/ARCHITECTURE.md",
+        "README.md",
+        "docs/PROJECT_STRUCTURE.md"
+      ],
+      "top1_score": 0.00012787179730366915,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "Why does HALO's multi-agent system use circuit breakers?",
+      "expected_source": "docs/ARCHITECTURE.md",
+      "retrieved_sources": [
+        "docs/PROJECT_STRUCTURE.md",
+        "docs/ARCHITECTURE.md",
+        "README.md"
+      ],
+      "top1_score": 0.05049549788236618,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "What does HALO's fleet reconciler handle for job scheduling?",
+      "expected_source": "docs/FLEET_SCHEDULING.md",
+      "retrieved_sources": [
+        "docs/FLEET_SCHEDULING.md",
+        "README.md",
+        "README.md"
+      ],
+      "top1_score": 0.9177462458610535,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "What physics does PhysicalAI's batched simulation model?",
+      "expected_source": "docs/PHYSICS_SIMULATION.md",
+      "retrieved_sources": [
+        "docs/PHYSICS_SIMULATION.md",
+        "README.md",
+        "docs/PHYSICS_SIMULATION.md"
+      ],
+      "top1_score": 0.9942519664764404,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "What lives in HALO's src/csrc and src/cuda_ext directories?",
+      "expected_source": "docs/PROJECT_STRUCTURE.md",
+      "retrieved_sources": [
+        "docs/PROJECT_STRUCTURE.md",
+        "README.md",
+        "docs/PROJECT_STRUCTURE.md"
+      ],
+      "top1_score": 0.8715256452560425,
+      "expected_source_in_topk": true
+    },
+    {
+      "question": "What held-out accuracy did HALO's cost-aware query-complexity classifier achieve, and on what sample size?",
+      "expected_source": "RESULTS.md",
+      "retrieved_sources": [
+        "RESULTS.md",
+        "RESULTS.md",
+        "RESULTS.md"
+      ],
+      "top1_score": 0.8262627720832825,
+      "expected_source_in_topk": true
+    }
+  ]
+}
