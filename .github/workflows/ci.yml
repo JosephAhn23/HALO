@@ -209,11 +209,11 @@ jobs:
 
       - name: Regression gate
         id: gate
-        run: |
-          python src/cicd/ragas_gate.py \
-            --scores reports/ragas_scores.json \
-            --baseline src/mlops/ragas_baseline.json \
-            --tolerance 0.03
+        uses: ./.github/actions/gate
+        with:
+          scores: reports/ragas_scores.json
+          baseline: src/mlops/ragas_baseline.json
+          tolerance: '0.03'
 
       - name: Upload RAGAS report
         uses: actions/upload-artifact@v4

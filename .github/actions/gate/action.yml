@@ -1,0 +1,62 @@
+name: 'HALO RAGAS Quality Gate'
+description: >-
+  Blocks CI when RAGAS scores fall below a hard threshold or regress vs a
+  saved baseline. Wraps src/cicd/ragas_gate.py — pure stdlib, no extra deps.
+  Bring your own scores.json (from ragas, your own eval harness, whatever);
+  this step only enforces the gate.
+author: 'JosephAhn23'
+
+inputs:
+  scores:
+    description: >-
+      Path to current scores JSON. Accepts either a flat object
+      ({"faithfulness": 0.85, ...}) or {"scores": {...}}.
+    required: true
+  baseline:
+    description: 'Path to a baseline scores JSON to check regression against. Omit to skip regression checking.'
+    required: false
+    default: ''
+  tolerance:
+    description: 'Max allowed absolute drop vs baseline before the gate fails.'
+    required: false
+    default: '0.03'
+  thresholds:
+    description: 'Path to a JSON file of custom per-metric minimum thresholds. Omit to use the built-in defaults (faithfulness 0.80, answer_relevancy 0.78, context_precision 0.75, context_recall 0.75).'
+    required: false
+    default: ''
+  output-file:
+    description: 'Optional path to write the full structured gate result JSON.'
+    required: false
+    default: ''
+
+outputs:
+  passed:
+    description: '"true" or "false" — whether every threshold and regression check passed.'
+    value: ${{ steps.gate.outputs.passed }}
+  faithfulness:
+    value: ${{ steps.gate.outputs.faithfulness }}
+  answer_relevancy:
+    value: ${{ steps.gate.outputs.answer_relevancy }}
+  context_precision:
+    value: ${{ steps.gate.outputs.context_precision }}
+  context_recall:
+    value: ${{ steps.gate.outputs.context_recall }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Run RAGAS gate
+      id: gate
+      shell: bash
+      run: |
+        set -e
+        ARGS=(--scores "${{ inputs.scores }}" --tolerance "${{ inputs.tolerance }}")
+        if [ -n "${{ inputs.baseline }}" ]; then ARGS+=(--baseline "${{ inputs.baseline }}"); fi
+        if [ -n "${{ inputs.thresholds }}" ]; then ARGS+=(--thresholds "${{ inputs.thresholds }}"); fi
+        if [ -n "${{ inputs.output-file }}" ]; then ARGS+=(--output-file "${{ inputs.output-file }}"); fi
+        python3 "${{ github.action_path }}/../../../src/cicd/ragas_gate.py" "${ARGS[@]}"

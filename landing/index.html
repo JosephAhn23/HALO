@@ -514,7 +514,7 @@
           <span class="mono" id="gate-status" style="color:var(--fail)">BLOCKED</span>
         </div>
         <canvas id="gate" width="600" height="220"></canvas>
-        <p class="gate-caption">Illustrative gate run. Threshold logic mirrors a real RAGAS regression gate (±0.03 tolerance against a 0.80 faithfulness floor).</p>
+        <p class="gate-caption">Illustrative commit history, but the pass/fail logic is real and dogfooded — see the gate spec below.</p>
       </div>
     </div>
   </section>
@@ -568,13 +568,17 @@
         <div><h4>Pass unblocks, fail explains why</h4><p>A failing gate comments the exact metric, delta, and threshold that tripped on the PR — merge stays blocked until it's addressed or explicitly overridden.</p></div>
       </div>
     </div>
-    <div class="code"><span class="c"># .github/workflows/ci.yml</span>
-- <span class="k">uses</span>: threshold/gate-action@v1
+    <div class="code"><span class="c"># .github/workflows/ci.yml — this is the real action, not a mockup:</span>
+<span class="c"># github.com/JosephAhn23/HALO/tree/main/.github/actions/gate</span>
+- <span class="k">uses</span>: JosephAhn23/HALO/.github/actions/gate@main
+  <span class="k">id</span>: gate
   <span class="k">with</span>:
-    eval_set: <span class="s">./evals/regression_set.jsonl</span>
-    tolerance: <span class="s">0.03</span>
-    cost_ceiling_per_1k: <span class="s">"0.08"</span>
-    on_fail: <span class="k">block_merge</span></div>
+    scores: <span class="s">reports/ragas_scores.json</span>
+    baseline: <span class="s">eval/ragas_baseline.json</span>
+    tolerance: <span class="s">'0.03'</span>
+- <span class="k">if</span>: steps.gate.outputs.passed != <span class="s">'true'</span>
+  <span class="k">run</span>: exit 1</div>
+    <p class="gate-caption" style="margin-top:10px">Not a mockup — this exact composite action gates <a href="https://github.com/JosephAhn23/HALO/blob/main/.github/workflows/ci.yml" target="_blank" rel="noopener" style="color:var(--brass-strong)">HALO's own CI</a>, including on this commit. <a href="https://github.com/JosephAhn23/HALO/actions/workflows/ci.yml" target="_blank" rel="noopener" style="color:var(--brass-strong)">Live status →</a></p>
   </section>
 
   <section class="numbers wrap" id="numbers">
@@ -604,8 +608,13 @@
         <div class="label">Complexity classifier held‑out accuracy</div>
         <span class="n-size mono">n = 22</span>
       </div>
+      <div class="stat" style="border-left:2px solid var(--pass)">
+        <div class="n" style="color:var(--pass)">1.000</div>
+        <div class="label">Recall@k, real ingested corpus (not a proxy)</div>
+        <span class="n-size mono">n = 8 questions</span>
+      </div>
     </div>
-    <p class="numbers-foot">Full methodology and confidence‑interval math: <a href="https://github.com/JosephAhn23/HALO/blob/main/RESULTS.md" target="_blank" rel="noopener">RESULTS.md</a> in the source pipeline.</p>
+    <p class="numbers-foot">Every other number here runs against hand-written contexts or a small labeled proxy — the recall@k above is the first score from documents actually ingested through the real pipeline. Full methodology: <a href="https://github.com/JosephAhn23/HALO/blob/main/RESULTS.md" target="_blank" rel="noopener">RESULTS.md</a>.</p>
   </section>
 
   <section class="pricing wrap" id="pricing">
