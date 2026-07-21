@@ -9,20 +9,17 @@ Stage 2: CrossEncoderReranker (precise ~40ms)
   - Encodes (query, doc) pairs jointly through a cross-encoder
   - Logit-based relevance scoring -> global re-sort -> top-k
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-BIENCODER_MODEL = os.getenv(
-    "BIENCODER_MODEL", "sentence-transformers/all-MiniLM-L6-v2"
-)
-CROSSENCODER_MODEL = os.getenv(
-    "CROSSENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
-)
+BIENCODER_MODEL = os.getenv("BIENCODER_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+CROSSENCODER_MODEL = os.getenv("CROSSENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 
 class BiEncoderEmbedder:
@@ -48,14 +45,12 @@ class BiEncoderEmbedder:
         import torch
 
         token_embeddings = model_output.last_hidden_state
-        mask_expanded = attention_mask.unsqueeze(-1).expand(
-            token_embeddings.size()
-        ).float()
+        mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
         return torch.sum(token_embeddings * mask_expanded, dim=1) / torch.clamp(
             mask_expanded.sum(dim=1), min=1e-9
         )
 
-    def embed(self, texts: List[str], batch_size: int = 64):
+    def embed(self, texts: list[str], batch_size: int = 64):
         import numpy as np
 
         all_embeddings = []
@@ -93,10 +88,8 @@ class CrossEncoderReranker:
         self.model.eval()
         logger.info("CrossEncoder loaded: %s on %s", model_name, self.device)
 
-    def score_pairs(
-        self, query: str, documents: List[str], batch_size: int = 32
-    ) -> List[float]:
-        all_scores: List[float] = []
+    def score_pairs(self, query: str, documents: list[str], batch_size: int = 32) -> list[float]:
+        all_scores: list[float] = []
         with self._torch.no_grad():
             for i in range(0, len(documents), batch_size):
                 batch_docs = documents[i : i + batch_size]
@@ -141,9 +134,7 @@ class RerankerAgent:
         except Exception as exc:
             logger.warning("CrossEncoder unavailable, using passthrough: %s", exc)
 
-    def rerank(
-        self, query: str, candidates: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    def rerank(self, query: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not self._ready or not candidates or self.cross_encoder is None:
             return candidates[: self.top_k]
 

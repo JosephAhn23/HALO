@@ -1,10 +1,11 @@
 """
 Log grounding / attribution metrics alongside RAG runs (MLflow-compatible).
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ def log_grounding_metrics(
     grounding_confidence: float,
     *,
     n_chunks: int = 0,
-    extra: Optional[Dict[str, Any]] = None,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     """Best-effort MLflow metrics; no-op if no active run."""
     try:

@@ -1,4 +1,8 @@
-from src.benchmarks.run_retrieval_ablation import precision_at_k, recall_at_k, reciprocal_rank_fusion
+from src.benchmarks.run_retrieval_ablation import (
+    precision_at_k,
+    recall_at_k,
+    reciprocal_rank_fusion,
+)
 
 
 def test_precision_at_k_all_relevant() -> None:

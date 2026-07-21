@@ -10,14 +10,14 @@ Usage:
     text = generate_symbol_map_text(Path("."), max_lines=400)
     system += "\\n\\n## Repository symbol map\\n" + text
 """
+
 from __future__ import annotations
 
 import ast
 import logging
 import subprocess
-import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ _DEFAULT_SKIP_DIRS = {
 def generate_symbol_map_text(
     repo_root: Path,
     *,
-    package_roots: Optional[Iterable[str]] = None,
+    package_roots: Iterable[str] | None = None,
     max_files: int = 120,
     max_lines: int = 500,
 ) -> str:
@@ -47,8 +47,8 @@ def generate_symbol_map_text(
     """
     root = Path(repo_root).resolve()
     roots = list(package_roots) if package_roots else _default_package_roots(root)
-    lines: List[str] = []
-    seen: Set[Path] = set()
+    lines: list[str] = []
+    seen: set[Path] = set()
     n_files = 0
     for pr in roots:
         base = root / pr
@@ -82,7 +82,7 @@ def generate_symbol_map_text(
     return header + body
 
 
-def _default_package_roots(root: Path) -> List[str]:
+def _default_package_roots(root: Path) -> list[str]:
     candidates = [
         "agents",
         "api",
@@ -107,8 +107,8 @@ def _should_skip(path: Path, root: Path) -> bool:
     return False
 
 
-def _outline_file(module_path: str, source: str) -> List[str]:
-    lines: List[str] = []
+def _outline_file(module_path: str, source: str) -> list[str]:
+    lines: list[str] = []
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -133,7 +133,7 @@ def _outline_file(module_path: str, source: str) -> List[str]:
     return lines
 
 
-def try_pyright_symbol_dump(repo_root: Path, *, timeout_s: float = 60.0) -> Optional[str]:
+def try_pyright_symbol_dump(repo_root: Path, *, timeout_s: float = 60.0) -> str | None:
     """
     If ``pyright`` is on PATH, return JSON diagnostics summary (optional enrichment).
     Returns None if unavailable or failed.

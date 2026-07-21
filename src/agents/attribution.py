@@ -4,10 +4,12 @@ Source-weighting / traceability: map answer sentences to retrieval chunks.
 Each sentence gets the best-matching chunk by lexical overlap (no extra model load).
 Sentences with weak support are flagged ``speculative`` for UI disclosure.
 """
+
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 # Below this best Jaccard(word) score, label sentence as speculative
 DEFAULT_SPECULATIVE_THRESHOLD = 0.12
@@ -27,10 +29,10 @@ def _jaccard(a: set[str], b: set[str]) -> float:
 
 def attribute_answer_to_chunks(
     answer: str,
-    chunks: Sequence[Dict[str, Any]],
+    chunks: Sequence[dict[str, Any]],
     *,
     speculative_threshold: float = DEFAULT_SPECULATIVE_THRESHOLD,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     For each non-trivial sentence, find the chunk with highest token Jaccard overlap.
 
@@ -44,7 +46,7 @@ def attribute_answer_to_chunks(
     chunk_sets = [(i, _tokens(t)) for i, t in chunk_texts]
 
     raw_parts = [p.strip() for p in _SENT_SPLIT.split(answer) if p.strip()]
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     idx = 0
     for sent in raw_parts:
         if len(sent) < 12:

@@ -14,13 +14,14 @@ Interview talking point:
    Debate refinement is most accurate but adds latency — we use it
    only for high-stakes queries above a complexity threshold."
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from src.agents.multi_agent.base_agent import AgentResult, AgentStatus
+from src.agents.multi_agent.base_agent import AgentResult
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +32,10 @@ class ConsensusResult:
     final_output: str
     confidence: float
     agreement_score: float
-    participating_agents: List[str]
-    dissenting_agents: List[str]
+    participating_agents: list[str]
+    dissenting_agents: list[str]
     rounds: int = 1
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
 
     def __post_init__(self):
         if self.metadata is None:
@@ -47,7 +48,7 @@ class MajorityVote:
     Ties are broken by highest average confidence among tied candidates.
     """
 
-    def aggregate(self, results: List[AgentResult]) -> ConsensusResult:
+    def aggregate(self, results: list[AgentResult]) -> ConsensusResult:
         successful = [r for r in results if r.is_success()]
         if not successful:
             return ConsensusResult(
@@ -59,23 +60,30 @@ class MajorityVote:
                 dissenting_agents=[],
             )
 
-        vote_counts: Dict[str, List[AgentResult]] = {}
+        vote_counts: dict[str, list[AgentResult]] = {}
         for r in successful:
             key = r.output.strip().lower()[:100]
             vote_counts.setdefault(key, []).append(r)
 
-        winner_key = max(vote_counts, key=lambda k: (len(vote_counts[k]), sum(r.confidence for r in vote_counts[k])))
+        winner_key = max(
+            vote_counts,
+            key=lambda k: (len(vote_counts[k]), sum(r.confidence for r in vote_counts[k])),
+        )
         winner_results = vote_counts[winner_key]
         winner_output = winner_results[0].output
 
         agreement = len(winner_results) / len(successful)
         avg_confidence = sum(r.confidence for r in winner_results) / len(winner_results)
 
-        dissenters = [r.agent_name for r in successful if r.output.strip().lower()[:100] != winner_key]
+        dissenters = [
+            r.agent_name for r in successful if r.output.strip().lower()[:100] != winner_key
+        ]
 
         logger.info(
             "MajorityVote: %d/%d agree, confidence=%.3f",
-            len(winner_results), len(successful), avg_confidence,
+            len(winner_results),
+            len(successful),
+            avg_confidence,
         )
 
         return ConsensusResult(
@@ -99,10 +107,10 @@ class WeightedConfidence:
     Agent weights can be pre-set based on historical performance.
     """
 
-    def __init__(self, agent_weights: Optional[Dict[str, float]] = None):
+    def __init__(self, agent_weights: dict[str, float] | None = None):
         self.agent_weights = agent_weights or {}
 
-    def aggregate(self, results: List[AgentResult]) -> ConsensusResult:
+    def aggregate(self, results: list[AgentResult]) -> ConsensusResult:
         successful = [r for r in results if r.is_success()]
         if not successful:
             return ConsensusResult(
@@ -132,7 +140,9 @@ class WeightedConfidence:
 
         logger.info(
             "WeightedConfidence: winner=%s weight=%.3f/%.3f",
-            best_result.agent_name, best_weight, total_weight,
+            best_result.agent_name,
+            best_weight,
+            total_weight,
         )
 
         return ConsensusResult(
@@ -142,13 +152,14 @@ class WeightedConfidence:
             agreement_score=agreement,
             participating_agents=[r.agent_name for _, r in weighted],
             dissenting_agents=[
-                r.agent_name for w, r in weighted
+                r.agent_name
+                for w, r in weighted
                 if r.agent_name != best_result.agent_name and w / total_weight < 0.2
             ],
             metadata={"weights": {r.agent_name: round(w, 3) for w, r in weighted}},
         )
 
-    def _fallback(self, results: List[AgentResult]) -> ConsensusResult:
+    def _fallback(self, results: list[AgentResult]) -> ConsensusResult:
         best = max(results, key=lambda r: r.confidence)
         return ConsensusResult(
             strategy="weighted_confidence",
@@ -160,7 +171,7 @@ class WeightedConfidence:
         )
 
     @staticmethod
-    def _text_agreement(outputs: List[str]) -> float:
+    def _text_agreement(outputs: list[str]) -> float:
         if len(outputs) <= 1:
             return 1.0
         ref = set(outputs[0].lower().split())
@@ -194,7 +205,7 @@ class DebateRefinement:
         self,
         max_rounds: int = 3,
         agreement_threshold: float = 0.80,
-        critic_fn: Optional[Any] = None,
+        critic_fn: Any | None = None,
     ):
         self.max_rounds = max_rounds
         self.agreement_threshold = agreement_threshold
@@ -203,8 +214,8 @@ class DebateRefinement:
 
     def aggregate(
         self,
-        results: List[AgentResult],
-        debate_fn: Optional[Any] = None,
+        results: list[AgentResult],
+        debate_fn: Any | None = None,
     ) -> ConsensusResult:
         """
         debate_fn: callable(outputs: List[str]) -> List[str]
@@ -227,7 +238,11 @@ class DebateRefinement:
         for round_num in range(2, self.max_rounds + 1):
             initial = self._weighted.aggregate(current_results)
             if initial.agreement_score >= self.agreement_threshold:
-                logger.info("Debate: early stop at round %d (agreement=%.3f)", round_num - 1, initial.agreement_score)
+                logger.info(
+                    "Debate: early stop at round %d (agreement=%.3f)",
+                    round_num - 1,
+                    initial.agreement_score,
+                )
                 initial.rounds = round_num - 1
                 return initial
 
@@ -251,7 +266,7 @@ class DebateRefinement:
 
 
 def select_consensus_strategy(
-    results: List[AgentResult],
+    results: list[AgentResult],
     complexity: str = "medium",
     latency_budget_ms: float = 5000.0,
 ) -> str:
@@ -267,9 +282,7 @@ def select_consensus_strategy(
     if len(results) < 2:
         return "weighted_confidence"
 
-    outputs_are_categorical = all(
-        len(r.output.split()) < 5 for r in results if r.is_success()
-    )
+    outputs_are_categorical = all(len(r.output.split()) < 5 for r in results if r.is_success())
     if outputs_are_categorical:
         return "majority_vote"
 

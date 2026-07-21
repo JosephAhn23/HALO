@@ -21,15 +21,15 @@ Usage:
     # Or run the full pipeline end-to-end:
     python inference/tensorrt_onnx_triton.py --model meta-llama/Llama-3.2-1B --precision fp16
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -41,14 +41,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Config
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class OptimizationConfig:
     model_name: str = "meta-llama/Llama-3.2-1B-Instruct"
     max_seq_len: int = 512
     max_batch_size: int = 8
-    precision: str = "fp16"           # fp32 | fp16 | int8 | fp8
-    workspace_gb: int = 8             # TensorRT builder workspace
-    calibration_samples: int = 512    # for INT8 PTQ calibration
+    precision: str = "fp16"  # fp32 | fp16 | int8 | fp8
+    workspace_gb: int = 8  # TensorRT builder workspace
+    calibration_samples: int = 512  # for INT8 PTQ calibration
     triton_model_name: str = "llmops-llm"
     triton_max_batch: int = 8
     triton_url: str = "localhost:8000"
@@ -59,6 +60,7 @@ class OptimizationConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 # ONNX export
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class ONNXExporter:
     """
@@ -74,7 +76,7 @@ class ONNXExporter:
         model,
         tokenizer,
         output_path: str,
-        opset: Optional[int] = None,
+        opset: int | None = None,
     ) -> str:
         import torch
 
@@ -94,8 +96,7 @@ class ONNXExporter:
         input_names = list(inputs.keys())
         output_names = ["logits"]
 
-        dynamic_axes = {name: {0: "batch_size", 1: "sequence_length"}
-                        for name in input_names}
+        dynamic_axes = {name: {0: "batch_size", 1: "sequence_length"} for name in input_names}
         dynamic_axes["logits"] = {0: "batch_size", 1: "sequence_length"}
 
         logger.info("Exporting to ONNX (opset=%d): %s", opset, output_path)
@@ -114,13 +115,14 @@ class ONNXExporter:
             )
 
         self._verify_onnx(output_path)
-        file_mb = os.path.getsize(output_path) / (1024 ** 2)
+        file_mb = os.path.getsize(output_path) / (1024**2)
         logger.info("ONNX export complete: %.1f MB at %s", file_mb, output_path)
         return output_path
 
     def _verify_onnx(self, path: str) -> None:
         try:
             import onnx
+
             model = onnx.load(path)
             onnx.checker.check_model(model)
             logger.info("ONNX model check passed (opset %d).", model.opset_import[0].version)
@@ -152,6 +154,7 @@ class ONNXExporter:
 # ONNX Runtime backend
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class ONNXRuntimeBackend:
     """ONNX Runtime inference backend (CPU + CUDA execution providers)."""
 
@@ -166,7 +169,8 @@ class ONNXRuntimeBackend:
 
             providers = (
                 ["CUDAExecutionProvider", "CPUExecutionProvider"]
-                if self.use_gpu else ["CPUExecutionProvider"]
+                if self.use_gpu
+                else ["CPUExecutionProvider"]
             )
             opts = ort.SessionOptions()
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -177,12 +181,12 @@ class ONNXRuntimeBackend:
             logger.info("ORT session loaded (providers=%s)", providers)
         return self._session
 
-    def run(self, inputs: Dict[str, np.ndarray]) -> np.ndarray:
+    def run(self, inputs: dict[str, np.ndarray]) -> np.ndarray:
         session = self._get_session()
         output_names = [o.name for o in session.get_outputs()]
         return session.run(output_names, inputs)[0]
 
-    def benchmark(self, inputs: Dict[str, np.ndarray], n_runs: int = 100) -> Dict:
+    def benchmark(self, inputs: dict[str, np.ndarray], n_runs: int = 100) -> dict:
         for _ in range(10):
             self.run(inputs)
         latencies = []
@@ -197,6 +201,7 @@ class ONNXRuntimeBackend:
 # TensorRT engine builder
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TensorRTEngineBuilder:
     """
     Build TensorRT engines from ONNX models.
@@ -210,7 +215,7 @@ class TensorRTEngineBuilder:
         self,
         onnx_path: str,
         engine_path: str,
-        precision: Optional[str] = None,
+        precision: str | None = None,
         calibrator=None,
     ) -> str:
         precision = precision or self.cfg.precision
@@ -264,7 +269,9 @@ class TensorRTEngineBuilder:
                     logger.error("TRT parse error: %s", parser.get_error(i))
                 raise RuntimeError("ONNX parse failed")
 
-        logger.info("Building TRT engine (precision=%s) — this may take several minutes…", precision)
+        logger.info(
+            "Building TRT engine (precision=%s) — this may take several minutes…", precision
+        )
         serialized = builder.build_serialized_network(network, config)
         if serialized is None:
             raise RuntimeError("TRT engine build failed")
@@ -273,7 +280,7 @@ class TensorRTEngineBuilder:
         with open(engine_path, "wb") as f:
             f.write(serialized)
 
-        size_mb = os.path.getsize(engine_path) / (1024 ** 2)
+        size_mb = os.path.getsize(engine_path) / (1024**2)
         logger.info("TRT engine built: %.1f MB at %s", size_mb, engine_path)
         return engine_path
 
@@ -298,6 +305,7 @@ class TensorRTEngineBuilder:
 # INT8 PTQ Calibrator
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class INT8Calibrator:
     """
     Post-Training Quantization (PTQ) calibrator for TensorRT INT8.
@@ -307,7 +315,7 @@ class INT8Calibrator:
 
     def __init__(
         self,
-        calibration_data: List[Dict[str, np.ndarray]],
+        calibration_data: list[dict[str, np.ndarray]],
         cache_file: str = "outputs/trt/calibration.cache",
     ):
         self.data = calibration_data
@@ -317,7 +325,7 @@ class INT8Calibrator:
     def get_batch_size(self) -> int:
         return 1
 
-    def get_batch(self, names: List[str]):
+    def get_batch(self, names: list[str]):
         try:
             import pycuda.driver as cuda
         except ImportError:
@@ -353,6 +361,7 @@ class INT8Calibrator:
 # TensorRT runtime
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TensorRTRuntime:
     """Run inference on a compiled TensorRT engine."""
 
@@ -363,8 +372,8 @@ class TensorRTRuntime:
 
     def _load(self) -> None:
         try:
-            import tensorrt as trt
             import pycuda.autoinit  # noqa: F401
+            import tensorrt as trt
 
             TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
             runtime = trt.Runtime(TRT_LOGGER)
@@ -401,7 +410,7 @@ class TensorRTRuntime:
         stream.synchronize()
         return output
 
-    def benchmark(self, inputs: Dict, n_runs: int = 100) -> Dict:
+    def benchmark(self, inputs: dict, n_runs: int = 100) -> dict:
         latencies = []
         for _ in range(10):
             try:
@@ -421,6 +430,7 @@ class TensorRTRuntime:
 # ──────────────────────────────────────────────────────────────────────────────
 # Triton config generator
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TritonConfigGenerator:
     """
@@ -443,8 +453,8 @@ class TritonConfigGenerator:
     def generate(
         self,
         repo_dir: str,
-        backend: str = "tensorrt",      # "tensorrt" | "onnxruntime" | "pytorch"
-        model_file: Optional[str] = None,
+        backend: str = "tensorrt",  # "tensorrt" | "onnxruntime" | "pytorch"
+        model_file: str | None = None,
     ) -> str:
         model_dir = Path(repo_dir) / self.cfg.triton_model_name / "1"
         model_dir.mkdir(parents=True, exist_ok=True)
@@ -455,6 +465,7 @@ class TritonConfigGenerator:
 
         if model_file and os.path.exists(model_file):
             import shutil
+
             ext = ".plan" if backend == "tensorrt" else ".onnx"
             dest = model_dir / f"model{ext}"
             shutil.copy2(model_file, dest)
@@ -624,6 +635,7 @@ result = client.infer_raw(input_ids, attention_mask)
 # Triton HTTP client
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TritonClient:
     """
     HTTP client for Triton Inference Server.
@@ -646,6 +658,7 @@ class TritonClient:
         if self._client is None:
             try:
                 import tritonclient.http as httpclient
+
                 self._client = httpclient.InferenceServerClient(url=self.url)
             except ImportError:
                 raise ImportError("Install tritonclient: pip install tritonclient[http]")
@@ -686,7 +699,7 @@ class TritonClient:
 
     def embed(
         self,
-        texts: List[str],
+        texts: list[str],
         tokenizer_name: str = "sentence-transformers/all-MiniLM-L6-v2",
         max_length: int = 128,
     ) -> np.ndarray:
@@ -717,7 +730,7 @@ class TritonClient:
         input_ids: np.ndarray,
         attention_mask: np.ndarray,
         n_runs: int = 100,
-    ) -> Dict:
+    ) -> dict:
         for _ in range(5):
             self.infer_raw(input_ids, attention_mask)
         latencies = []
@@ -731,6 +744,7 @@ class TritonClient:
 # ──────────────────────────────────────────────────────────────────────────────
 # Benchmarking
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class BenchmarkResult:
@@ -754,7 +768,7 @@ class BenchmarkResult:
         )
 
 
-def _latency_stats(latencies: List[float], backend: str) -> Dict:
+def _latency_stats(latencies: list[float], backend: str) -> dict:
     if not latencies:
         return {"backend": backend, "p50": 0, "p90": 0, "p99": 0, "qps": 0, "n_runs": 0}
     arr = np.array(latencies)
@@ -778,9 +792,9 @@ class InferenceBenchmarker:
 
     def __init__(self, cfg: OptimizationConfig):
         self.cfg = cfg
-        self.results: List[BenchmarkResult] = []
+        self.results: list[BenchmarkResult] = []
 
-    def benchmark_pytorch(self, model, inputs: Dict, n_runs: int = 200) -> BenchmarkResult:
+    def benchmark_pytorch(self, model, inputs: dict, n_runs: int = 200) -> BenchmarkResult:
         import torch
 
         model.eval()
@@ -796,10 +810,13 @@ class InferenceBenchmarker:
                 latencies.append((time.perf_counter() - t0) * 1000)
         stats = _latency_stats(latencies, "pytorch")
         result = BenchmarkResult(
-            backend="pytorch", precision="fp32",
+            backend="pytorch",
+            precision="fp32",
             batch_size=inputs["input_ids"].shape[0],
             seq_len=inputs["input_ids"].shape[1],
-            p50_ms=stats["p50"], p90_ms=stats["p90"], p99_ms=stats["p99"],
+            p50_ms=stats["p50"],
+            p90_ms=stats["p90"],
+            p99_ms=stats["p99"],
             throughput_qps=stats["qps"],
             memory_mb=self._gpu_memory_mb(),
         )
@@ -807,15 +824,18 @@ class InferenceBenchmarker:
         return result
 
     def benchmark_ort(
-        self, ort_backend: ONNXRuntimeBackend, inputs: Dict, n_runs: int = 200
+        self, ort_backend: ONNXRuntimeBackend, inputs: dict, n_runs: int = 200
     ) -> BenchmarkResult:
         np_inputs = {k: v.astype(np.int64) for k, v in inputs.items()}
         stats = ort_backend.benchmark(np_inputs, n_runs=n_runs)
         result = BenchmarkResult(
-            backend="onnxruntime", precision="fp32",
+            backend="onnxruntime",
+            precision="fp32",
             batch_size=inputs["input_ids"].shape[0],
             seq_len=inputs["input_ids"].shape[1],
-            p50_ms=stats["p50"], p90_ms=stats["p90"], p99_ms=stats["p99"],
+            p50_ms=stats["p50"],
+            p90_ms=stats["p90"],
+            p99_ms=stats["p99"],
             throughput_qps=stats["qps"],
             memory_mb=self._gpu_memory_mb(),
         )
@@ -823,14 +843,17 @@ class InferenceBenchmarker:
         return result
 
     def benchmark_trt(
-        self, trt_runtime: TensorRTRuntime, inputs: Dict, precision: str = "fp16", n_runs: int = 200
+        self, trt_runtime: TensorRTRuntime, inputs: dict, precision: str = "fp16", n_runs: int = 200
     ) -> BenchmarkResult:
         stats = trt_runtime.benchmark(inputs, n_runs=n_runs)
         result = BenchmarkResult(
-            backend="tensorrt", precision=precision,
+            backend="tensorrt",
+            precision=precision,
             batch_size=inputs["input_ids"].shape[0],
             seq_len=inputs["input_ids"].shape[1],
-            p50_ms=stats["p50"], p90_ms=stats["p90"], p99_ms=stats["p99"],
+            p50_ms=stats["p50"],
+            p90_ms=stats["p90"],
+            p99_ms=stats["p99"],
             throughput_qps=stats["qps"],
             memory_mb=self._gpu_memory_mb(),
         )
@@ -840,8 +863,9 @@ class InferenceBenchmarker:
     def _gpu_memory_mb(self) -> float:
         try:
             import torch
+
             if torch.cuda.is_available():
-                return torch.cuda.memory_allocated() / (1024 ** 2)
+                return torch.cuda.memory_allocated() / (1024**2)
         except Exception:
             pass
         return 0.0
@@ -852,7 +876,9 @@ class InferenceBenchmarker:
             return
         baseline = self.results[0].p50_ms if self.results else 1.0
         print("\n" + "=" * 90)
-        print(f"{'Backend':20s} | {'Prec':5s} | {'p50':>8s} | {'p90':>8s} | {'p99':>8s} | {'QPS':>8s} | {'Speedup':>8s}")
+        print(
+            f"{'Backend':20s} | {'Prec':5s} | {'p50':>8s} | {'p90':>8s} | {'p99':>8s} | {'QPS':>8s} | {'Speedup':>8s}"
+        )
         print("=" * 90)
         for r in self.results:
             r.speedup_vs_pytorch = baseline / r.p50_ms if r.p50_ms > 0 else 1.0
@@ -862,6 +888,7 @@ class InferenceBenchmarker:
     def log_to_mlflow(self) -> None:
         try:
             import mlflow
+
             with mlflow.start_run(run_name="inference-benchmark"):
                 mlflow.log_param("model", self.cfg.model_name)
                 for r in self.results:
@@ -877,6 +904,7 @@ class InferenceBenchmarker:
 # ──────────────────────────────────────────────────────────────────────────────
 # Top-level pipeline
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class InferenceOptimizationPipeline:
     """
@@ -896,7 +924,7 @@ class InferenceOptimizationPipeline:
         self.benchmarker = InferenceBenchmarker(cfg)
 
     @classmethod
-    def from_hf(cls, model_name: str, **kwargs) -> "InferenceOptimizationPipeline":
+    def from_hf(cls, model_name: str, **kwargs) -> InferenceOptimizationPipeline:
         cfg = OptimizationConfig(model_name=model_name, **kwargs)
         return cls(cfg)
 
@@ -912,9 +940,7 @@ class InferenceOptimizationPipeline:
         )
         return model, tokenizer
 
-    def export_onnx(
-        self, output_path: str, model=None, tokenizer=None
-    ) -> str:
+    def export_onnx(self, output_path: str, model=None, tokenizer=None) -> str:
         if model is None or tokenizer is None:
             model, tokenizer = self.load_model_and_tokenizer()
         return self.exporter.export(model, tokenizer, output_path)
@@ -922,8 +948,8 @@ class InferenceOptimizationPipeline:
     def build_trt_engine(
         self,
         engine_path: str,
-        onnx_path: Optional[str] = None,
-        precision: Optional[str] = None,
+        onnx_path: str | None = None,
+        precision: str | None = None,
         calibrator=None,
     ) -> str:
         if onnx_path is None:
@@ -934,11 +960,11 @@ class InferenceOptimizationPipeline:
         self,
         repo_dir: str,
         backend: str = "tensorrt",
-        model_file: Optional[str] = None,
+        model_file: str | None = None,
     ) -> str:
         return self.triton_gen.generate(repo_dir, backend, model_file)
 
-    def run_full_pipeline(self, triton_repo: str = "triton_repo") -> Dict[str, str]:
+    def run_full_pipeline(self, triton_repo: str = "triton_repo") -> dict[str, str]:
         """
         Run the complete pipeline:
           1. Load model
@@ -975,16 +1001,21 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="TRT/ONNX/Triton inference optimization pipeline")
-    parser.add_argument("--model", default="meta-llama/Llama-3.2-1B-Instruct",
-                        help="HuggingFace model ID")
-    parser.add_argument("--precision", default="fp16",
-                        choices=["fp32", "fp16", "int8", "fp8"])
-    parser.add_argument("--triton-repo", default="triton_repo",
-                        help="Triton model repository output directory")
-    parser.add_argument("--artifacts-dir", default="artifacts/trt",
-                        help="Directory for ONNX and TRT artefacts")
-    parser.add_argument("--triton-only", action="store_true",
-                        help="Generate Triton config only (skip model loading)")
+    parser.add_argument(
+        "--model", default="meta-llama/Llama-3.2-1B-Instruct", help="HuggingFace model ID"
+    )
+    parser.add_argument("--precision", default="fp16", choices=["fp32", "fp16", "int8", "fp8"])
+    parser.add_argument(
+        "--triton-repo", default="triton_repo", help="Triton model repository output directory"
+    )
+    parser.add_argument(
+        "--artifacts-dir", default="artifacts/trt", help="Directory for ONNX and TRT artefacts"
+    )
+    parser.add_argument(
+        "--triton-only",
+        action="store_true",
+        help="Generate Triton config only (skip model loading)",
+    )
     args = parser.parse_args()
 
     cfg = OptimizationConfig(

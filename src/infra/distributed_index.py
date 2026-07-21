@@ -1,12 +1,12 @@
 """
 Distributed FAISS with IVF partitioning + multi-shard search.
 """
+
 from __future__ import annotations
 
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List
 
 import faiss
 import numpy as np
@@ -26,11 +26,11 @@ class DistributedFAISSIndex:
 
     def __init__(self, dim: int = 384):
         self.dim = dim
-        self.shards: List[faiss.IndexIVFFlat] = []
-        self.shard_metadata: List[List[Dict]] = []
+        self.shards: list[faiss.IndexIVFFlat] = []
+        self.shard_metadata: list[list[dict]] = []
         self.lock = threading.Lock()
 
-    def _build_shard(self, embeddings: np.ndarray, metadata: List[Dict]) -> faiss.IndexIVFFlat:
+    def _build_shard(self, embeddings: np.ndarray, metadata: list[dict]) -> faiss.IndexIVFFlat:
         quantizer = faiss.IndexFlatIP(self.dim)
         index = faiss.IndexIVFFlat(quantizer, self.dim, NLIST, faiss.METRIC_INNER_PRODUCT)
         index.train(embeddings)
@@ -38,7 +38,7 @@ class DistributedFAISSIndex:
         index.nprobe = NPROBE
         return index
 
-    def build(self, embeddings: np.ndarray, metadata: List[Dict]):
+    def build(self, embeddings: np.ndarray, metadata: list[dict]):
         """Partition embeddings across shards."""
         n = len(embeddings)
         shard_size = n // N_SHARDS
@@ -66,7 +66,7 @@ class DistributedFAISSIndex:
 
         logger.info("Built %d shards, ~%d vectors each.", N_SHARDS, shard_size)
 
-    def _search_shard(self, shard_idx: int, query: np.ndarray, top_k: int) -> List[Dict]:
+    def _search_shard(self, shard_idx: int, query: np.ndarray, top_k: int) -> list[dict]:
         """Search a single shard - runs in thread pool."""
         index = self.shards[shard_idx]
         metadata = self.shard_metadata[shard_idx]
@@ -82,7 +82,7 @@ class DistributedFAISSIndex:
             results.append(chunk)
         return results
 
-    def search(self, query_vec: np.ndarray, top_k: int = 10) -> List[Dict]:
+    def search(self, query_vec: np.ndarray, top_k: int = 10) -> list[dict]:
         """
         Parallel search across all shards using ThreadPoolExecutor.
         Merges results and returns global top-k.

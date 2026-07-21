@@ -24,12 +24,12 @@ Usage:
     result = pipeline.classify("How do I make a bomb?")
     # → {"toxicity": "toxic", "intent": "harmful", "topic": "safety", ...}
 """
+
 from __future__ import annotations
 
 import logging
 import re
 import time
-from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 
 # (text, label)
-_TOXICITY_DATA: List[Tuple[str, int]] = [
+_TOXICITY_DATA: list[tuple[str, int]] = [
     # Toxic (1)
     ("You are a complete idiot and should be ashamed of yourself.", 1),
     ("I hate you so much, go die in a fire.", 1),
@@ -81,7 +81,7 @@ _TOXICITY_DATA: List[Tuple[str, int]] = [
     ("What are some good recipes for pasta?", 0),
 ]
 
-_INTENT_DATA: List[Tuple[str, int]] = [
+_INTENT_DATA: list[tuple[str, int]] = [
     # 0: question
     ("What is the capital of France?", 0),
     ("How does photosynthesis work?", 0),
@@ -129,7 +129,7 @@ _INTENT_DATA: List[Tuple[str, int]] = [
     ("test test test", 6),
 ]
 
-_TOPIC_DATA: List[Tuple[str, int]] = [
+_TOPIC_DATA: list[tuple[str, int]] = [
     # 0: coding
     ("How do I implement a binary search tree in Python?", 0),
     ("What is the difference between async and sync in JavaScript?", 0),
@@ -193,9 +193,57 @@ _TOXIC_PATTERNS = [
 ]
 _TOXIC_COMPILED = [re.compile(p, re.IGNORECASE) for p in _TOXIC_PATTERNS]
 
-_QUESTION_WORDS = {"what", "how", "why", "when", "where", "who", "which", "whose", "whom", "is", "are", "can", "could", "would", "should", "do", "does", "did"}
-_COMMAND_WORDS = {"write", "create", "generate", "make", "build", "fix", "translate", "summarize", "explain", "list", "give", "show", "find", "calculate"}
-_HARMFUL_WORDS = {"bomb", "hack", "exploit", "poison", "weapon", "drug", "illegal", "bypass", "crack", "attack", "steal", "kill", "harm"}
+_QUESTION_WORDS = {
+    "what",
+    "how",
+    "why",
+    "when",
+    "where",
+    "who",
+    "which",
+    "whose",
+    "whom",
+    "is",
+    "are",
+    "can",
+    "could",
+    "would",
+    "should",
+    "do",
+    "does",
+    "did",
+}
+_COMMAND_WORDS = {
+    "write",
+    "create",
+    "generate",
+    "make",
+    "build",
+    "fix",
+    "translate",
+    "summarize",
+    "explain",
+    "list",
+    "give",
+    "show",
+    "find",
+    "calculate",
+}
+_HARMFUL_WORDS = {
+    "bomb",
+    "hack",
+    "exploit",
+    "poison",
+    "weapon",
+    "drug",
+    "illegal",
+    "bypass",
+    "crack",
+    "attack",
+    "steal",
+    "kill",
+    "harm",
+}
 
 
 def _extract_behavioral_features(text: str) -> np.ndarray:
@@ -205,19 +253,19 @@ def _extract_behavioral_features(text: str) -> np.ndarray:
     first_word = text_lower.split()[0] if text_lower.split() else ""
 
     features = [
-        float(text.strip().endswith("?")),                        # ends with ?
-        float(first_word in _QUESTION_WORDS),                     # starts with question word
-        float(first_word in _COMMAND_WORDS),                      # starts with command
-        float(any(w in words for w in _HARMFUL_WORDS)),           # harmful keywords
-        float(any(p.search(text) for p in _TOXIC_COMPILED)),      # toxic patterns
-        float(sum(1 for p in _TOXIC_COMPILED if p.search(text))), # toxic pattern count
-        float(len(text.split()) < 5),                             # very short
-        float(len(text.split()) > 30),                            # very long
-        min(len(text) / 300.0, 1.0),                              # normalised length
-        float(text[0].isupper() if text else False),              # starts with capital
-        float(text.count("!") > 0),                               # exclamation
-        float(text.count("?") > 1),                               # multiple questions
-        float(any(c.isdigit() for c in text)),                    # contains numbers
+        float(text.strip().endswith("?")),  # ends with ?
+        float(first_word in _QUESTION_WORDS),  # starts with question word
+        float(first_word in _COMMAND_WORDS),  # starts with command
+        float(any(w in words for w in _HARMFUL_WORDS)),  # harmful keywords
+        float(any(p.search(text) for p in _TOXIC_COMPILED)),  # toxic patterns
+        float(sum(1 for p in _TOXIC_COMPILED if p.search(text))),  # toxic pattern count
+        float(len(text.split()) < 5),  # very short
+        float(len(text.split()) > 30),  # very long
+        min(len(text) / 300.0, 1.0),  # normalised length
+        float(text[0].isupper() if text else False),  # starts with capital
+        float(text.count("!") > 0),  # exclamation
+        float(text.count("?") > 1),  # multiple questions
+        float(any(c.isdigit() for c in text)),  # contains numbers
         float("code" in text_lower or "function" in text_lower or "def " in text_lower),
         float("thank" in text_lower or "great" in text_lower or "helpful" in text_lower),
         float("wrong" in text_lower or "incorrect" in text_lower or "doesn't work" in text_lower),
@@ -238,27 +286,30 @@ class _EmbeddingClassifier:
         self.embedding_model_name = embedding_model
         self._embedder = None
         self._clf = None
-        self._label_names: List[str] = []
+        self._label_names: list[str] = []
 
     def _get_embedder(self):
         if self._embedder is None:
             try:
                 from sentence_transformers import SentenceTransformer
+
                 self._embedder = SentenceTransformer(self.embedding_model_name)
             except ImportError:
-                raise ImportError("sentence-transformers required: pip install sentence-transformers")
+                raise ImportError(
+                    "sentence-transformers required: pip install sentence-transformers"
+                )
         return self._embedder
 
-    def _featurize(self, texts: List[str]) -> np.ndarray:
+    def _featurize(self, texts: list[str]) -> np.ndarray:
         emb = self._get_embedder().encode(texts, show_progress_bar=False, normalize_embeddings=True)
         hc = np.stack([_extract_behavioral_features(t) for t in texts])
         return np.concatenate([emb, hc], axis=1)
 
-    def _fit(self, data: List[Tuple[str, int]], label_names: List[str]) -> Dict:
+    def _fit(self, data: list[tuple[str, int]], label_names: list[str]) -> dict:
         from sklearn.linear_model import LogisticRegression
         from sklearn.model_selection import cross_val_score
-        from sklearn.preprocessing import StandardScaler
         from sklearn.pipeline import Pipeline
+        from sklearn.preprocessing import StandardScaler
 
         self._label_names = label_names
         texts = [d[0] for d in data]
@@ -268,13 +319,20 @@ class _EmbeddingClassifier:
         y = np.array(labels)
 
         n_classes = len(set(labels))
-        self._clf = Pipeline([
-            ("scaler", StandardScaler()),
-            ("clf", LogisticRegression(
-                max_iter=1000, C=1.0, random_state=42,
-                multi_class="multinomial" if n_classes > 2 else "auto",
-            )),
-        ])
+        self._clf = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                (
+                    "clf",
+                    LogisticRegression(
+                        max_iter=1000,
+                        C=1.0,
+                        random_state=42,
+                        multi_class="multinomial" if n_classes > 2 else "auto",
+                    ),
+                ),
+            ]
+        )
 
         n_splits = min(5, len(texts) // n_classes)
         cv_scores = cross_val_score(self._clf, X, y, cv=max(2, n_splits), scoring="f1_macro")
@@ -287,7 +345,7 @@ class _EmbeddingClassifier:
             "cv_f1_macro_std": round(cv_scores.std(), 4),
         }
 
-    def _predict_one(self, text: str) -> Dict:
+    def _predict_one(self, text: str) -> dict:
         if self._clf is None:
             raise RuntimeError("Call .train() first")
         X = self._featurize([text])
@@ -310,6 +368,7 @@ class _EmbeddingClassifier:
 # 1. Toxicity Classifier
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class ToxicityClassifier(_EmbeddingClassifier):
     """
     Binary toxicity classifier with severity scoring.
@@ -322,13 +381,13 @@ class ToxicityClassifier(_EmbeddingClassifier):
       - severe:   confidence > 0.9
     """
 
-    def train(self, extra_data: Optional[List[Tuple[str, int]]] = None) -> Dict:
+    def train(self, extra_data: list[tuple[str, int]] | None = None) -> dict:
         data = list(_TOXICITY_DATA) + (extra_data or [])
         metrics = self._fit(data, ["non-toxic", "toxic"])
         logger.info("ToxicityClassifier trained: CV F1=%.3f", metrics["cv_f1_macro_mean"])
         return metrics
 
-    def classify(self, text: str) -> Dict:
+    def classify(self, text: str) -> dict:
         t0 = time.perf_counter()
         result = self._predict_one(text)
 
@@ -366,6 +425,7 @@ class ToxicityClassifier(_EmbeddingClassifier):
 # 2. Intent Classifier
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class IntentClassifier(_EmbeddingClassifier):
     """
     Multi-class intent classifier.
@@ -378,13 +438,13 @@ class IntentClassifier(_EmbeddingClassifier):
       - Analytics on user behavior patterns
     """
 
-    def train(self, extra_data: Optional[List[Tuple[str, int]]] = None) -> Dict:
+    def train(self, extra_data: list[tuple[str, int]] | None = None) -> dict:
         data = list(_INTENT_DATA) + (extra_data or [])
         metrics = self._fit(data, INTENT_LABELS)
         logger.info("IntentClassifier trained: CV F1=%.3f", metrics["cv_f1_macro_mean"])
         return metrics
 
-    def classify(self, text: str) -> Dict:
+    def classify(self, text: str) -> dict:
         t0 = time.perf_counter()
         result = self._predict_one(text)
 
@@ -406,6 +466,7 @@ class IntentClassifier(_EmbeddingClassifier):
 # 3. Topic Classifier
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TopicClassifier(_EmbeddingClassifier):
     """
     Multi-class topic classifier.
@@ -418,13 +479,13 @@ class TopicClassifier(_EmbeddingClassifier):
       - Content filtering (safety topic → extra scrutiny)
     """
 
-    def train(self, extra_data: Optional[List[Tuple[str, int]]] = None) -> Dict:
+    def train(self, extra_data: list[tuple[str, int]] | None = None) -> dict:
         data = list(_TOPIC_DATA) + (extra_data or [])
         metrics = self._fit(data, TOPIC_LABELS)
         logger.info("TopicClassifier trained: CV F1=%.3f", metrics["cv_f1_macro_mean"])
         return metrics
 
-    def classify(self, text: str) -> Dict:
+    def classify(self, text: str) -> dict:
         t0 = time.perf_counter()
         result = self._predict_one(text)
         return {**result, "latency_ms": round((time.perf_counter() - t0) * 1000, 2)}
@@ -436,6 +497,7 @@ class TopicClassifier(_EmbeddingClassifier):
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. Unified Behavioral Pipeline
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class BehavioralPipeline:
     """
@@ -453,7 +515,7 @@ class BehavioralPipeline:
         self.topic = TopicClassifier(embedding_model)
         self._trained = False
 
-    def train_all(self) -> Dict:
+    def train_all(self) -> dict:
         """Train all three classifiers. Call once before serving."""
         logger.info("Training behavioral classifiers...")
         metrics = {
@@ -464,7 +526,7 @@ class BehavioralPipeline:
         self._trained = True
         return metrics
 
-    def classify(self, text: str) -> Dict:
+    def classify(self, text: str) -> dict:
         """
         Run all classifiers on a text.
 
@@ -517,10 +579,10 @@ class BehavioralPipeline:
             "total_latency_ms": round((time.perf_counter() - t0) * 1000, 2),
         }
 
-    def classify_batch(self, texts: List[str]) -> List[Dict]:
+    def classify_batch(self, texts: list[str]) -> list[dict]:
         return [self.classify(t) for t in texts]
 
-    def analytics(self, texts: List[str]) -> Dict:
+    def analytics(self, texts: list[str]) -> dict:
         """
         Aggregate statistics over a batch of texts.
         Useful for monitoring query distribution in production.
@@ -557,7 +619,8 @@ class BehavioralPipeline:
 # ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import argparse, json
+    import argparse
+    import json
 
     parser = argparse.ArgumentParser(description="Behavioral classifiers")
     sub = parser.add_subparsers(dest="cmd")

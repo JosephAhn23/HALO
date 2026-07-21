@@ -40,24 +40,25 @@ actual corpus — re-run that script and re-tune once real documents are
 ingested, since a real FAISS index's score distribution may differ from a
 16-sentence reference corpus.
 """
+
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.agents.multi_agent.cost_classifier import ComplexityClassifier, get_default_classifier
 
 DEFAULT_ABSTAIN_THRESHOLD = float(os.getenv("COST_ROUTER_ABSTAIN_THRESHOLD", "0.18"))
 
 # $ / 1K tokens, (prompt, completion). Snapshot — see module docstring.
-MODEL_PRICING_USD_PER_1K: Dict[str, Dict[str, float]] = {
+MODEL_PRICING_USD_PER_1K: dict[str, dict[str, float]] = {
     "gpt-4o-mini": {"prompt": 0.00015, "completion": 0.0006},
     "gpt-4o": {"prompt": 0.0025, "completion": 0.01},
 }
 
 # Complexity tier -> which model handles it.
-TIER_MODEL_MAP: Dict[str, str] = {
+TIER_MODEL_MAP: dict[str, str] = {
     "low": "gpt-4o-mini",
     "medium": "gpt-4o-mini",
     "high": "gpt-4o",
@@ -74,13 +75,13 @@ ABSTAIN_ANSWER = (
 @dataclass
 class RouterDecision:
     abstain: bool
-    complexity_tier: Optional[str]
-    model: Optional[str]
-    retrieval_top_score: Optional[float]
+    complexity_tier: str | None
+    model: str | None
+    retrieval_top_score: float | None
     n_retrieved: int
     reasoning: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "abstain": self.abstain,
             "complexity_tier": self.complexity_tier,
@@ -95,13 +96,15 @@ def estimate_cost_usd(model: str, prompt_tokens: int, completion_tokens: int) ->
     rates = MODEL_PRICING_USD_PER_1K.get(model)
     if rates is None:
         return 0.0
-    return (prompt_tokens / 1000.0) * rates["prompt"] + (completion_tokens / 1000.0) * rates["completion"]
+    return (prompt_tokens / 1000.0) * rates["prompt"] + (completion_tokens / 1000.0) * rates[
+        "completion"
+    ]
 
 
 class CostAwareRouter:
     def __init__(
         self,
-        classifier: Optional[ComplexityClassifier] = None,
+        classifier: ComplexityClassifier | None = None,
         abstain_threshold: float = DEFAULT_ABSTAIN_THRESHOLD,
         score_keys: tuple[str, ...] = ("rerank_score", "retrieval_score"),
     ) -> None:
@@ -118,14 +121,14 @@ class CostAwareRouter:
             self._classifier = get_default_classifier()
         return self._classifier
 
-    def _top_score(self, chunks: List[Dict[str, Any]]) -> Optional[float]:
+    def _top_score(self, chunks: list[dict[str, Any]]) -> float | None:
         for key in self.score_keys:
             scores = [c[key] for c in chunks if c.get(key) is not None]
             if scores:
                 return max(scores)
         return None
 
-    def route(self, query: str, retrieved_chunks: List[Dict[str, Any]]) -> RouterDecision:
+    def route(self, query: str, retrieved_chunks: list[dict[str, Any]]) -> RouterDecision:
         n = len(retrieved_chunks)
         top_score = self._top_score(retrieved_chunks)
 

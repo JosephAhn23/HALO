@@ -7,6 +7,7 @@ compares answers, and flags human-in-the-loop when they materially disagree.
 Designed for high-stakes numeric or factual checks; agreement uses normalized
 text similarity by default, with an optional third-party LLM judge.
 """
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -17,8 +18,9 @@ import re
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -35,7 +37,7 @@ class ProviderAnswer:
     model: str
     text: str
     latency_ms: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -48,7 +50,7 @@ class CrossProviderConsensusResult:
 
     task_id: str
     prompt_excerpt: str
-    answers: Tuple[ProviderAnswer, ProviderAnswer]
+    answers: tuple[ProviderAnswer, ProviderAnswer]
     agreement_score: float
     models_agree: bool
     final_text: str
@@ -56,11 +58,11 @@ class CrossProviderConsensusResult:
     hitl_required: bool
     hitl_reason: str
     judge_rationale: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_agent_results(self) -> List[AgentResult]:
+    def to_agent_results(self) -> list[AgentResult]:
         """Map provider answers to AgentResult for the existing consensus stack."""
-        out: List[AgentResult] = []
+        out: list[AgentResult] = []
         for pa in self.answers:
             status = AgentStatus.SUCCEEDED if pa.ok else AgentStatus.FAILED
             conf = 1.0 if pa.ok and self.models_agree else (0.85 if pa.ok else 0.0)
@@ -107,7 +109,9 @@ class TruthCommitteeOutcome(BaseModel):
         if raw.hitl_required:
             notes = (raw.hitl_reason or "").strip() or None
             if raw.judge_rationale:
-                notes = (notes + "\n" + raw.judge_rationale).strip() if notes else raw.judge_rationale
+                notes = (
+                    (notes + "\n" + raw.judge_rationale).strip() if notes else raw.judge_rationale
+                )
         elif raw.judge_rationale:
             notes = raw.judge_rationale
         return cls(
@@ -160,11 +164,11 @@ class OpenAIChatProvider(LLMProvider):
         provider_id: str,
         model: str,
         *,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.2,
-        timeout_s: Optional[float] = None,
+        timeout_s: float | None = None,
     ):
         from openai import OpenAI
 
@@ -173,7 +177,7 @@ class OpenAIChatProvider(LLMProvider):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.timeout_s = timeout_s or float(os.getenv("OPENAI_TIMEOUT_S", "60"))
-        kwargs: Dict[str, Any] = {}
+        kwargs: dict[str, Any] = {}
         if api_key is not None:
             kwargs["api_key"] = api_key
         if base_url is not None:
@@ -220,10 +224,10 @@ class AnthropicMessagesProvider(LLMProvider):
         provider_id: str,
         model: str,
         *,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         max_tokens: int = 1024,
         temperature: float = 0.2,
-        timeout_s: Optional[float] = None,
+        timeout_s: float | None = None,
     ):
         try:
             import anthropic
@@ -243,7 +247,7 @@ class AnthropicMessagesProvider(LLMProvider):
     def complete(self, system: str, user: str) -> ProviderAnswer:
         t0 = time.perf_counter()
         try:
-            kwargs: Dict[str, Any] = {
+            kwargs: dict[str, Any] = {
                 "model": self.model,
                 "max_tokens": self.max_tokens,
                 "messages": [{"role": "user", "content": user}],
@@ -252,7 +256,7 @@ class AnthropicMessagesProvider(LLMProvider):
             if system.strip():
                 kwargs["system"] = system
             msg = self._client.messages.create(**kwargs)
-            parts: List[str] = []
+            parts: list[str] = []
             for block in msg.content:
                 if hasattr(block, "text"):
                     parts.append(block.text)
@@ -291,8 +295,8 @@ class CrossProviderConsensusNode:
         provider_b: LLMProvider,
         *,
         agreement_threshold: float = 0.82,
-        judge: Optional[Callable[[str, str, str], Tuple[bool, str]]] = None,
-        executor: Optional[concurrent.futures.Executor] = None,
+        judge: Callable[[str, str, str], tuple[bool, str]] | None = None,
+        executor: concurrent.futures.Executor | None = None,
     ):
         self.provider_a = provider_a
         self.provider_b = provider_b
@@ -305,7 +309,7 @@ class CrossProviderConsensusNode:
         user_prompt: str,
         system_prompt: str = "",
         *,
-        task_id: Optional[str] = None,
+        task_id: str | None = None,
     ) -> CrossProviderConsensusResult:
         tid = task_id or str(uuid.uuid4())[:12]
         excerpt = user_prompt[:200] + ("…" if len(user_prompt) > 200 else "")
@@ -404,22 +408,20 @@ class CrossProviderConsensusNode:
         )
 
 
-def openai_judge_factory(model: str = "gpt-4o-mini") -> Callable[[str, str, str], Tuple[bool, str]]:
+def openai_judge_factory(model: str = "gpt-4o-mini") -> Callable[[str, str, str], tuple[bool, str]]:
     """
     LLM-as-judge using the default OpenAI client.
     Returns (agree, short_rationale).
     """
     provider = OpenAIChatProvider("consensus_judge", model, temperature=0.0, max_tokens=256)
 
-    def judge(a: str, b: str, prompt: str) -> Tuple[bool, str]:
+    def judge(a: str, b: str, prompt: str) -> tuple[bool, str]:
         sys = (
             "You compare two model answers to the same question. "
             "Decide if they are materially the same conclusion (including numerics). "
             "Reply with exactly one line: AGREE or DISAGREE, then a short reason."
         )
-        user = (
-            f"Question:\n{prompt}\n\n--- Answer A ---\n{a}\n\n--- Answer B ---\n{b}\n"
-        )
+        user = f"Question:\n{prompt}\n\n--- Answer A ---\n{a}\n\n--- Answer B ---\n{b}\n"
         pa = provider.complete(sys, user)
         if not pa.ok:
             return False, f"judge_error:{pa.error}"
@@ -430,7 +432,7 @@ def openai_judge_factory(model: str = "gpt-4o-mini") -> Callable[[str, str, str]
     return judge
 
 
-def default_truth_committee_from_env() -> Optional[CrossProviderConsensusNode]:
+def default_truth_committee_from_env() -> CrossProviderConsensusNode | None:
     """
     If both OPENAI_API_KEY and ANTHROPIC_API_KEY are set, build OpenAI + Anthropic node.
 

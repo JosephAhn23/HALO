@@ -12,12 +12,13 @@ Mount in api/main.py:
     from src.governance.api_router import router as governance_router
     app.include_router(governance_router, prefix="/governance", tags=["governance"])
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from src.governance.audit_log import CryptoAuditLog
@@ -41,7 +42,7 @@ class RedactRequest(BaseModel):
 
 
 @router.get("/report", summary="Full governance dashboard")
-async def governance_report() -> Dict[str, Any]:
+async def governance_report() -> dict[str, Any]:
     """Returns governance status for the current production model."""
     valid, error = _audit_log.verify_chain()
     return {
@@ -66,7 +67,7 @@ async def get_model_card(
     version: int,
     ragas_faithfulness: float = 0.847,
     ragas_relevancy: float = 0.823,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generate and return a model card for the specified model version."""
     card = _card_generator.generate(
         model_name=model_name,
@@ -80,19 +81,19 @@ async def get_model_card(
 
 
 @router.get("/model-card/{model_name}/{version}/markdown", summary="Get model card as markdown")
-async def get_model_card_markdown(model_name: str, version: int) -> Dict[str, str]:
+async def get_model_card_markdown(model_name: str, version: int) -> dict[str, str]:
     card = _card_generator.generate(model_name=model_name, version=version, metrics={})
     return {"markdown": card.to_markdown()}
 
 
 @router.get("/audit-log", summary="Get recent audit log entries")
-async def get_audit_log(limit: int = 20, event_type: Optional[str] = None) -> List[Dict]:
+async def get_audit_log(limit: int = 20, event_type: str | None = None) -> list[dict]:
     entries = _audit_log.get_entries(event_type=event_type)
     return [e.to_dict() for e in entries[-limit:]]
 
 
 @router.post("/verify-audit-log", summary="Verify audit log chain integrity")
-async def verify_audit_log() -> Dict[str, Any]:
+async def verify_audit_log() -> dict[str, Any]:
     valid, error = _audit_log.verify_chain()
     return {
         "valid": valid,
@@ -103,7 +104,7 @@ async def verify_audit_log() -> Dict[str, Any]:
 
 
 @router.post("/redact", summary="Redact PII from text")
-async def redact_pii(request: RedactRequest) -> Dict[str, Any]:
+async def redact_pii(request: RedactRequest) -> dict[str, Any]:
     result = _pii_redactor.redact(request.text)
     return {
         "redacted_text": result.redacted_text,
@@ -120,7 +121,7 @@ async def run_ci_check(
     version: int,
     ragas_faithfulness: float = 0.847,
     ragas_relevancy: float = 0.823,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     report = _ci_enforcement.run_all_checks(
         model_name=model_name,
         version=version,

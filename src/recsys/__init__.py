@@ -1,6 +1,6 @@
 from src.recsys.recommendation_engine import (
-    LearnToRankModel,
     HybridRecommender,
+    LearnToRankModel,
     RecSysEvaluator,
     SHAPExplainer,
 )

@@ -20,12 +20,13 @@ Usage:
     context = manager.build_context(query, retrieved_chunks, history)
     print(f"Tokens used: {context.token_count} / {budget.total_tokens}")
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,7 @@ def estimate_tokens(text: str) -> int:
 # Context Budget
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ContextBudget:
     """
@@ -51,6 +53,7 @@ class ContextBudget:
       retrieved_context: 2048 tokens (50%)
       generation:       1280 tokens  (31%)
     """
+
     total_tokens: int = 4096
     system_tokens: int = 256
     history_tokens: int = 512
@@ -58,22 +61,46 @@ class ContextBudget:
     generation_tokens: int = 1280
 
     def __post_init__(self):
-        allocated = self.system_tokens + self.history_tokens + self.retrieval_tokens + self.generation_tokens
+        allocated = (
+            self.system_tokens
+            + self.history_tokens
+            + self.retrieval_tokens
+            + self.generation_tokens
+        )
         if allocated > self.total_tokens:
             logger.warning(
                 "Budget over-allocated: %d > %d. Scaling down retrieval.",
-                allocated, self.total_tokens,
+                allocated,
+                self.total_tokens,
             )
             overflow = allocated - self.total_tokens
             self.retrieval_tokens = max(256, self.retrieval_tokens - overflow)
 
     @classmethod
-    def for_model(cls, model: str) -> "ContextBudget":
+    def for_model(cls, model: str) -> ContextBudget:
         configs = {
-            "gpt-4o": cls(total_tokens=8192, system_tokens=256, history_tokens=1024, retrieval_tokens=4096, generation_tokens=2816),
+            "gpt-4o": cls(
+                total_tokens=8192,
+                system_tokens=256,
+                history_tokens=1024,
+                retrieval_tokens=4096,
+                generation_tokens=2816,
+            ),
             "gpt-4o-mini": cls(total_tokens=4096),
-            "llama-3.1-8b": cls(total_tokens=8192, system_tokens=256, history_tokens=1024, retrieval_tokens=4096, generation_tokens=2816),
-            "claude-3-haiku": cls(total_tokens=8192, system_tokens=512, history_tokens=1024, retrieval_tokens=4096, generation_tokens=2560),
+            "llama-3.1-8b": cls(
+                total_tokens=8192,
+                system_tokens=256,
+                history_tokens=1024,
+                retrieval_tokens=4096,
+                generation_tokens=2816,
+            ),
+            "claude-3-haiku": cls(
+                total_tokens=8192,
+                system_tokens=512,
+                history_tokens=1024,
+                retrieval_tokens=4096,
+                generation_tokens=2560,
+            ),
         }
         return configs.get(model, cls())
 
@@ -85,6 +112,7 @@ class ContextBudget:
 # ---------------------------------------------------------------------------
 # Query Rewriter
 # ---------------------------------------------------------------------------
+
 
 class QueryRewriter:
     """
@@ -123,16 +151,25 @@ class QueryRewriter:
         """
         step_back_patterns = [
             (r"how (do|does|should) (.+?) work", r"What are the principles behind \2?"),
-            (r"why (is|are|does) (.+?) (better|worse|faster|slower)", r"What determines \2 performance?"),
-            (r"compare (.+?) (and|vs|versus) (.+)", r"What are the key dimensions for comparing \1 and \3?"),
-            (r"what (is|are) the (best|optimal|right) way to (.+)", r"What are the general principles for \3?"),
+            (
+                r"why (is|are|does) (.+?) (better|worse|faster|slower)",
+                r"What determines \2 performance?",
+            ),
+            (
+                r"compare (.+?) (and|vs|versus) (.+)",
+                r"What are the key dimensions for comparing \1 and \3?",
+            ),
+            (
+                r"what (is|are) the (best|optimal|right) way to (.+)",
+                r"What are the general principles for \3?",
+            ),
         ]
         for pattern, replacement in step_back_patterns:
             if re.search(pattern, query, re.IGNORECASE):
                 return re.sub(pattern, replacement, query, flags=re.IGNORECASE)
         return f"What are the fundamental concepts needed to understand: {query}"
 
-    def decompose(self, query: str) -> List[str]:
+    def decompose(self, query: str) -> list[str]:
         """
         Split a complex multi-part query into focused sub-queries.
         Each sub-query retrieves independently; results are merged.
@@ -147,9 +184,11 @@ class QueryRewriter:
         comparison_match = re.search(r"compare (.+?) (and|vs|versus) (.+)", query, re.IGNORECASE)
         if comparison_match:
             a, _, b = comparison_match.groups()
-            return [f"What are the strengths and weaknesses of {a}?",
-                    f"What are the strengths and weaknesses of {b}?",
-                    f"When should you choose {a} over {b}?"]
+            return [
+                f"What are the strengths and weaknesses of {a}?",
+                f"What are the strengths and weaknesses of {b}?",
+                f"When should you choose {a} over {b}?",
+            ]
 
         return [query]
 
@@ -169,7 +208,7 @@ class QueryRewriter:
                 expanded += f" {expansion}"
         return expanded.strip()
 
-    def rewrite_for_retrieval(self, query: str, strategy: str = "hyde") -> Dict[str, Any]:
+    def rewrite_for_retrieval(self, query: str, strategy: str = "hyde") -> dict[str, Any]:
         """Apply rewriting strategy and return all variants for multi-query retrieval."""
         results = {
             "original": query,
@@ -186,6 +225,7 @@ class QueryRewriter:
 # ---------------------------------------------------------------------------
 # Retrieval Compressor
 # ---------------------------------------------------------------------------
+
 
 class RetrievalCompressor:
     """
@@ -204,10 +244,10 @@ class RetrievalCompressor:
 
     def compress(
         self,
-        chunks: List[Dict[str, Any]],
+        chunks: list[dict[str, Any]],
         query: str,
         budget: int,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         Compress chunks to fit within token budget.
         Returns (compressed_chunks, total_tokens_used).
@@ -229,12 +269,17 @@ class RetrievalCompressor:
                 text = self._extractive_compress(text, query, self.max_tokens_per_chunk)
                 chunk_tokens = estimate_tokens(text)
 
-            compressed.append({**chunk, "text": text, "compressed": True, "token_count": chunk_tokens})
+            compressed.append(
+                {**chunk, "text": text, "compressed": True, "token_count": chunk_tokens}
+            )
             tokens_used += chunk_tokens
 
         logger.debug(
             "Compressed %d->%d chunks, %d tokens (budget=%d).",
-            len(chunks), len(compressed), tokens_used, budget,
+            len(chunks),
+            len(compressed),
+            tokens_used,
+            budget,
         )
         return compressed, tokens_used
 
@@ -256,17 +301,17 @@ class RetrievalCompressor:
                 break
             result += " " + sent
 
-        return result.strip() or text[:max_tokens * CHARS_PER_TOKEN]
+        return result.strip() or text[: max_tokens * CHARS_PER_TOKEN]
 
-    def _deduplicate(self, chunks: List[Dict], similarity_threshold: float = 0.85) -> List[Dict]:
+    def _deduplicate(self, chunks: list[dict], similarity_threshold: float = 0.85) -> list[dict]:
         """Remove near-duplicate chunks using character n-gram overlap."""
         unique = []
-        seen_ngrams: List[set] = []
+        seen_ngrams: list[set] = []
 
         for chunk in chunks:
             text = chunk.get("text", "").lower()
             words = text.split()
-            ngrams = set(tuple(words[i:i+5]) for i in range(len(words)-4))
+            ngrams = {tuple(words[i : i + 5]) for i in range(len(words) - 4)}
             if not ngrams:
                 unique.append(chunk)
                 continue
@@ -291,6 +336,7 @@ class RetrievalCompressor:
 # Memory Decay Policy
 # ---------------------------------------------------------------------------
 
+
 class MemoryDecayPolicy:
     """
     Controls how conversation history is weighted and pruned.
@@ -307,15 +353,15 @@ class MemoryDecayPolicy:
 
     def apply(
         self,
-        history: List[Dict[str, str]],
+        history: list[dict[str, str]],
         query: str,
         token_budget: int,
-    ) -> List[Dict[str, str]]:
+    ) -> list[dict[str, str]]:
         """Prune and weight conversation history to fit token budget."""
         if not history:
             return []
 
-        recent = history[-self.max_turns:]
+        recent = history[-self.max_turns :]
         tokens_used = 0
         selected = []
 
@@ -324,7 +370,7 @@ class MemoryDecayPolicy:
             text = turn.get("content", "")
             turn_tokens = estimate_tokens(text)
 
-            recency_weight = self.decay_factor ** i
+            recency_weight = self.decay_factor**i
             turn_terms = set(text.lower().split())
             relevance = len(query_terms & turn_terms) / max(len(query_terms), 1)
             importance = recency_weight * 0.6 + relevance * 0.4
@@ -337,7 +383,7 @@ class MemoryDecayPolicy:
 
         return list(reversed(selected))
 
-    def summarize_old_turns(self, history: List[Dict]) -> str:
+    def summarize_old_turns(self, history: list[dict]) -> str:
         """Compress the earliest turns into a single summary sentence."""
         if len(history) < 3:
             return ""
@@ -353,6 +399,7 @@ class MemoryDecayPolicy:
 # ---------------------------------------------------------------------------
 # Token Cost Optimizer
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ModelRoute:
@@ -405,7 +452,8 @@ class TokenCostOptimizer:
     ) -> ModelRoute:
         complexity = self.classify_query(query)
         candidates = [
-            m for m in AVAILABLE_MODELS
+            m
+            for m in AVAILABLE_MODELS
             if m.max_context >= required_context_tokens
             and m.cost_per_1k_tokens <= max_cost_per_1k
             and m.quality_score >= min_quality
@@ -429,15 +477,16 @@ class TokenCostOptimizer:
 # Context Manager (top-level)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BuiltContext:
     system_prompt: str
-    history: List[Dict]
-    retrieved_chunks: List[Dict]
+    history: list[dict]
+    retrieved_chunks: list[dict]
     token_count: int
     budget: ContextBudget
     compression_ratio: float
-    selected_model: Optional[str] = None
+    selected_model: str | None = None
 
 
 class ContextManager:
@@ -453,7 +502,7 @@ class ContextManager:
 
     def __init__(
         self,
-        budget: Optional[ContextBudget] = None,
+        budget: ContextBudget | None = None,
         system_prompt: str = "You are a helpful AI assistant. Answer based on the provided context.",
     ):
         self.budget = budget or ContextBudget()
@@ -466,8 +515,8 @@ class ContextManager:
     def build_context(
         self,
         query: str,
-        retrieved_chunks: List[Dict],
-        history: Optional[List[Dict]] = None,
+        retrieved_chunks: list[dict],
+        history: list[dict] | None = None,
         rewrite_strategy: str = "expand",
     ) -> BuiltContext:
         history = history or []
@@ -485,16 +534,24 @@ class ContextManager:
             retrieved_chunks, rewritten["primary"], adjusted_retrieval_budget
         )
 
-        original_retrieval_tokens = sum(estimate_tokens(c.get("text", "")) for c in retrieved_chunks)
+        original_retrieval_tokens = sum(
+            estimate_tokens(c.get("text", "")) for c in retrieved_chunks
+        )
         compression_ratio = 1 - retrieval_tokens / max(original_retrieval_tokens, 1)
 
         total_tokens = system_tokens + history_tokens + retrieval_tokens
-        selected_model = self.cost_optimizer.select_model(query, required_context_tokens=total_tokens)
+        selected_model = self.cost_optimizer.select_model(
+            query, required_context_tokens=total_tokens
+        )
 
         logger.info(
             "Context built: %d tokens (sys=%d, hist=%d, ret=%d). Compression: %.1f%%. Model: %s",
-            total_tokens, system_tokens, history_tokens, retrieval_tokens,
-            100 * compression_ratio, selected_model.model,
+            total_tokens,
+            system_tokens,
+            history_tokens,
+            retrieval_tokens,
+            100 * compression_ratio,
+            selected_model.model,
         )
 
         return BuiltContext(
@@ -514,11 +571,31 @@ if __name__ == "__main__":
 
     query = "Compare RAG and fine-tuning for domain adaptation and explain the tradeoffs"
     chunks = [
-        {"text": "RAG retrieves relevant documents at query time, allowing the model to access up-to-date information without retraining. " * 10, "score": 0.89},
-        {"text": "Fine-tuning updates model weights on domain-specific data, embedding knowledge directly into parameters. " * 8, "score": 0.82},
-        {"text": "RAG retrieves relevant documents at query time, allowing the model to access up-to-date information. " * 10, "score": 0.87},
-        {"text": "Memory and compute tradeoffs: RAG requires vector store infrastructure; fine-tuning requires GPU training. " * 6, "score": 0.71},
-        {"text": "Unrelated content about weather forecasting models and meteorological data processing. " * 5, "score": 0.21},
+        {
+            "text": "RAG retrieves relevant documents at query time, allowing the model to access up-to-date information without retraining. "
+            * 10,
+            "score": 0.89,
+        },
+        {
+            "text": "Fine-tuning updates model weights on domain-specific data, embedding knowledge directly into parameters. "
+            * 8,
+            "score": 0.82,
+        },
+        {
+            "text": "RAG retrieves relevant documents at query time, allowing the model to access up-to-date information. "
+            * 10,
+            "score": 0.87,
+        },
+        {
+            "text": "Memory and compute tradeoffs: RAG requires vector store infrastructure; fine-tuning requires GPU training. "
+            * 6,
+            "score": 0.71,
+        },
+        {
+            "text": "Unrelated content about weather forecasting models and meteorological data processing. "
+            * 5,
+            "score": 0.21,
+        },
     ]
     history = [
         {"role": "user", "content": "What is RAG?"},
@@ -533,7 +610,7 @@ if __name__ == "__main__":
 
     rewriter = QueryRewriter()
     rewrites = rewriter.rewrite_for_retrieval(query, strategy="hyde")
-    print(f"\nQuery rewrites:")
+    print("\nQuery rewrites:")
     for key, val in rewrites.items():
         if isinstance(val, str):
             print(f"  {key}: {val[:80]}...")

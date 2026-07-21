@@ -4,11 +4,12 @@ Policy enforcement — constitution-style rules + drop claims unsupported by RAG
 Conservative default: remove sentences that neither cite ``[source_N]`` with a valid
 index nor show lexical overlap with retrieved chunk text.
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.agents.multi_agent.base_agent import (
     AgentResult,
@@ -32,15 +33,15 @@ DEFAULT_CONSTITUTION = [
 @dataclass
 class PolicyEnforcementResult:
     enforced_answer: str
-    dropped_sentences: List[str] = field(default_factory=list)
+    dropped_sentences: list[str] = field(default_factory=list)
     kept_count: int = 0
 
 
 def enforce_grounded_answer(
     answer: str,
-    chunks: List[Dict[str, Any]],
+    chunks: list[dict[str, Any]],
     *,
-    constitution: Optional[List[str]] = None,
+    constitution: list[str] | None = None,
     overlap_threshold: float = 0.08,
 ) -> PolicyEnforcementResult:
     """
@@ -59,11 +60,13 @@ def enforce_grounded_answer(
         t = chunks[i].get("text") or ""
         return {w.lower() for w in re.findall(r"[a-zA-Z]{4,}", t)}
 
-    all_chunk_tokens: List[set[str]] = [chunk_tokens(i) for i in range(n_chunks)]
+    all_chunk_tokens: list[set[str]] = [chunk_tokens(i) for i in range(n_chunks)]
 
     def sentence_supported(sent: str) -> bool:
         s = sent.strip()
-        if len(s.split()) < 10 and not re.search(r"\b(shall|must|will|policy|guarantee)\b", s, re.I):
+        if len(s.split()) < 10 and not re.search(
+            r"\b(shall|must|will|policy|guarantee)\b", s, re.I
+        ):
             return True
         m = _CITATION.search(s)
         if m:
@@ -86,8 +89,8 @@ def enforce_grounded_answer(
                 return True
         return False
 
-    kept: List[str] = []
-    dropped: List[str] = []
+    kept: list[str] = []
+    dropped: list[str] = []
     for part in _SENT_SPLIT.split(answer.strip()):
         if not part.strip():
             continue
@@ -118,19 +121,15 @@ class PolicyEnforcementAgent(BaseAgent):
     def __init__(
         self,
         name: str = "policy_enforcement",
-        tools: Optional[ToolRegistry] = None,
-        constitution: Optional[List[str]] = None,
+        tools: ToolRegistry | None = None,
+        constitution: list[str] | None = None,
         timeout_seconds: float = 30.0,
     ) -> None:
         super().__init__(name, tools, timeout_seconds)
         self.constitution = constitution or list(DEFAULT_CONSTITUTION)
 
     def process(self, task: AgentTask) -> AgentResult:
-        draft = (
-            task.context.get("draft_answer")
-            or task.context.get("research_result")
-            or ""
-        )
+        draft = task.context.get("draft_answer") or task.context.get("research_result") or ""
         chunks = task.context.get("retrieved_context") or task.context.get("chunks") or []
 
         if not draft.strip():

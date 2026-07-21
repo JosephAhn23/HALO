@@ -1,9 +1,9 @@
 """
 Tests for MLflow tracking, RAGAS evaluation, embedding analysis.
 """
+
 import importlib
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -82,8 +82,10 @@ class TestEvaluatePipeline:
                 "ground_truth": "RAG is a technique.",
             }
         ]
-        with patch.object(eval_mod, "evaluate", return_value=mock_result), \
-             patch.object(eval_mod, "mlflow") as mock_mlflow:
+        with (
+            patch.object(eval_mod, "evaluate", return_value=mock_result),
+            patch.object(eval_mod, "mlflow") as mock_mlflow,
+        ):
             mock_mlflow.active_run.return_value = None
             mock_mlflow.start_run.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_mlflow.start_run.return_value.__exit__ = MagicMock(return_value=False)
@@ -93,7 +95,6 @@ class TestEvaluatePipeline:
         mock_mlflow.log_metrics.assert_called_once()
 
     def test_nan_scores_are_filtered(self):
-        import math
         eval_mod = importlib.import_module("src.mlops.evaluate")
         fake_scores = {
             "faithfulness": float("nan"),
@@ -111,8 +112,10 @@ class TestEvaluatePipeline:
                 "contexts": ["ctx"],
             }
         ]
-        with patch.object(eval_mod, "evaluate", return_value=mock_result), \
-             patch.object(eval_mod, "mlflow") as mock_mlflow:
+        with (
+            patch.object(eval_mod, "evaluate", return_value=mock_result),
+            patch.object(eval_mod, "mlflow") as mock_mlflow,
+        ):
             mock_mlflow.active_run.return_value = None
             mock_mlflow.start_run.return_value.__enter__ = MagicMock(return_value=MagicMock())
             mock_mlflow.start_run.return_value.__exit__ = MagicMock(return_value=False)
@@ -141,9 +144,7 @@ class TestRAGASTracker:
     def test_check_regression_detects_drop(self, tmp_path):
         tracker = self._make_tracker(tmp_path)
         tracker.capture_baseline({"faithfulness": 0.9, "answer_relevancy": 0.85})
-        regressions = tracker._check_regression(
-            {"faithfulness": 0.8, "answer_relevancy": 0.85}
-        )
+        regressions = tracker._check_regression({"faithfulness": 0.8, "answer_relevancy": 0.85})
         assert "faithfulness" in regressions
         assert regressions["faithfulness"]["delta"] == pytest.approx(-0.1, abs=1e-6)
 
@@ -174,15 +175,19 @@ class TestEmbeddingAnalysis:
         metadata = [{"source": "test", "text": f"text {i}"} for i in range(200)]
 
         emb_mod = importlib.import_module("src.analysis.embedding_analysis")
-        with patch.object(emb_mod, "mlflow"), patch.object(emb_mod, "KMeans") as mock_km, patch.object(
-            emb_mod, "silhouette_score", return_value=0.72
+        with (
+            patch.object(emb_mod, "mlflow"),
+            patch.object(emb_mod, "KMeans") as mock_km,
+            patch.object(emb_mod, "silhouette_score", return_value=0.72),
         ):
             mock_km_inst = MagicMock()
             mock_km_inst.fit_predict.return_value = np.zeros(200, dtype=int)
             mock_km.return_value = mock_km_inst
             analyzer = emb_mod.EmbeddingAnalyzer(n_components=2, n_clusters=5)
 
-            with patch.object(analyzer.reducer, "fit_transform", return_value=np.random.randn(200, 2)):
+            with patch.object(
+                analyzer.reducer, "fit_transform", return_value=np.random.randn(200, 2)
+            ):
                 result = analyzer.analyze(embeddings, metadata)
 
             assert "metrics" in result

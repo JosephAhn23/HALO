@@ -15,12 +15,12 @@ LLMOps example:
    with 80% power and 5% false positive rate. Historical std = 0.08.
    Required n = 502 per variant."
 """
+
 from __future__ import annotations
 
 import logging
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class PowerAnalysisResult:
     baseline_mean: float
     baseline_std: float
     effect_size_cohens_d: float
-    days_to_significance: Optional[float] = None
+    days_to_significance: float | None = None
 
     def summary(self) -> str:
         lines = [
@@ -46,7 +46,9 @@ class PowerAnalysisResult:
             f"Alpha: {self.alpha}  Power: {self.power}",
         ]
         if self.days_to_significance:
-            lines.append(f"Days to significance (at current traffic): {self.days_to_significance:.1f}")
+            lines.append(
+                f"Days to significance (at current traffic): {self.days_to_significance:.1f}"
+            )
         return "\n".join(lines)
 
 
@@ -113,9 +115,9 @@ class PowerAnalysis:
         z_beta = self._norm_quantile(power)
 
         n = (
-            (z_alpha * math.sqrt(2 * p_bar * (1 - p_bar)) + z_beta * math.sqrt(p1 * (1 - p1) + p2 * (1 - p2))) ** 2
-            / max(mde ** 2, 1e-12)
-        )
+            z_alpha * math.sqrt(2 * p_bar * (1 - p_bar))
+            + z_beta * math.sqrt(p1 * (1 - p1) + p2 * (1 - p2))
+        ) ** 2 / max(mde**2, 1e-12)
         n_per_variant = math.ceil(n)
         std = math.sqrt(p_bar * (1 - p_bar))
 
@@ -169,20 +171,22 @@ class PowerAnalysis:
         self,
         baseline_mean: float,
         baseline_std: float,
-        mde_range: List[float],
+        mde_range: list[float],
         alpha: float = 0.05,
         power: float = 0.80,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Show required n for a range of MDEs."""
         results = []
         for mde in mde_range:
             r = self.required_sample_size(baseline_mean, baseline_std, mde, alpha, power)
-            results.append({
-                "mde": mde,
-                "mde_pct": round(100 * mde / max(abs(baseline_mean), 1e-9), 1),
-                "n_per_variant": r.required_n_per_variant,
-                "cohens_d": r.effect_size_cohens_d,
-            })
+            results.append(
+                {
+                    "mde": mde,
+                    "mde_pct": round(100 * mde / max(abs(baseline_mean), 1e-9), 1),
+                    "n_per_variant": r.required_n_per_variant,
+                    "cohens_d": r.effect_size_cohens_d,
+                }
+            )
         return results
 
     @staticmethod

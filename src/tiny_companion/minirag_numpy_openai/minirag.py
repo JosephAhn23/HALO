@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import math
 import os
 import re
 from collections import Counter
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, List, Sequence
 
 import numpy as np
 
@@ -22,17 +21,17 @@ class RetrievedChunk:
     score: float
 
 
-def simple_tokenize(text: str) -> List[str]:
+def simple_tokenize(text: str) -> list[str]:
     """Tokenize text with a simple alphanumeric regex."""
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
-def chunk_text(text: str, chunk_size: int = 60, overlap: int = 10) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 60, overlap: int = 10) -> list[str]:
     """Chunk by words with overlap for context continuity."""
     words = text.split()
     if overlap >= chunk_size:
         raise ValueError("overlap must be smaller than chunk_size")
-    out: List[str] = []
+    out: list[str] = []
     start = 0
     step = chunk_size - overlap
     while start < len(words):
@@ -46,7 +45,7 @@ class MiniTfidfIndex:
 
     def __init__(self, chunks: Sequence[str]) -> None:
         self.chunks = list(chunks)
-        self.vocab: List[str] = []
+        self.vocab: list[str] = []
         self.vocab_index: dict[str, int] = {}
         self.idf: np.ndarray = np.array([])
         self.matrix: np.ndarray = np.array([[]], dtype=np.float64)
@@ -61,7 +60,7 @@ class MiniTfidfIndex:
         n_docs = len(tokenized)
         df = np.zeros(len(vocab), dtype=np.float64)
 
-        rows: List[np.ndarray] = []
+        rows: list[np.ndarray] = []
         for tokens in tokenized:
             counts = Counter(tokens)
             row = np.zeros(len(vocab), dtype=np.float64)
@@ -85,7 +84,7 @@ class MiniTfidfIndex:
                 vec[idx] = float(count)
         return self._l2_normalize(vec * self.idf)
 
-    def retrieve(self, query: str, top_k: int = 3) -> List[RetrievedChunk]:
+    def retrieve(self, query: str, top_k: int = 3) -> list[RetrievedChunk]:
         query_vec = self.embed_query(query)
         scores = self.matrix @ query_vec
         top_indices = np.argsort(scores)[::-1][:top_k]
@@ -111,7 +110,7 @@ def extractive_synthesize(query: str, chunks: Iterable[RetrievedChunk]) -> str:
     The heuristic picks high-overlap sentences from retrieved chunks.
     """
     query_terms = set(simple_tokenize(query))
-    candidates: List[tuple[float, str]] = []
+    candidates: list[tuple[float, str]] = []
     for chunk in chunks:
         for sentence in re.split(r"(?<=[.!?])\s+", chunk.text.strip()):
             sent_terms = set(simple_tokenize(sentence))
@@ -153,7 +152,7 @@ def openai_synthesize(query: str, chunks: Sequence[RetrievedChunk], model: str) 
     return response.output_text.strip()
 
 
-def build_demo_corpus() -> List[str]:
+def build_demo_corpus() -> list[str]:
     """Small deterministic corpus for local demos (`n=6` documents)."""
     docs = [
         (
@@ -183,7 +182,7 @@ def build_demo_corpus() -> List[str]:
             "After repeated errors, the breaker opens and returns degraded output instead of waiting on timeouts."
         ),
     ]
-    chunks: List[str] = []
+    chunks: list[str] = []
     for doc in docs:
         chunks.extend(chunk_text(doc, chunk_size=48, overlap=8))
     return chunks
@@ -236,4 +235,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -16,13 +16,14 @@ Usage:
     flow.promote_to_staging("rag-embedder", version=3, metrics)
     champion = flow.get_production_model("rag-embedder")
 """
+
 from __future__ import annotations
 
 import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,13 @@ class ModelVersion:
     version: int
     run_id: str
     stage: str = "None"
-    metrics: Dict[str, float] = field(default_factory=dict)
-    params: Dict[str, Any] = field(default_factory=dict)
-    tags: Dict[str, str] = field(default_factory=dict)
-    registered_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    metrics: dict[str, float] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
+    registered_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     description: str = ""
 
-    def passes_threshold(self, thresholds: Dict[str, float]) -> tuple[bool, List[str]]:
+    def passes_threshold(self, thresholds: dict[str, float]) -> tuple[bool, list[str]]:
         failures = []
         for metric, min_val in thresholds.items():
             actual = self.metrics.get(metric)
@@ -76,12 +77,13 @@ class ModelRegistryFlow:
     - Shadow traffic routing for safe production rollout
     """
 
-    def __init__(self, mlflow_tracking_uri: Optional[str] = None):
-        self._versions: Dict[str, List[ModelVersion]] = {}
-        self._production: Dict[str, Optional[ModelVersion]] = {}
+    def __init__(self, mlflow_tracking_uri: str | None = None):
+        self._versions: dict[str, list[ModelVersion]] = {}
+        self._production: dict[str, ModelVersion | None] = {}
 
         try:
             from src.mlops.compat import mlflow
+
             if mlflow_tracking_uri:
                 mlflow.set_tracking_uri(mlflow_tracking_uri)
             self._mlflow = mlflow
@@ -98,9 +100,9 @@ class ModelRegistryFlow:
         self,
         run_id: str,
         model_name: str,
-        metrics: Dict[str, float],
-        params: Optional[Dict[str, Any]] = None,
-        tags: Optional[Dict[str, str]] = None,
+        metrics: dict[str, float],
+        params: dict[str, Any] | None = None,
+        tags: dict[str, str] | None = None,
         description: str = "",
     ) -> ModelVersion:
         """Register a model artifact from a training run."""
@@ -159,7 +161,11 @@ class ModelRegistryFlow:
             self._client.transition_model_version_stage(model_name, str(version), "Staging")
 
         logger.info("Promoted '%s' v%d to Staging.", model_name, version)
-        return True, f"Promoted to Staging. Failures overridden: {failures}" if failures else "Promoted to Staging."
+        return True, (
+            f"Promoted to Staging. Failures overridden: {failures}"
+            if failures
+            else "Promoted to Staging."
+        )
 
     def promote_to_production(
         self,
@@ -240,7 +246,8 @@ class ModelRegistryFlow:
 
         logger.warning(
             "ROLLBACK: '%s' reverted to v%d (was v%s).",
-            model_name, prev.version,
+            model_name,
+            prev.version,
             current.version if current else "none",
         )
         return True, f"Rolled back to v{prev.version}."
@@ -249,7 +256,7 @@ class ModelRegistryFlow:
     # Comparison
     # ------------------------------------------------------------------
 
-    def _compare(self, champion: ModelVersion, challenger: ModelVersion) -> Dict[str, Any]:
+    def _compare(self, champion: ModelVersion, challenger: ModelVersion) -> dict[str, Any]:
         """Compare challenger vs champion on all shared metrics."""
         shared = set(champion.metrics) & set(challenger.metrics)
         deltas = {}
@@ -271,8 +278,10 @@ class ModelRegistryFlow:
                 winner = "challenger" if delta > 0 else "champion"
 
             deltas[metric] = {
-                "champion": champ_val, "challenger": chal_val,
-                "delta": round(delta, 4), "pct_change": round(pct, 2),
+                "champion": champ_val,
+                "challenger": chal_val,
+                "delta": round(delta, 4),
+                "pct_change": round(pct, 2),
                 "winner": winner,
             }
             if winner == "challenger":
@@ -293,14 +302,14 @@ class ModelRegistryFlow:
     # Serving
     # ------------------------------------------------------------------
 
-    def get_production_model(self, model_name: str) -> Optional[ModelVersion]:
+    def get_production_model(self, model_name: str) -> ModelVersion | None:
         return self._production.get(model_name)
 
     def shadow_traffic_config(
         self,
         model_name: str,
         shadow_pct: float = 0.10,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate shadow traffic routing config.
         Routes shadow_pct of traffic to challenger while champion serves all responses.
@@ -324,7 +333,7 @@ class ModelRegistryFlow:
     # Model card
     # ------------------------------------------------------------------
 
-    def generate_model_card(self, model_name: str, version: int) -> Dict[str, Any]:
+    def generate_model_card(self, model_name: str, version: int) -> dict[str, Any]:
         """Generate a structured model card for governance and documentation."""
         mv = self._get_version(model_name, version)
         if not mv:
@@ -358,11 +367,13 @@ class ModelRegistryFlow:
             "tags": mv.tags,
         }
 
-    def list_versions(self, model_name: str) -> List[Dict]:
+    def list_versions(self, model_name: str) -> list[dict]:
         return [
             {
-                "version": v.version, "stage": v.stage,
-                "run_id": v.run_id, "registered_at": v.registered_at,
+                "version": v.version,
+                "stage": v.stage,
+                "run_id": v.run_id,
+                "registered_at": v.registered_at,
                 "metrics": v.metrics,
             }
             for v in self._versions.get(model_name, [])
@@ -372,7 +383,7 @@ class ModelRegistryFlow:
     # Internal
     # ------------------------------------------------------------------
 
-    def _get_version(self, model_name: str, version: int) -> Optional[ModelVersion]:
+    def _get_version(self, model_name: str, version: int) -> ModelVersion | None:
         for mv in self._versions.get(model_name, []):
             if mv.version == version:
                 return mv

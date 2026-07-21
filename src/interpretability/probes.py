@@ -28,11 +28,10 @@ Usage:
     cka = CKAAnalyzer()
     similarity = cka.linear_cka(states["layer_3"], states["layer_11"])
 """
+
 from __future__ import annotations
 
 import logging
-import math
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -44,6 +43,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. Hidden-state extractor (forward hooks)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class HiddenStateExtractor:
     """
@@ -61,22 +61,27 @@ class HiddenStateExtractor:
 
     def __init__(self, model_name: str = "bert-base-uncased", device: str = "cpu"):
         from transformers import AutoModel, AutoTokenizer
+
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(
-            model_name,
-            output_attentions=True,
-            output_hidden_states=True,
-        ).to(device).eval()
+        self.model = (
+            AutoModel.from_pretrained(
+                model_name,
+                output_attentions=True,
+                output_hidden_states=True,
+            )
+            .to(device)
+            .eval()
+        )
         self.model_name = model_name
 
     @torch.no_grad()
     def extract(
         self,
-        texts: List[str],
+        texts: list[str],
         max_length: int = 128,
-        pooling: str = "mean",   # mean | cls | none
-    ) -> Dict[str, torch.Tensor]:
+        pooling: str = "mean",  # mean | cls | none
+    ) -> dict[str, torch.Tensor]:
         """
         Args:
             texts:    list of input strings
@@ -99,7 +104,7 @@ class HiddenStateExtractor:
         outputs = self.model(**enc)
         mask = enc["attention_mask"].unsqueeze(-1).float()  # [B, S, 1]
 
-        result: Dict[str, torch.Tensor] = {}
+        result: dict[str, torch.Tensor] = {}
 
         # Hidden states: tuple of (num_layers+1) tensors [B, S, H]
         for i, hs in enumerate(outputs.hidden_states):
@@ -129,6 +134,7 @@ class HiddenStateExtractor:
 # 2. Attention visualizer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class AttentionVisualizer:
     """
     Visualize attention patterns as ASCII heatmaps or HTML.
@@ -142,9 +148,7 @@ class AttentionVisualizer:
     def __init__(self, model_name: str = "bert-base-uncased", device: str = "cpu"):
         self.extractor = HiddenStateExtractor(model_name, device)
 
-    def get_attention(
-        self, text: str, layer: int = 0
-    ) -> Tuple[torch.Tensor, List[str]]:
+    def get_attention(self, text: str, layer: int = 0) -> tuple[torch.Tensor, list[str]]:
         """
         Returns:
             attn:   [num_heads, seq, seq] attention weights for one text
@@ -163,7 +167,7 @@ class AttentionVisualizer:
         self,
         text: str,
         layer: int = 0,
-        head: Optional[int] = None,
+        head: int | None = None,
         width: int = 60,
     ) -> str:
         """Render an attention matrix as an ASCII heatmap."""
@@ -182,13 +186,14 @@ class AttentionVisualizer:
         for i, row_tok in enumerate(tokens[:seq]):
             row = matrix[i, :seq]
             row_norm = row / row.max().clamp(min=1e-8)
-            bar = "".join(chars[min(int(v * (len(chars) - 1)), len(chars) - 1)]
-                          for v in row_norm.tolist())
+            bar = "".join(
+                chars[min(int(v * (len(chars) - 1)), len(chars) - 1)] for v in row_norm.tolist()
+            )
             lines.append(f"{row_tok[:5]:>5} {bar}")
 
         return "\n".join(lines)
 
-    def head_entropy(self, text: str, layer: int = 0) -> List[Tuple[int, float]]:
+    def head_entropy(self, text: str, layer: int = 0) -> list[tuple[int, float]]:
         """
         Rank attention heads by entropy.
         Low entropy → focused attention (potentially more interpretable).
@@ -215,7 +220,6 @@ class AttentionVisualizer:
             cells = [f"<td><b>{tok}</b></td>"]
             for j in range(seq):
                 v = matrix[i][j]
-                alpha = int(v * 255)
                 cells.append(
                     f"<td style='background:rgba(0,100,200,{v:.3f});padding:2px'>{v:.2f}</td>"
                 )
@@ -227,6 +231,7 @@ class AttentionVisualizer:
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. Linear probe
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class LinearProbe(nn.Module):
     """
@@ -250,13 +255,13 @@ class LinearProbe(nn.Module):
 
     def train_probe(
         self,
-        X: torch.Tensor,       # [N, hidden_dim]
-        y: torch.Tensor,       # [N] int labels
+        X: torch.Tensor,  # [N, hidden_dim]
+        y: torch.Tensor,  # [N] int labels
         epochs: int = 100,
         lr: float = 1e-2,
         l2: float = 1e-4,
         verbose: bool = False,
-    ) -> List[float]:
+    ) -> list[float]:
         """Train the probe and return per-epoch loss."""
         optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=l2)
         self.train()
@@ -273,7 +278,7 @@ class LinearProbe(nn.Module):
         return losses
 
     @torch.no_grad()
-    def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> Dict:
+    def evaluate(self, X: torch.Tensor, y: torch.Tensor) -> dict:
         self.eval()
         logits = self(X)
         preds = logits.argmax(-1)
@@ -301,12 +306,12 @@ class LayerwiseProbeExperiment:
 
     def run(
         self,
-        texts: List[str],
-        labels: List[int],
+        texts: list[str],
+        labels: list[int],
         num_classes: int = 2,
         epochs: int = 100,
         test_split: float = 0.2,
-    ) -> Dict[str, Dict]:
+    ) -> dict[str, dict]:
         """
         Returns:
             {
@@ -347,12 +352,14 @@ class LayerwiseProbeExperiment:
             }
             logger.info(
                 "Layer %2d: train_acc=%.3f  test_acc=%.3f",
-                layer_i, train_eval["accuracy"], test_eval["accuracy"],
+                layer_i,
+                train_eval["accuracy"],
+                test_eval["accuracy"],
             )
 
         return results
 
-    def ascii_plot(self, results: Dict[str, Dict], metric: str = "test_acc") -> str:
+    def ascii_plot(self, results: dict[str, dict], metric: str = "test_acc") -> str:
         """Render layer-wise accuracy as an ASCII bar chart."""
         layers = sorted(results.keys(), key=lambda k: int(k.split("_")[1]))
         lines = [f"Layer-wise probe accuracy ({metric})", ""]
@@ -367,6 +374,7 @@ class LayerwiseProbeExperiment:
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. Activation patcher (causal tracing)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class ActivationPatcher:
     """
@@ -384,16 +392,19 @@ class ActivationPatcher:
 
     def __init__(self, model_name: str = "gpt2", device: str = "cpu"):
         from transformers import AutoModelForCausalLM, AutoTokenizer
+
         self.device = device
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name, output_hidden_states=True
-        ).to(device).eval()
+        self.model = (
+            AutoModelForCausalLM.from_pretrained(model_name, output_hidden_states=True)
+            .to(device)
+            .eval()
+        )
 
     @torch.no_grad()
-    def _run(self, text: str) -> Tuple[torch.Tensor, Tuple[torch.Tensor, ...]]:
+    def _run(self, text: str) -> tuple[torch.Tensor, tuple[torch.Tensor, ...]]:
         """Run model, return logits and all hidden states."""
         enc = self.tokenizer(text, return_tensors="pt").to(self.device)
         out = self.model(**enc)
@@ -404,8 +415,8 @@ class ActivationPatcher:
         clean_text: str,
         corrupted_text: str,
         target_token: str,
-        patch_positions: Optional[List[int]] = None,
-    ) -> Dict:
+        patch_positions: list[int] | None = None,
+    ) -> dict:
         """
         Measure how much patching each layer's activations from the clean run
         into the corrupted run recovers the probability of target_token.
@@ -437,7 +448,7 @@ class ActivationPatcher:
         clean_prob = last_token_prob(clean_logits)
         corr_prob = last_token_prob(corr_logits)
 
-        layer_effects: Dict[int, float] = {}
+        layer_effects: dict[int, float] = {}
         num_layers = len(clean_states)
 
         enc_corr = self.tokenizer(corrupted_text, return_tensors="pt").to(self.device)
@@ -460,6 +471,7 @@ class ActivationPatcher:
                     if isinstance(output, tuple):
                         return (patched,) + output[1:]
                     return patched
+
                 return hook_fn
 
             # Register hook on the layer_idx-th transformer block
@@ -492,7 +504,7 @@ class ActivationPatcher:
             "target_token": target_token,
         }
 
-    def ascii_causal_trace(self, results: Dict) -> str:
+    def ascii_causal_trace(self, results: dict) -> str:
         """Render causal trace as ASCII bar chart."""
         clean = results["clean_prob"]
         corr = results["corrupted_prob"]
@@ -514,6 +526,7 @@ class ActivationPatcher:
 # ──────────────────────────────────────────────────────────────────────────────
 # 5. CKA (Centered Kernel Alignment)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class CKAAnalyzer:
     """
@@ -570,16 +583,17 @@ class CKAAnalyzer:
             return 0.0
         return (hsic_xy / denom).item()
 
-    def rbf_cka(self, X: torch.Tensor, Y: torch.Tensor, sigma: Optional[float] = None) -> float:
+    def rbf_cka(self, X: torch.Tensor, Y: torch.Tensor, sigma: float | None = None) -> float:
         """
         RBF kernel CKA — more sensitive to non-linear similarity.
         sigma defaults to median pairwise distance heuristic.
         """
+
         def rbf_kernel(A, s):
             sq_dists = torch.cdist(A, A) ** 2
             if s is None:
                 s = sq_dists.median().sqrt().item()
-            return torch.exp(-sq_dists / (2 * s ** 2))
+            return torch.exp(-sq_dists / (2 * s**2))
 
         Kx = self._center(rbf_kernel(X, sigma))
         Ky = self._center(rbf_kernel(Y, sigma))
@@ -592,9 +606,9 @@ class CKAAnalyzer:
 
     def layer_similarity_matrix(
         self,
-        states: Dict[str, torch.Tensor],
+        states: dict[str, torch.Tensor],
         kernel: str = "linear",
-    ) -> Tuple[torch.Tensor, List[str]]:
+    ) -> tuple[torch.Tensor, list[str]]:
         """
         Compute pairwise CKA between all layers.
 
@@ -627,7 +641,7 @@ class CKAAnalyzer:
     def ascii_similarity_matrix(
         self,
         sim: torch.Tensor,
-        layer_names: List[str],
+        layer_names: list[str],
     ) -> str:
         """Render the CKA similarity matrix as ASCII."""
         n = len(layer_names)
@@ -650,7 +664,7 @@ class CKAAnalyzer:
 # ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import argparse, json
+    import argparse
 
     parser = argparse.ArgumentParser(description="Interpretability & probing suite")
     sub = parser.add_subparsers(dest="cmd")
@@ -715,7 +729,7 @@ if __name__ == "__main__":
         cka = CKAAnalyzer()
         sim, names = cka.layer_similarity_matrix(states)
         print(cka.ascii_similarity_matrix(sim, names))
-        print(f"\nMost similar pair: ", end="")
+        print("\nMost similar pair: ", end="")
         max_val, max_i, max_j = 0.0, 0, 0
         for i in range(len(names)):
             for j in range(i + 1, len(names)):

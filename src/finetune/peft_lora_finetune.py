@@ -2,15 +2,23 @@
 PEFT LoRA Fine-tuning with HuggingFace Transformers + Accelerate.
 Closes gaps: HuggingFace ecosystem, PEFT, QLoRA, distributed training, MLflow
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 import torch
+from accelerate import Accelerator
 from datasets import load_dataset
+from peft import (
+    LoraConfig,
+    PeftModel,
+    TaskType,
+    get_peft_model,
+    prepare_model_for_kbit_training,
+)
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -19,14 +27,6 @@ from transformers import (
     Trainer,
     TrainingArguments,
 )
-from peft import (
-    LoraConfig,
-    PeftModel,
-    TaskType,
-    get_peft_model,
-    prepare_model_for_kbit_training,
-)
-from accelerate import Accelerator
 
 from src.mlops.compat import mlflow
 
@@ -53,7 +53,7 @@ class FinetuneConfig:
     load_in_4bit: bool = True
     bnb_4bit_compute_dtype: str = "bfloat16"
     mlflow_experiment: str = "peft-lora-finetune"
-    mlflow_run_name: Optional[str] = None
+    mlflow_run_name: str | None = None
     dataset_name: str = "tatsu-lab/alpaca"
     dataset_split: str = "train[:5000]"
 
@@ -91,9 +91,7 @@ class PEFTLoRATrainer:
         )
         model = prepare_model_for_kbit_training(model)
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.config.base_model, trust_remote_code=True
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.config.base_model, trust_remote_code=True)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "right"
         return model, tokenizer
@@ -147,14 +145,16 @@ class PEFTLoRATrainer:
 
     def train(self):
         with mlflow.start_run(run_name=self.config.mlflow_run_name):
-            mlflow.log_params({
-                "base_model": self.config.base_model,
-                "lora_r": self.config.lora_r,
-                "lora_alpha": self.config.lora_alpha,
-                "num_epochs": self.config.num_epochs,
-                "learning_rate": self.config.learning_rate,
-                "load_in_4bit": self.config.load_in_4bit,
-            })
+            mlflow.log_params(
+                {
+                    "base_model": self.config.base_model,
+                    "lora_r": self.config.lora_r,
+                    "lora_alpha": self.config.lora_alpha,
+                    "num_epochs": self.config.num_epochs,
+                    "learning_rate": self.config.learning_rate,
+                    "load_in_4bit": self.config.load_in_4bit,
+                }
+            )
 
             model, tokenizer = self._load_model_and_tokenizer()
             model = self._inject_lora(model)
@@ -186,14 +186,14 @@ class PEFTLoRATrainer:
                 data_collator=DataCollatorForLanguageModeling(tokenizer, mlm=False),
             )
 
-            result = trainer.train(
-                resume_from_checkpoint=self._latest_checkpoint()
-            )
+            result = trainer.train(resume_from_checkpoint=self._latest_checkpoint())
 
-            mlflow.log_metrics({
-                "train_loss": result.training_loss,
-                "train_runtime": result.metrics["train_runtime"],
-            })
+            mlflow.log_metrics(
+                {
+                    "train_loss": result.training_loss,
+                    "train_runtime": result.metrics["train_runtime"],
+                }
+            )
 
             adapter_path = os.path.join(self.config.output_dir, "lora_adapter")
             model.save_pretrained(adapter_path)
@@ -202,14 +202,10 @@ class PEFTLoRATrainer:
 
             return result
 
-    def _latest_checkpoint(self) -> Optional[str]:
+    def _latest_checkpoint(self) -> str | None:
         if not os.path.isdir(self.config.output_dir):
             return None
-        ckpts = [
-            d
-            for d in os.listdir(self.config.output_dir)
-            if d.startswith("checkpoint-")
-        ]
+        ckpts = [d for d in os.listdir(self.config.output_dir) if d.startswith("checkpoint-")]
         if not ckpts:
             return None
         return os.path.join(

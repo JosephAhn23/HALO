@@ -1,6 +1,7 @@
 """
 Reproducible benchmark runner for latency/throughput evidence.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -10,10 +11,10 @@ import statistics
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 
 import httpx
 
@@ -103,10 +104,16 @@ def run_benchmark(
     failures: list[str] = []
     started_at = time.perf_counter()
 
+    call: Callable[[], None]
     if mode == "offline_pipeline":
-        call: Callable[[], None] = lambda: _offline_call(query)
+
+        def call():
+            return _offline_call(query)
+
     else:
-        call = lambda: _api_call(api_url, query, timeout_s)
+
+        def call():
+            return _api_call(api_url, query, timeout_s)
 
     def timed_call() -> float:
         t0 = time.perf_counter()
@@ -144,7 +151,7 @@ def run_benchmark(
         "elapsed_s": elapsed_s,
         "failure_samples": failures[:5],
         "metadata": {
-            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "timestamp_utc": datetime.now(UTC).isoformat(),
             "python": sys.version.split()[0],
             "platform": platform.platform(),
             "git_sha": _git_sha(),
@@ -153,7 +160,7 @@ def run_benchmark(
 
 
 def _write_results(output_root: Path, metrics: dict) -> Path:
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    run_id = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     out_dir = output_root / run_id
     out_dir.mkdir(parents=True, exist_ok=True)
 

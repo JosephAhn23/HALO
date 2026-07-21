@@ -21,15 +21,15 @@ Usage:
     pii_result = gov.redact_pii("Call me at 555-867-5309, john@example.com")
     bias_report = gov.evaluate_bias(predictions, labels, groups)
 """
+
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import re
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,9 @@ PII_PATTERNS = {
     "ssn": re.compile(r"\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b"),
     "credit_card": re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
     "ip_address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
-    "date_of_birth": re.compile(r"\b(?:dob|date of birth|born on)[:\s]+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", re.IGNORECASE),
+    "date_of_birth": re.compile(
+        r"\b(?:dob|date of birth|born on)[:\s]+\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b", re.IGNORECASE
+    ),
     "api_key": re.compile(r"\b(?:sk-|pk_|api[-_]?key[-_=\s]+)[A-Za-z0-9_\-]{16,}\b", re.IGNORECASE),
     "aws_key": re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
 }
@@ -55,9 +57,9 @@ PII_PATTERNS = {
 class PIIResult:
     original_text: str
     redacted_text: str
-    detections: List[Dict[str, Any]]
+    detections: list[dict[str, Any]]
     has_pii: bool
-    pii_types: List[str]
+    pii_types: list[str]
     redaction_rate: float
 
 
@@ -67,20 +69,22 @@ class PIIRedactor:
     Used to scrub prompts before logging and to audit training data.
     """
 
-    def __init__(self, custom_patterns: Optional[Dict[str, re.Pattern]] = None):
+    def __init__(self, custom_patterns: dict[str, re.Pattern] | None = None):
         self.patterns = {**PII_PATTERNS, **(custom_patterns or {})}
 
-    def detect(self, text: str) -> List[Dict[str, Any]]:
+    def detect(self, text: str) -> list[dict[str, Any]]:
         detections = []
         for pii_type, pattern in self.patterns.items():
             for match in pattern.finditer(text):
-                detections.append({
-                    "type": pii_type,
-                    "value_hash": hashlib.sha256(match.group().encode()).hexdigest()[:12],
-                    "start": match.start(),
-                    "end": match.end(),
-                    "length": len(match.group()),
-                })
+                detections.append(
+                    {
+                        "type": pii_type,
+                        "value_hash": hashlib.sha256(match.group().encode()).hexdigest()[:12],
+                        "start": match.start(),
+                        "end": match.end(),
+                        "length": len(match.group()),
+                    }
+                )
         return sorted(detections, key=lambda d: d["start"])
 
     def redact(self, text: str, replacement: str = "[REDACTED]") -> PIIResult:
@@ -106,11 +110,11 @@ class PIIRedactor:
             redaction_rate=round(original_pii_chars / max(len(text), 1), 4),
         )
 
-    def audit_dataset(self, records: List[Dict], text_fields: List[str]) -> Dict[str, Any]:
+    def audit_dataset(self, records: list[dict], text_fields: list[str]) -> dict[str, Any]:
         """Scan a dataset for PII. Returns audit report without exposing values."""
         total = len(records)
         pii_count = 0
-        type_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
 
         for rec in records:
             record_has_pii = False
@@ -130,7 +134,7 @@ class PIIRedactor:
             "pii_rate": round(pii_count / max(total, 1), 4),
             "pii_type_counts": type_counts,
             "clean": pii_count == 0,
-            "audited_at": datetime.now(timezone.utc).isoformat(),
+            "audited_at": datetime.now(UTC).isoformat(),
         }
 
 
@@ -138,9 +142,10 @@ class PIIRedactor:
 # Bias Evaluation
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class BiasReport:
-    group_metrics: Dict[str, Dict[str, float]]
+    group_metrics: dict[str, dict[str, float]]
     demographic_parity_diff: float
     equalized_odds_diff: float
     disparate_impact_ratio: float
@@ -180,14 +185,14 @@ class BiasEvaluator:
 
     def evaluate(
         self,
-        predictions: List[int],
-        labels: List[int],
-        groups: List[str],
+        predictions: list[int],
+        labels: list[int],
+        groups: list[str],
         positive_class: int = 1,
         fairness_threshold: float = 0.10,
     ) -> BiasReport:
         group_names = list(set(groups))
-        group_metrics: Dict[str, Dict[str, float]] = {}
+        group_metrics: dict[str, dict[str, float]] = {}
 
         for group in group_names:
             idx = [i for i, g in enumerate(groups) if g == group]
@@ -243,6 +248,7 @@ class BiasEvaluator:
 # Dataset Audit Log
 # ---------------------------------------------------------------------------
 
+
 class DatasetAuditLog:
     """
     Immutable audit log for dataset lineage and governance.
@@ -251,21 +257,21 @@ class DatasetAuditLog:
     """
 
     def __init__(self):
-        self._entries: List[Dict] = []
+        self._entries: list[dict] = []
 
     def log_dataset_creation(
         self,
         dataset_name: str,
         n_records: int,
-        features: List[str],
+        features: list[str],
         label_col: str,
         source: str,
         created_by: str = "llmops",
-        pii_scan: Optional[Dict] = None,
-        transformations: Optional[List[str]] = None,
+        pii_scan: dict | None = None,
+        transformations: list[str] | None = None,
     ) -> str:
         entry_id = hashlib.sha256(
-            f"{dataset_name}{datetime.now(timezone.utc).isoformat()}".encode()
+            f"{dataset_name}{datetime.now(UTC).isoformat()}".encode()
         ).hexdigest()[:16]
 
         entry = {
@@ -279,10 +285,15 @@ class DatasetAuditLog:
             "created_by": created_by,
             "pii_scan": pii_scan or {},
             "transformations": transformations or [],
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         self._entries.append(entry)
-        logger.info("Audit: dataset '%s' created (%d records, %d features).", dataset_name, n_records, len(features))
+        logger.info(
+            "Audit: dataset '%s' created (%d records, %d features).",
+            dataset_name,
+            n_records,
+            len(features),
+        )
         return entry_id
 
     def log_model_training(
@@ -291,19 +302,21 @@ class DatasetAuditLog:
         model_name: str,
         model_version: int,
         run_id: str,
-        metrics: Dict[str, float],
+        metrics: dict[str, float],
     ) -> str:
         entry_id = hashlib.sha256(f"{model_name}{run_id}".encode()).hexdigest()[:16]
-        self._entries.append({
-            "entry_id": entry_id,
-            "event": "model_trained",
-            "dataset_entry_id": dataset_entry_id,
-            "model_name": model_name,
-            "model_version": model_version,
-            "run_id": run_id,
-            "metrics": metrics,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self._entries.append(
+            {
+                "entry_id": entry_id,
+                "event": "model_trained",
+                "dataset_entry_id": dataset_entry_id,
+                "model_name": model_name,
+                "model_version": model_version,
+                "run_id": run_id,
+                "metrics": metrics,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
         return entry_id
 
     def log_deployment(
@@ -313,34 +326,42 @@ class DatasetAuditLog:
         version: int,
         environment: str,
         deployed_by: str,
-        approvals: List[str],
+        approvals: list[str],
     ) -> str:
-        entry_id = hashlib.sha256(f"deploy{model_name}{version}{environment}".encode()).hexdigest()[:16]
-        self._entries.append({
-            "entry_id": entry_id,
-            "event": "model_deployed",
-            "model_entry_id": model_entry_id,
-            "model_name": model_name,
-            "version": version,
-            "environment": environment,
-            "deployed_by": deployed_by,
-            "approvals": approvals,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        entry_id = hashlib.sha256(f"deploy{model_name}{version}{environment}".encode()).hexdigest()[
+            :16
+        ]
+        self._entries.append(
+            {
+                "entry_id": entry_id,
+                "event": "model_deployed",
+                "model_entry_id": model_entry_id,
+                "model_name": model_name,
+                "version": version,
+                "environment": environment,
+                "deployed_by": deployed_by,
+                "approvals": approvals,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
         logger.info("Audit: '%s' v%d deployed to %s.", model_name, version, environment)
         return entry_id
 
-    def get_lineage(self, model_name: str) -> List[Dict]:
-        return [e for e in self._entries if e.get("model_name") == model_name
-                or e.get("dataset_name") == model_name]
+    def get_lineage(self, model_name: str) -> list[dict]:
+        return [
+            e
+            for e in self._entries
+            if e.get("model_name") == model_name or e.get("dataset_name") == model_name
+        ]
 
-    def export(self) -> List[Dict]:
+    def export(self) -> list[dict]:
         return list(self._entries)
 
 
 # ---------------------------------------------------------------------------
 # Model Card Generator
 # ---------------------------------------------------------------------------
+
 
 class GovernanceFramework:
     """
@@ -357,13 +378,13 @@ class GovernanceFramework:
         self,
         model_name: str,
         version: int,
-        metrics: Dict[str, float],
+        metrics: dict[str, float],
         training_data_description: str = "",
         intended_use: str = "",
-        limitations: Optional[List[str]] = None,
-        bias_report: Optional[BiasReport] = None,
-        pii_audit: Optional[Dict] = None,
-    ) -> Dict[str, Any]:
+        limitations: list[str] | None = None,
+        bias_report: BiasReport | None = None,
+        pii_audit: dict | None = None,
+    ) -> dict[str, Any]:
         """
         Generate a model card following Mitchell et al. (2019) standard.
         Standard adopted by HuggingFace, Google, and major AI labs.
@@ -373,11 +394,12 @@ class GovernanceFramework:
                 "name": model_name,
                 "version": version,
                 "type": "LLM-based RAG retrieval/generation model",
-                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
                 "license": "MIT",
             },
             "intended_use": {
-                "primary_use": intended_use or "RAG-grounded question answering for enterprise knowledge management.",
+                "primary_use": intended_use
+                or "RAG-grounded question answering for enterprise knowledge management.",
                 "out_of_scope": [
                     "Medical diagnosis or clinical decision support without human oversight.",
                     "Legal advice without qualified legal review.",
@@ -385,17 +407,25 @@ class GovernanceFramework:
                 ],
             },
             "training_data": {
-                "description": training_data_description or "Domain-specific text corpus with quality filtering.",
+                "description": training_data_description
+                or "Domain-specific text corpus with quality filtering.",
                 "pii_audit": pii_audit or {"status": "not_audited"},
-                "preprocessing": ["MinHash deduplication", "quality score filtering (min_words=100)", "language detection"],
+                "preprocessing": [
+                    "MinHash deduplication",
+                    "quality score filtering (min_words=100)",
+                    "language detection",
+                ],
             },
             "evaluation": {
                 "metrics": metrics,
                 "evaluation_dataset": "Held-out test set (10% of corpus, stratified by domain).",
-                "evaluation_date": datetime.now(timezone.utc).isoformat(),
+                "evaluation_date": datetime.now(UTC).isoformat(),
             },
-            "fairness": bias_report.summary() if bias_report else "Bias evaluation not yet completed.",
-            "limitations": limitations or [
+            "fairness": (
+                bias_report.summary() if bias_report else "Bias evaluation not yet completed."
+            ),
+            "limitations": limitations
+            or [
                 "Performance degrades on queries outside the training domain.",
                 "Hallucinations possible when retrieved context is incomplete or contradictory.",
                 "Language coverage limited to training corpus languages.",
@@ -408,7 +438,7 @@ class GovernanceFramework:
             ],
         }
 
-    def redact_prompt(self, text: str) -> Tuple[str, bool]:
+    def redact_prompt(self, text: str) -> tuple[str, bool]:
         """Redact PII from a prompt before logging. Returns (redacted_text, had_pii)."""
         result = self.pii_redactor.redact(text)
         if result.has_pii:
@@ -417,15 +447,16 @@ class GovernanceFramework:
 
     def evaluate_bias(
         self,
-        predictions: List[int],
-        labels: List[int],
-        groups: List[str],
+        predictions: list[int],
+        labels: list[int],
+        groups: list[str],
     ) -> BiasReport:
         return self.bias_evaluator.evaluate(predictions, labels, groups)
 
 
 if __name__ == "__main__":
-    import json, random
+    import random
+
     random.seed(42)
 
     gov = GovernanceFramework()
@@ -454,7 +485,8 @@ if __name__ == "__main__":
     print(bias_report.summary())
 
     card = gov.generate_model_card(
-        "rag-embedder", version=2,
+        "rag-embedder",
+        version=2,
         metrics={"ragas_faithfulness": 0.847, "ragas_relevancy": 0.823, "p95_latency_ms": 4200},
         bias_report=bias_report,
     )
@@ -462,16 +494,30 @@ if __name__ == "__main__":
     print(f"Intended use: {card['intended_use']['primary_use']}")
 
     dataset_id = gov.audit_log.log_dataset_creation(
-        "domain_corpus_v3", n_records=50000, features=["text", "source", "domain"],
-        label_col="is_relevant", source="CommonCrawl + internal docs",
+        "domain_corpus_v3",
+        n_records=50000,
+        features=["text", "source", "domain"],
+        label_col="is_relevant",
+        source="CommonCrawl + internal docs",
     )
     model_id = gov.audit_log.log_model_training(
-        dataset_id, "rag-embedder", version=2, run_id="run_abc123",
+        dataset_id,
+        "rag-embedder",
+        version=2,
+        run_id="run_abc123",
         metrics={"ragas_faithfulness": 0.847},
     )
-    gov.audit_log.log_deployment(model_id, "rag-embedder", version=2, environment="production",
-                                  deployed_by="mlops-ci", approvals=["tech-lead", "ml-platform"])
+    gov.audit_log.log_deployment(
+        model_id,
+        "rag-embedder",
+        version=2,
+        environment="production",
+        deployed_by="mlops-ci",
+        approvals=["tech-lead", "ml-platform"],
+    )
     lineage = gov.audit_log.get_lineage("rag-embedder")
     print(f"\nAudit lineage: {len(lineage)} entries")
     for entry in lineage:
-        print(f"  [{entry['event']}] {entry.get('dataset_name', entry.get('model_name', ''))} @ {entry['timestamp'][:19]}")
+        print(
+            f"  [{entry['event']}] {entry.get('dataset_name', entry.get('model_name', ''))} @ {entry['timestamp'][:19]}"
+        )

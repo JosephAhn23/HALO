@@ -1,30 +1,30 @@
 """
 FastAPI gateway - realtime + batch inference endpoints.
 """
+
 from __future__ import annotations
 
 import asyncio
 import logging
 import os
 import threading
+import time
 import uuid
+from typing import Any
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Security
+import torch
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Security
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field, field_validator
-from typing import Any, Dict, Optional
-
-import time
-import torch
 
 from src.agents.orchestrator import run_pipeline
 from src.api.batch import enqueue_batch_job
 from src.api.websocket_streaming import router as websocket_router
 from src.inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
-from src.simulation import batch_simulate, QualityGates, track_to_mlflow
 from src.scheduling import FleetReconciler, parse_fleet_config
 from src.scheduling.metrics import SchedulingMetrics, track_dispatch_plan
+from src.simulation import QualityGates, batch_simulate, track_to_mlflow
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +104,7 @@ class RetrieveRequest(BaseModel):
 
 class IngestRequest(BaseModel):
     content: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     chunk_size: int = 512
 
     @field_validator("content")
@@ -117,35 +117,41 @@ class IngestRequest(BaseModel):
 
 class TritonDispatchRequest(BaseModel):
     """Request to compile + dispatch inference through Triton kernels."""
+
     use_triton: bool = Field(default=True, description="Use Triton backend")
-    operation: str = Field(default="info", description="'info' to get hardware, 'dispatch' to compile")
+    operation: str = Field(
+        default="info", description="'info' to get hardware, 'dispatch' to compile"
+    )
 
 
 class TritonDispatchResponse(BaseModel):
     """Response with hardware info and dispatch status."""
-    hardware: Dict[str, Any]
+
+    hardware: dict[str, Any]
     status: str
     message: str
 
 
 class PhysicsSimulationRequest(BaseModel):
     """Request for batched physics simulation."""
+
     batch_size: int = Field(default=10, ge=1, le=1000)
     num_steps: int = Field(default=10000, ge=100, le=100000)
-    initial_conditions: Optional[list] = Field(default=None, description="(batch, 7) initial states")
-    B_field_schedule: Optional[Dict] = Field(default=None, description="B0 rate schedule")
-    alpha_schedule: Optional[Dict] = Field(default=None, description="Mirror field schedule")
+    initial_conditions: list | None = Field(default=None, description="(batch, 7) initial states")
+    B_field_schedule: dict | None = Field(default=None, description="B0 rate schedule")
+    alpha_schedule: dict | None = Field(default=None, description="Mirror field schedule")
     particle_mass: float = Field(default=0.938, description="GeV/c^2")
     edm_eta: float = Field(default=1e-3, description="EDM coupling strength")
 
 
 class PhysicsSimulationResponse(BaseModel):
     """Response from physics simulation."""
+
     run_id: str
     batch_size: int
     num_steps: int
     quality_score: float
-    diagnostics: Dict[str, Any]
+    diagnostics: dict[str, Any]
     hardware_used: str
     wall_clock_time_sec: float
     estimated_cost_usd: float
@@ -155,19 +161,27 @@ class PhysicsSimulationResponse(BaseModel):
 
 class SchedulingRequest(BaseModel):
     """Request for fleet scheduling reconciliation."""
-    workers: list = Field(..., description="Worker definitions with id, cpu, memory, labels, blackouts")
-    jobs: list = Field(..., description="Job definitions with timezone, weekdays, times, dependencies, etc.")
-    window_start: str = Field(..., description="RFC 3339 UTC window start (e.g., 2025-01-01T00:00:00Z)")
+
+    workers: list = Field(
+        ..., description="Worker definitions with id, cpu, memory, labels, blackouts"
+    )
+    jobs: list = Field(
+        ..., description="Job definitions with timezone, weekdays, times, dependencies, etc."
+    )
+    window_start: str = Field(
+        ..., description="RFC 3339 UTC window start (e.g., 2025-01-01T00:00:00Z)"
+    )
     window_end: str = Field(..., description="RFC 3339 UTC window end")
-    failed_attempts: Optional[list] = Field(default=None, description="Simulated failures for testing")
+    failed_attempts: list | None = Field(default=None, description="Simulated failures for testing")
 
 
 class SchedulingResponse(BaseModel):
     """Response from fleet scheduling."""
+
     run_id: str
     dispatch_count: int
     quality_score: float
-    summary: Dict[str, Any]
+    summary: dict[str, Any]
     dispatches: list
     terminal: list
     status: str
@@ -196,6 +210,7 @@ def _get_ingestion_pipeline():
         with _ingestion_lock:
             if _ingestion_pipeline is None:
                 from src.ingestion.pipeline import IngestionPipeline
+
                 _ingestion_pipeline = IngestionPipeline()
     return _ingestion_pipeline
 
@@ -220,7 +235,7 @@ async def query_realtime(request: QueryRequest):
     if result.get("error"):
         raise HTTPException(status_code=502, detail=result["error"])
     resp = result["response"]
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "answer": resp["answer"],
         "sources": resp.get("sources") or [],
         "tokens_used": resp.get("tokens_used", 0),
@@ -290,26 +305,20 @@ async def dispatch_triton(request: TritonDispatchRequest):
 
         if request.operation == "info":
             return TritonDispatchResponse(
-                hardware=hardware,
-                status="ok",
-                message="Hardware info retrieved"
+                hardware=hardware, status="ok", message="Hardware info retrieved"
             )
         elif request.operation == "dispatch":
             if not request.use_triton:
                 return TritonDispatchResponse(
-                    hardware=hardware,
-                    status="ok",
-                    message="Triton dispatch disabled"
+                    hardware=hardware, status="ok", message="Triton dispatch disabled"
                 )
 
             logger.info("Testing Triton backend compilation...")
             test_model = torch.nn.Linear(128, 64)
-            compiled = dispatch_model(test_model, use_triton=True)
+            dispatch_model(test_model, use_triton=True)
 
             return TritonDispatchResponse(
-                hardware=hardware,
-                status="ok",
-                message="Model compiled with morphos_backend_phase3"
+                hardware=hardware, status="ok", message="Model compiled with morphos_backend_phase3"
             )
         else:
             raise ValueError(f"Unknown operation: {request.operation}")
@@ -338,8 +347,10 @@ async def simulate_physics(request: PhysicsSimulationRequest):
 
     try:
         hardware_info = get_hardware_info()
-        logger.info(f"Physics simulation {run_id}: batch_size={request.batch_size}, "
-                   f"hardware={hardware_info.get('device_name', 'cpu')}")
+        logger.info(
+            f"Physics simulation {run_id}: batch_size={request.batch_size}, "
+            f"hardware={hardware_info.get('device_name', 'cpu')}"
+        )
 
         # Convert initial conditions to torch tensor
         initial_conditions = None
@@ -402,8 +413,10 @@ async def simulate_physics(request: PhysicsSimulationRequest):
             status="ok" if gates_passed else "quality_warning",
         )
 
-        logger.info(f"Simulation {run_id} complete: quality={quality_score:.3f}, "
-                   f"time={wall_clock_time:.2f}s, cost=${estimated_cost:.2f}")
+        logger.info(
+            f"Simulation {run_id} complete: quality={quality_score:.3f}, "
+            f"time={wall_clock_time:.2f}s, cost=${estimated_cost:.2f}"
+        )
 
         return response
 
@@ -433,8 +446,10 @@ async def schedule_fleet(request: SchedulingRequest):
     start_time = time.time()
 
     try:
-        logger.info(f"Fleet scheduling {run_id}: {len(request.jobs)} jobs, "
-                   f"{len(request.workers)} workers")
+        logger.info(
+            f"Fleet scheduling {run_id}: {len(request.jobs)} jobs, "
+            f"{len(request.workers)} workers"
+        )
 
         # Build fleet config
         fleet_config = parse_fleet_config(
@@ -474,8 +489,10 @@ async def schedule_fleet(request: SchedulingRequest):
             status="ok" if quality_score > 0 else "degraded",
         )
 
-        logger.info(f"Scheduling {run_id} complete: quality={quality_score:.3f}, "
-                   f"time={wall_clock_time:.2f}s, dispatches={summary.get('dispatch_count', 0)}")
+        logger.info(
+            f"Scheduling {run_id} complete: quality={quality_score:.3f}, "
+            f"time={wall_clock_time:.2f}s, dispatches={summary.get('dispatch_count', 0)}"
+        )
 
         return response
 

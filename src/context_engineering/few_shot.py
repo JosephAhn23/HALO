@@ -154,14 +154,11 @@ class DynamicFewShot:
     # ------------------------------------------------------------------
 
     def _faiss_retrieve(self, query_emb: np.ndarray, k: int) -> list[Example]:
-        import faiss
         k = min(k, len(self._examples))
         D, I = self._index.search(query_emb.reshape(1, -1).astype("float32"), k)
         return [self._examples[i] for i in I[0] if i >= 0]
 
-    def _mmr_retrieve(
-        self, query_emb: np.ndarray, k: int, lambda_: float = 0.5
-    ) -> list[Example]:
+    def _mmr_retrieve(self, query_emb: np.ndarray, k: int, lambda_: float = 0.5) -> list[Example]:
         """Maximal Marginal Relevance for diverse yet relevant examples."""
         all_embs = np.stack([ex.embedding for ex in self._examples]).astype("float32")
         query_sims = self._cosine_sim(query_emb, all_embs)
@@ -174,9 +171,7 @@ class DynamicFewShot:
                 best = int(np.argmax(query_sims))
             else:
                 sel_embs = all_embs[selected_idx]
-                redundancy = self._cosine_sim_matrix(
-                    all_embs[remaining], sel_embs
-                ).max(axis=1)
+                redundancy = self._cosine_sim_matrix(all_embs[remaining], sel_embs).max(axis=1)
                 relevance = query_sims[remaining]
                 mmr_scores = lambda_ * relevance - (1 - lambda_) * redundancy
                 best = remaining[int(np.argmax(mmr_scores))]
@@ -188,6 +183,7 @@ class DynamicFewShot:
 
     def _build_index(self) -> None:
         import faiss
+
         embs = np.stack([ex.embedding for ex in self._examples]).astype("float32")
         if self.similarity == "cosine":
             faiss.normalize_L2(embs)
@@ -198,12 +194,11 @@ class DynamicFewShot:
     def _get_encoder(self):
         if self._encoder is None:
             from sentence_transformers import SentenceTransformer
+
             self._encoder = SentenceTransformer(self.encoder_name)
         return self._encoder
 
-    def _encode_batch(
-        self, encoder: Any, texts: list[str], batch_size: int
-    ) -> np.ndarray:
+    def _encode_batch(self, encoder: Any, texts: list[str], batch_size: int) -> np.ndarray:
         return encoder.encode(texts, batch_size=batch_size, normalize_embeddings=True)
 
     @staticmethod

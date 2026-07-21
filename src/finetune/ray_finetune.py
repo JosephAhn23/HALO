@@ -2,9 +2,9 @@
 Distributed LoRA fine-tuning with Ray Train.
 Covers: Distributed training (Ray), replaces single-node training
 """
+
 import json
 
-from src.mlops.compat import mlflow
 import ray
 from datasets import Dataset
 from peft import LoraConfig, TaskType, get_peft_model
@@ -12,6 +12,8 @@ from ray import train
 from ray.train import CheckpointConfig, RunConfig, ScalingConfig
 from ray.train.huggingface import TransformersTrainer
 from transformers import AutoModel, AutoTokenizer, TrainingArguments
+
+from src.mlops.compat import mlflow
 
 BASE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 NUM_WORKERS = 4

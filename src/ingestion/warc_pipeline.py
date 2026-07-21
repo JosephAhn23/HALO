@@ -2,15 +2,16 @@
 Real CommonCrawl WARC parsing - direct S3 access, language detection, domain scoring.
 Covers: Large-scale web datasets (real depth, not just load_dataset)
 """
+
 import gzip
 import hashlib
 import io
 import logging
 import re
 import threading
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Optional
 from urllib.parse import urlparse
 
 import boto3
@@ -27,11 +28,18 @@ TARGET_LANGUAGES = {"en", "fr", "de", "zh", "es", "ja", "ko"}
 
 # Domain quality tiers - mirrors production data pipeline standards
 HIGH_QUALITY_DOMAINS = {
-    "wikipedia.org", "arxiv.org", "github.com",
-    "stackoverflow.com", "nature.com", "pubmed.ncbi.nlm.nih.gov",
+    "wikipedia.org",
+    "arxiv.org",
+    "github.com",
+    "stackoverflow.com",
+    "nature.com",
+    "pubmed.ncbi.nlm.nih.gov",
 }
 LOW_QUALITY_PATTERNS = [
-    r"spam", r"casino", r"click-?here", r"buy-?now",
+    r"spam",
+    r"casino",
+    r"click-?here",
+    r"buy-?now",
     r"\d{4}-\d{2}-\d{2}\.html$",
 ]
 
@@ -69,7 +77,7 @@ class WARCIngestionPipeline:
         self._hash_lock = threading.Lock()
         self._low_quality_re = re.compile("|".join(LOW_QUALITY_PATTERNS), re.IGNORECASE)
 
-    def get_warc_paths(self, limit: int = 10) -> List[str]:
+    def get_warc_paths(self, limit: int = 10) -> list[str]:
         """Fetch WET file paths from CommonCrawl index."""
         response = requests.get(CC_INDEX_URL, stream=True, timeout=30)
         response.raise_for_status()
@@ -77,7 +85,7 @@ class WARCIngestionPipeline:
             paths = [line.decode().strip() for line in f]
         return paths[:limit]
 
-    def _detect_language(self, text: str) -> Optional[str]:
+    def _detect_language(self, text: str) -> str | None:
         try:
             return langdetect.detect(text[:500])
         except Exception:
@@ -166,16 +174,16 @@ class WARCIngestionPipeline:
 
     def process_warc_paths_parallel(
         self,
-        warc_paths: List[str],
+        warc_paths: list[str],
         max_docs: int = 100_000,
     ) -> pd.DataFrame:
         """
         Process multiple WARC files in parallel using ThreadPoolExecutor.
         Returns DataFrame with quality metrics per document.
         """
-        all_docs: List[Dict] = []
+        all_docs: list[dict] = []
 
-        def process_one(path: str) -> List[Dict]:
+        def process_one(path: str) -> list[dict]:
             docs = []
             for doc in self.stream_warc_from_s3(path):
                 docs.append(

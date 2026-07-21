@@ -5,12 +5,13 @@ Runs up to ``max_rounds`` (default 3) self-correction cycles: on mismatch or san
 failure, the traceback and stdout are formatted for a reviser (typically an LLM)
 before the user sees a "verified" result.
 """
+
 from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
 
 from src.sandbox.code_sandbox import CodeSandbox, ExecutionResult, SandboxConfig
 from src.sandbox.debug_loop import format_traceback_for_agent
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 _FLOAT = re.compile(r"[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?")
 
 
-def extract_numbers(text: str) -> List[float]:
-    out: List[float] = []
+def extract_numbers(text: str) -> list[float]:
+    out: list[float] = []
     for m in _FLOAT.finditer(text):
         try:
             out.append(float(m.group()))
@@ -71,7 +72,7 @@ class ValidationLoopResult:
     last_execution: ExecutionResult
     rounds_used: int
     matcher_notes: str = ""
-    feedback_trace: List[str] = field(default_factory=list)
+    feedback_trace: list[str] = field(default_factory=list)
 
 
 class ValidationLoop:
@@ -84,11 +85,11 @@ class ValidationLoop:
 
     def __init__(
         self,
-        sandbox: Optional[CodeSandbox] = None,
+        sandbox: CodeSandbox | None = None,
         *,
         max_rounds: int = 3,
         language: str = "python",
-        config: Optional[SandboxConfig] = None,
+        config: SandboxConfig | None = None,
     ) -> None:
         self.sandbox = sandbox or CodeSandbox()
         self.max_rounds = max_rounds
@@ -100,11 +101,11 @@ class ValidationLoop:
         claim: str,
         initial_code: str,
         revise: Callable[[str, str], str],
-        matcher: Optional[Callable[[str, str, str], bool]] = None,
+        matcher: Callable[[str, str, str], bool] | None = None,
     ) -> ValidationLoopResult:
         match_fn = matcher or (lambda c, o, e: default_claim_matcher(c, o, e))
         code = initial_code.strip()
-        trace: List[str] = []
+        trace: list[str] = []
         last = ExecutionResult(
             exit_code=-1,
             stdout="",

@@ -55,7 +55,7 @@ class UpliftEstimator:
     # Public API
     # ------------------------------------------------------------------
 
-    def fit_estimate(self, df: pd.DataFrame) -> "UpliftResults":
+    def fit_estimate(self, df: pd.DataFrame) -> UpliftResults:
         """
         Fit causal model and return ATE + CATE estimates.
 
@@ -80,12 +80,15 @@ class UpliftEstimator:
         )
         logger.info(
             "Uplift ATE=%.4f SE=%.4f p=%.4f (estimator=%s)",
-            ate, ate_se, results.p_value, self.config.estimator,
+            ate,
+            ate_se,
+            results.p_value,
+            self.config.estimator,
         )
         return results
 
     def top_uplift_segments(
-        self, df: pd.DataFrame, results: "UpliftResults", top_k: int = 3
+        self, df: pd.DataFrame, results: UpliftResults, top_k: int = 3
     ) -> pd.DataFrame:
         """Return the top-k covariate segments with highest treatment uplift."""
         seg_df = df[self.config.covariate_cols].copy()
@@ -127,6 +130,7 @@ class UpliftEstimator:
 
         if self.config.estimator == "t_learner":
             from econml.metalearners import TLearner
+
             est = TLearner(
                 models=GradientBoostingRegressor(
                     n_estimators=self.config.n_estimators,
@@ -138,6 +142,7 @@ class UpliftEstimator:
 
         elif self.config.estimator == "dr_learner":
             from econml.dr import DRLearner
+
             est = DRLearner(
                 model_regression=GradientBoostingRegressor(
                     n_estimators=self.config.n_estimators,
@@ -154,6 +159,7 @@ class UpliftEstimator:
 
         else:  # causal_forest
             from econml.grf import CausalForest
+
             est = CausalForest(
                 n_estimators=self.config.n_estimators,
                 random_state=self.config.random_state,
@@ -185,15 +191,13 @@ class UpliftEstimator:
     @staticmethod
     def _z_pvalue(ate: float, se: float) -> float:
         from scipy import stats
+
         if se == 0:
             return 0.0
         return float(2 * (1 - stats.norm.cdf(abs(ate / se))))
 
     def _validate(self, df: pd.DataFrame) -> None:
-        required = (
-            [self.config.treatment_col, self.config.outcome_col]
-            + self.config.covariate_cols
-        )
+        required = [self.config.treatment_col, self.config.outcome_col] + self.config.covariate_cols
         missing = [c for c in required if c not in df.columns]
         if missing:
             raise ValueError(f"Missing columns: {missing}")

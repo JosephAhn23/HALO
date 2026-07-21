@@ -34,13 +34,14 @@ Usage:
     # Generate TRT-LLM build shell script
     python inference/trtllm_nim.py --gen-build-script --model meta-llama/Llama-3.1-8B-Instruct
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -50,12 +51,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Shared generation result
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class GenerationResult:
     """
     Unified result dataclass shared across all inference backends
     (TRT-LLM, NIM, vLLM, llama.cpp).
     """
+
     text: str
     prompt_tokens: int
     completion_tokens: int
@@ -77,20 +80,22 @@ class GenerationResult:
 # TensorRT-LLM configs
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class TRTLLMConfig:
     """Runtime config for a loaded TRT-LLM engine."""
+
     model_dir: str = "trtllm_engines"
     max_batch_size: int = 8
     max_input_len: int = 2048
     max_output_len: int = 512
     max_beam_width: int = 1
     # Parallelism
-    tp_size: int = 1                # tensor parallelism degree
-    pp_size: int = 1                # pipeline parallelism degree
+    tp_size: int = 1  # tensor parallelism degree
+    pp_size: int = 1  # pipeline parallelism degree
     # Precision
-    dtype: str = "float16"          # float16 | bfloat16 | float8
-    quant_mode: str = "none"        # none | int8_kv_cache | fp8 | int4_awq | int4_gptq
+    dtype: str = "float16"  # float16 | bfloat16 | float8
+    quant_mode: str = "none"  # none | int8_kv_cache | fp8 | int4_awq | int4_gptq
     # KV cache
     kv_cache_free_gpu_memory_fraction: float = 0.9
     # Batching
@@ -103,12 +108,13 @@ class TRTLLMConfig:
 @dataclass
 class TRTLLMBuildConfig:
     """Config for building TRT-LLM engines from HuggingFace checkpoints."""
+
     hf_model_dir: str = ""
     output_dir: str = "trtllm_engines"
     tp_size: int = 1
     pp_size: int = 1
     dtype: str = "float16"
-    quant_mode: str = "none"        # none | fp8 | int4_awq | int4_gptq
+    quant_mode: str = "none"  # none | fp8 | int4_awq | int4_gptq
     max_batch_size: int = 8
     max_input_len: int = 2048
     max_output_len: int = 512
@@ -122,6 +128,7 @@ class TRTLLMBuildConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 # TensorRT-LLM engine builder
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TRTLLMEngineBuilder:
     """
@@ -154,12 +161,19 @@ class TRTLLMEngineBuilder:
         # Stage 1: Convert HF checkpoint → TRT-LLM checkpoint
         logger.info("Stage 1: Converting HF checkpoint: %s", self.cfg.hf_model_dir)
         convert_cmd = [
-            "python", "-m", "tensorrt_llm.commands.convert_checkpoint",
-            "--model_dir", self.cfg.hf_model_dir,
-            "--output_dir", checkpoint_dir,
-            "--dtype", self.cfg.dtype,
-            "--tp_size", str(self.cfg.tp_size),
-            "--pp_size", str(self.cfg.pp_size),
+            "python",
+            "-m",
+            "tensorrt_llm.commands.convert_checkpoint",
+            "--model_dir",
+            self.cfg.hf_model_dir,
+            "--output_dir",
+            checkpoint_dir,
+            "--dtype",
+            self.cfg.dtype,
+            "--tp_size",
+            str(self.cfg.tp_size),
+            "--pp_size",
+            str(self.cfg.pp_size),
         ]
         if self.cfg.quant_mode == "int4_awq":
             convert_cmd += ["--use_weight_only", "--weight_only_precision", "int4_awq"]
@@ -177,13 +191,20 @@ class TRTLLMEngineBuilder:
         logger.info("Stage 2: Building TRT-LLM engine (takes several minutes)…")
         build_cmd = [
             "trtllm-build",
-            "--checkpoint_dir", checkpoint_dir,
-            "--output_dir", engine_dir,
-            "--max_batch_size", str(self.cfg.max_batch_size),
-            "--max_input_len", str(self.cfg.max_input_len),
-            "--max_output_len", str(self.cfg.max_output_len),
-            "--gpt_attention_plugin", self.cfg.use_gpt_attention_plugin,
-            "--gemm_plugin", self.cfg.use_gemm_plugin,
+            "--checkpoint_dir",
+            checkpoint_dir,
+            "--output_dir",
+            engine_dir,
+            "--max_batch_size",
+            str(self.cfg.max_batch_size),
+            "--max_input_len",
+            str(self.cfg.max_input_len),
+            "--max_output_len",
+            str(self.cfg.max_output_len),
+            "--gpt_attention_plugin",
+            self.cfg.use_gpt_attention_plugin,
+            "--gemm_plugin",
+            self.cfg.use_gemm_plugin,
         ]
         if self.cfg.enable_paged_kv_cache:
             build_cmd.append("--paged_kv_cache")
@@ -260,6 +281,7 @@ echo "Engine built at: $OUTPUT_DIR/engine"
 # TensorRT-LLM runtime backend
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TRTLLMBackend:
     """
     TensorRT-LLM inference backend with continuous batching.
@@ -281,9 +303,9 @@ class TRTLLMBackend:
     def from_hf(
         cls,
         hf_model_id: str,
-        engine_dir: Optional[str] = None,
+        engine_dir: str | None = None,
         tp_size: int = 1,
-    ) -> "TRTLLMBackend":
+    ) -> TRTLLMBackend:
         """Convenience constructor — derives engine_dir from model ID."""
         engine_dir = engine_dir or f"trtllm_engines/{hf_model_id.replace('/', '_')}/engine"
         return cls(TRTLLMConfig(model_dir=engine_dir, tp_size=tp_size))
@@ -304,7 +326,9 @@ class TRTLLMBackend:
             )
             logger.info(
                 "TRT-LLM engine loaded: %s (tp=%d pp=%d)",
-                self.cfg.model_dir, self.cfg.tp_size, self.cfg.pp_size,
+                self.cfg.model_dir,
+                self.cfg.tp_size,
+                self.cfg.pp_size,
             )
         except ImportError:
             logger.warning(
@@ -313,15 +337,18 @@ class TRTLLMBackend:
             )
             self._runner = None
 
-    def generate(self, prompt: str, max_tokens: Optional[int] = None) -> GenerationResult:
+    def generate(self, prompt: str, max_tokens: int | None = None) -> GenerationResult:
         if self._runner is None:
             self._load()
         if self._runner is None:
             return GenerationResult(
                 text=f"[TRT-LLM unavailable — mock] {prompt[:60]}",
-                prompt_tokens=0, completion_tokens=0,
-                total_latency_ms=0.0, tokens_per_second=0.0,
-                backend="trtllm", model=self.cfg.model_dir,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_latency_ms=0.0,
+                tokens_per_second=0.0,
+                backend="trtllm",
+                model=self.cfg.model_dir,
             )
 
         from tensorrt_llm import SamplingParams
@@ -350,8 +377,8 @@ class TRTLLMBackend:
         )
 
     def generate_batch(
-        self, prompts: List[str], max_tokens: Optional[int] = None
-    ) -> List[GenerationResult]:
+        self, prompts: list[str], max_tokens: int | None = None
+    ) -> list[GenerationResult]:
         """
         Continuous batching — submit all prompts as a single batch.
         TRT-LLM's in-flight batching scheduler handles variable-length
@@ -391,6 +418,7 @@ class TRTLLMBackend:
 # NVIDIA NIM backend
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class NIMConfig:
     base_url: str = "http://localhost:8000/v1"
@@ -417,28 +445,31 @@ class NIMBackend:
     so you get TRT-LLM performance without managing engine builds.
     """
 
-    def __init__(self, cfg: Optional[NIMConfig] = None):
+    def __init__(self, cfg: NIMConfig | None = None):
         self.cfg = cfg or NIMConfig()
         self._client = None
 
     @classmethod
-    def local(cls, port: int = 8000, model: str = "meta/llama-3.1-8b-instruct") -> "NIMBackend":
+    def local(cls, port: int = 8000, model: str = "meta/llama-3.1-8b-instruct") -> NIMBackend:
         """Connect to a locally running NIM container."""
         return cls(NIMConfig(base_url=f"http://localhost:{port}/v1", model=model))
 
     @classmethod
-    def cloud(cls, model: str = "meta/llama-3.1-8b-instruct") -> "NIMBackend":
+    def cloud(cls, model: str = "meta/llama-3.1-8b-instruct") -> NIMBackend:
         """Connect to NVIDIA's managed cloud NIM API."""
-        return cls(NIMConfig(
-            base_url="https://integrate.api.nvidia.com/v1",
-            model=model,
-            api_key=os.environ.get("NVIDIA_API_KEY", ""),
-        ))
+        return cls(
+            NIMConfig(
+                base_url="https://integrate.api.nvidia.com/v1",
+                model=model,
+                api_key=os.environ.get("NVIDIA_API_KEY", ""),
+            )
+        )
 
     def _get_client(self):
         if self._client is None:
             try:
                 from openai import OpenAI
+
                 self._client = OpenAI(
                     base_url=self.cfg.base_url,
                     api_key=self.cfg.api_key,
@@ -448,7 +479,7 @@ class NIMBackend:
                 raise ImportError("openai required: pip install openai")
         return self._client
 
-    def generate(self, prompt: str, max_tokens: Optional[int] = None) -> GenerationResult:
+    def generate(self, prompt: str, max_tokens: int | None = None) -> GenerationResult:
         client = self._get_client()
         t0 = time.perf_counter()
         response = client.chat.completions.create(
@@ -466,13 +497,15 @@ class NIMBackend:
             prompt_tokens=usage.prompt_tokens if usage else 0,
             completion_tokens=usage.completion_tokens if usage else 0,
             total_latency_ms=latency_ms,
-            tokens_per_second=(usage.completion_tokens / max(latency_ms / 1000, 1e-6)) if usage else 0.0,
+            tokens_per_second=(
+                (usage.completion_tokens / max(latency_ms / 1000, 1e-6)) if usage else 0.0
+            ),
             backend="nim",
             model=self.cfg.model,
             finish_reason=response.choices[0].finish_reason or "stop",
         )
 
-    def stream(self, prompt: str, max_tokens: Optional[int] = None) -> Iterator[str]:
+    def stream(self, prompt: str, max_tokens: int | None = None) -> Iterator[str]:
         """Yield token strings from a streaming NIM response."""
         client = self._get_client()
         stream = client.chat.completions.create(
@@ -487,15 +520,16 @@ class NIMBackend:
             if delta:
                 yield delta
 
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         """List models available at this NIM endpoint."""
         client = self._get_client()
         return [m.id for m in client.models.list().data]
 
-    def health_check(self) -> Dict:
+    def health_check(self) -> dict:
         """Check NIM container readiness."""
         try:
             import httpx
+
             base = self.cfg.base_url.rstrip("/").removesuffix("/v1")
             resp = httpx.get(f"{base}/v1/health/ready", timeout=5.0)
             return {
@@ -508,9 +542,9 @@ class NIMBackend:
 
     def benchmark(
         self,
-        prompts: Optional[List[str]] = None,
+        prompts: list[str] | None = None,
         n_runs: int = 50,
-    ) -> Dict:
+    ) -> dict:
         """Measure NIM endpoint latency and throughput."""
         import numpy as np
 
@@ -540,6 +574,7 @@ class NIMBackend:
 # ──────────────────────────────────────────────────────────────────────────────
 # NIM Docker Compose generator
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def generate_nim_docker_compose(
     model: str = "meta/llama-3.1-8b-instruct",
@@ -593,6 +628,7 @@ volumes:
 # Unified backend factory
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class InferenceBackendFactory:
     """
     Create inference backends by name.
@@ -611,24 +647,33 @@ class InferenceBackendFactory:
     @staticmethod
     def create(backend: str, model: str, **kwargs) -> object:
         if backend == "nim":
-            base_url = kwargs.get("base_url", "http://localhost:8000/v1")
             port = kwargs.get("port", 8000)
             return NIMBackend.local(port=port, model=model)
         elif backend == "nim-cloud":
             return NIMBackend.cloud(model=model)
         elif backend == "trtllm":
-            engine_dir = kwargs.get("engine_dir", f"trtllm_engines/{model.replace('/', '_')}/engine")
+            engine_dir = kwargs.get(
+                "engine_dir", f"trtllm_engines/{model.replace('/', '_')}/engine"
+            )
             tp_size = kwargs.get("tp_size", 1)
             return TRTLLMBackend(TRTLLMConfig(model_dir=engine_dir, tp_size=tp_size))
         elif backend == "vllm":
             try:
                 from vllm import LLM
-                return LLM(model=model, **{k: v for k, v in kwargs.items()
-                                           if k not in ("engine_dir", "port", "base_url")})
+
+                return LLM(
+                    model=model,
+                    **{
+                        k: v
+                        for k, v in kwargs.items()
+                        if k not in ("engine_dir", "port", "base_url")
+                    },
+                )
             except ImportError:
                 raise ImportError("vllm required: pip install vllm")
         elif backend == "llamacpp":
             from src.inference.llamacpp_backend import LlamaCppRunner
+
             return LlamaCppRunner.from_gguf(model)
         else:
             raise ValueError(
@@ -637,7 +682,7 @@ class InferenceBackendFactory:
             )
 
     @staticmethod
-    def available_backends() -> List[str]:
+    def available_backends() -> list[str]:
         return ["nim", "nim-cloud", "trtllm", "vllm", "llamacpp"]
 
 
@@ -649,18 +694,15 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="TRT-LLM / NIM inference utilities")
-    parser.add_argument("--backend", default="nim",
-                        choices=["nim", "nim-cloud", "trtllm"])
+    parser.add_argument("--backend", default="nim", choices=["nim", "nim-cloud", "trtllm"])
     parser.add_argument("--model", default="meta/llama-3.1-8b-instruct")
     parser.add_argument("--prompt", default="Explain retrieval-augmented generation.")
-    parser.add_argument("--gen-docker", action="store_true",
-                        help="Write docker-compose.nim.yml")
-    parser.add_argument("--gen-build-script", action="store_true",
-                        help="Write scripts/build_trtllm.sh")
-    parser.add_argument("--health", action="store_true",
-                        help="Check NIM endpoint health")
-    parser.add_argument("--benchmark", action="store_true",
-                        help="Run NIM latency benchmark")
+    parser.add_argument("--gen-docker", action="store_true", help="Write docker-compose.nim.yml")
+    parser.add_argument(
+        "--gen-build-script", action="store_true", help="Write scripts/build_trtllm.sh"
+    )
+    parser.add_argument("--health", action="store_true", help="Check NIM endpoint health")
+    parser.add_argument("--benchmark", action="store_true", help="Run NIM latency benchmark")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--n-gpus", type=int, default=1)
     args = parser.parse_args()
@@ -681,11 +723,13 @@ if __name__ == "__main__":
     elif args.health:
         nim = NIMBackend.local(port=args.port, model=args.model)
         import json
+
         print(json.dumps(nim.health_check(), indent=2))
 
     elif args.benchmark:
         nim = NIMBackend.local(port=args.port, model=args.model)
         import json
+
         result = nim.benchmark(n_runs=20)
         print(json.dumps(result, indent=2))
 

@@ -2,9 +2,9 @@
 vLLM inference backend - high-throughput self-hosted LLM serving.
 Covers: vLLM, SGLang-compatible interface, inference systems
 """
+
 import asyncio
 import uuid
-from typing import Dict, List
 
 from vllm import LLM, SamplingParams
 from vllm.engine.arg_utils import AsyncEngineArgs
@@ -43,7 +43,7 @@ class VLLMSynthesizer:
             stop=["</s>", "<|eot_id|>"],
         )
 
-    def _build_prompt(self, query: str, context_chunks: List[Dict]) -> str:
+    def _build_prompt(self, query: str, context_chunks: list[dict]) -> str:
         context_str = ""
         for i, chunk in enumerate(context_chunks):
             context_str += f"[source_{i+1}] {chunk['source']}:\n{chunk['text']}\n\n"
@@ -57,7 +57,7 @@ Context:
 Question: {query}
 <|assistant|>"""
 
-    def synthesize(self, query: str, context_chunks: List[Dict]) -> Dict:
+    def synthesize(self, query: str, context_chunks: list[dict]) -> dict:
         """Single query inference."""
         prompt = self._build_prompt(query, context_chunks)
         outputs = self.llm.generate([prompt], self.sampling_params)
@@ -70,15 +70,12 @@ Question: {query}
             "finish_reason": outputs[0].outputs[0].finish_reason,
         }
 
-    def batch_synthesize(self, queries: List[Dict]) -> List[Dict]:
+    def batch_synthesize(self, queries: list[dict]) -> list[dict]:
         """
         True batch inference - vLLM processes all prompts in parallel.
         Covers: Batch inference pipelines
         """
-        prompts = [
-            self._build_prompt(q["query"], q["context_chunks"])
-            for q in queries
-        ]
+        prompts = [self._build_prompt(q["query"], q["context_chunks"]) for q in queries]
         outputs = self.llm.generate(prompts, self.sampling_params)
 
         results = []
@@ -108,7 +105,7 @@ class AsyncVLLMSynthesizer:
         )
         self.engine = AsyncLLMEngine.from_engine_args(engine_args)
 
-    async def stream_synthesize(self, query: str, context_chunks: List[Dict]):
+    async def stream_synthesize(self, query: str, context_chunks: list[dict]):
         """Streaming token generation."""
         prompt = self._build_prompt(query, context_chunks)
         request_id = str(uuid.uuid4())
@@ -119,31 +116,30 @@ class AsyncVLLMSynthesizer:
             if output.outputs:
                 yield output.outputs[0].text
 
-    def _build_prompt(self, query: str, context_chunks: List[Dict]) -> str:
+    def _build_prompt(self, query: str, context_chunks: list[dict]) -> str:
         context_str = "\n\n".join(
-            f"[source_{i+1}] {c['source']}:\n{c['text']}"
-            for i, c in enumerate(context_chunks)
+            f"[source_{i+1}] {c['source']}:\n{c['text']}" for i, c in enumerate(context_chunks)
         )
         return f"<|system|>\n{SYSTEM_PROMPT}\n<|user|>\nContext:\n{context_str}\n\nQuestion: {query}\n<|assistant|>"
 
 
-def _run_batch_sync(vllm_synth: VLLMSynthesizer, batch: List[Dict]) -> List[Dict]:
+def _run_batch_sync(vllm_synth: VLLMSynthesizer, batch: list[dict]) -> list[dict]:
     return vllm_synth.batch_synthesize(batch)
 
 
-def run_batch_sync(batch: List[Dict]) -> List[Dict]:
+def run_batch_sync(batch: list[dict]) -> list[dict]:
     """Convenience helper for scripting contexts."""
     return _run_batch_sync(VLLMSynthesizer(), batch)
 
 
-async def run_stream(query: str, context_chunks: List[Dict]) -> List[str]:
+async def run_stream(query: str, context_chunks: list[dict]) -> list[str]:
     """Collect stream outputs for async callers."""
     synth = AsyncVLLMSynthesizer()
-    chunks: List[str] = []
+    chunks: list[str] = []
     async for piece in synth.stream_synthesize(query, context_chunks):
         chunks.append(piece)
     return chunks
 
 
-def run_stream_sync(query: str, context_chunks: List[Dict]) -> List[str]:
+def run_stream_sync(query: str, context_chunks: list[dict]) -> list[str]:
     return asyncio.run(run_stream(query, context_chunks))

@@ -13,12 +13,12 @@ CI integration:
 
 Reference: Hardt et al., "Equality of Opportunity in Supervised Learning", NeurIPS 2016.
 """
+
 from __future__ import annotations
 
 import logging
-import math
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class GroupMetrics:
 
 @dataclass
 class FairnessReport:
-    group_metrics: Dict[str, GroupMetrics]
+    group_metrics: dict[str, GroupMetrics]
     statistical_parity_diff: float
     equal_opportunity_diff: float
     average_odds_diff: float
@@ -47,7 +47,7 @@ class FairnessReport:
     threshold: float
     n_groups: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "statistical_parity_diff": self.statistical_parity_diff,
             "equal_opportunity_diff": self.equal_opportunity_diff,
@@ -103,12 +103,12 @@ class BiasChecker:
 
     def evaluate(
         self,
-        predictions: List[int],
-        labels: List[int],
-        groups: List[str],
+        predictions: list[int],
+        labels: list[int],
+        groups: list[str],
     ) -> FairnessReport:
         group_names = sorted(set(groups))
-        group_metrics: Dict[str, GroupMetrics] = {}
+        group_metrics: dict[str, GroupMetrics] = {}
 
         for group in group_names:
             idx = [i for i, g in enumerate(groups) if g == group]
@@ -118,10 +118,26 @@ class BiasChecker:
             if n == 0:
                 continue
 
-            tp = sum(1 for p, l in zip(preds, labs) if p == self.positive_class and l == self.positive_class)
-            tn = sum(1 for p, l in zip(preds, labs) if p != self.positive_class and l != self.positive_class)
-            fp = sum(1 for p, l in zip(preds, labs) if p == self.positive_class and l != self.positive_class)
-            fn = sum(1 for p, l in zip(preds, labs) if p != self.positive_class and l == self.positive_class)
+            tp = sum(
+                1
+                for p, l in zip(preds, labs)
+                if p == self.positive_class and l == self.positive_class
+            )
+            tn = sum(
+                1
+                for p, l in zip(preds, labs)
+                if p != self.positive_class and l != self.positive_class
+            )
+            fp = sum(
+                1
+                for p, l in zip(preds, labs)
+                if p == self.positive_class and l != self.positive_class
+            )
+            fn = sum(
+                1
+                for p, l in zip(preds, labs)
+                if p != self.positive_class and l == self.positive_class
+            )
 
             n_pos = tp + fn
             n_neg = tn + fp
@@ -143,10 +159,7 @@ class BiasChecker:
 
         spd = max(pos_rates) - min(pos_rates) if len(pos_rates) > 1 else 0.0
         eod = max(tprs) - min(tprs) if len(tprs) > 1 else 0.0
-        aod = (
-            (max(tprs) - min(tprs) + max(fprs) - min(fprs)) / 2
-            if len(tprs) > 1 else 0.0
-        )
+        aod = (max(tprs) - min(tprs) + max(fprs) - min(fprs)) / 2 if len(tprs) > 1 else 0.0
         di = min(pos_rates) / max(max(pos_rates), 1e-9) if pos_rates else 1.0
 
         worst = min(accuracies, key=lambda g: accuracies[g]) if accuracies else "unknown"
@@ -172,7 +185,7 @@ class BiasChecker:
         baseline_report: FairnessReport,
         current_report: FairnessReport,
         regression_threshold: float = 0.05,
-    ) -> Tuple[bool, str]:
+    ) -> tuple[bool, str]:
         """
         Detect fairness regression between baseline and current model.
         Returns (regression_detected, explanation).

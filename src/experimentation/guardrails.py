@@ -15,12 +15,12 @@ Interview talking point:
    we shipped. Without guardrails, we would have shipped a regression
    that users would have noticed as slowness."
 """
+
 from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +43,8 @@ class GuardrailViolation:
 class GuardrailReport:
     experiment_id: str
     passed: bool
-    violations: List[GuardrailViolation]
-    warnings: List[str]
+    violations: list[GuardrailViolation]
+    warnings: list[str]
     n_control: int
     n_treatment: int
     srm_detected: bool
@@ -79,7 +79,7 @@ class ExperimentGuardrails:
         min_sample_size: int = 100,
         max_latency_increase_ms: float = 500.0,
         max_error_rate_increase: float = 0.02,
-        max_metric_degradation: Optional[Dict[str, float]] = None,
+        max_metric_degradation: dict[str, float] | None = None,
         srm_alpha: float = 0.001,
     ):
         self.min_sample_size = min_sample_size
@@ -91,8 +91,8 @@ class ExperimentGuardrails:
     def check(
         self,
         experiment_id: str,
-        control_obs: List[Dict[str, float]],
-        treatment_obs: List[Dict[str, float]],
+        control_obs: list[dict[str, float]],
+        treatment_obs: list[dict[str, float]],
         intended_split: float = 0.5,
     ) -> GuardrailReport:
         violations = []
@@ -108,16 +108,18 @@ class ExperimentGuardrails:
 
         srm_detected = self._check_srm(n_c, n_t, intended_split)
         if srm_detected:
-            violations.append(GuardrailViolation(
-                guardrail="sample_ratio_mismatch",
-                metric="traffic_split",
-                control_value=n_c / max(n_c + n_t, 1),
-                treatment_value=n_t / max(n_c + n_t, 1),
-                threshold=intended_split,
-                severity="critical",
-                message=f"SRM detected: expected {intended_split:.2f}/{1-intended_split:.2f}, "
-                        f"got {n_c}/{n_t} ({n_c/(n_c+n_t):.3f}/{n_t/(n_c+n_t):.3f})",
-            ))
+            violations.append(
+                GuardrailViolation(
+                    guardrail="sample_ratio_mismatch",
+                    metric="traffic_split",
+                    control_value=n_c / max(n_c + n_t, 1),
+                    treatment_value=n_t / max(n_c + n_t, 1),
+                    threshold=intended_split,
+                    severity="critical",
+                    message=f"SRM detected: expected {intended_split:.2f}/{1-intended_split:.2f}, "
+                    f"got {n_c}/{n_t} ({n_c/(n_c+n_t):.3f}/{n_t/(n_c+n_t):.3f})",
+                )
+            )
 
         latency_violation = self._check_latency(control_obs, treatment_obs)
         if latency_violation:
@@ -160,18 +162,17 @@ class ExperimentGuardrails:
             return False
         expected_t = n_total * intended_split
         expected_c = n_total * (1 - intended_split)
-        chi2 = (
-            (n_t - expected_t) ** 2 / max(expected_t, 1)
-            + (n_c - expected_c) ** 2 / max(expected_c, 1)
+        chi2 = (n_t - expected_t) ** 2 / max(expected_t, 1) + (n_c - expected_c) ** 2 / max(
+            expected_c, 1
         )
         p_value = 1 - self._chi2_cdf(chi2, df=1)
         return p_value < self.srm_alpha
 
     def _check_latency(
         self,
-        control_obs: List[Dict],
-        treatment_obs: List[Dict],
-    ) -> Optional[GuardrailViolation]:
+        control_obs: list[dict],
+        treatment_obs: list[dict],
+    ) -> GuardrailViolation | None:
         c_latencies = [o["latency_ms"] for o in control_obs if "latency_ms" in o]
         t_latencies = [o["latency_ms"] for o in treatment_obs if "latency_ms" in o]
         if not c_latencies or not t_latencies:
@@ -195,9 +196,9 @@ class ExperimentGuardrails:
 
     def _check_error_rate(
         self,
-        control_obs: List[Dict],
-        treatment_obs: List[Dict],
-    ) -> Optional[GuardrailViolation]:
+        control_obs: list[dict],
+        treatment_obs: list[dict],
+    ) -> GuardrailViolation | None:
         c_errors = [o.get("error_rate", 0) for o in control_obs]
         t_errors = [o.get("error_rate", 0) for o in treatment_obs]
         if not c_errors or not t_errors:
@@ -223,9 +224,9 @@ class ExperimentGuardrails:
         self,
         metric: str,
         max_degradation: float,
-        control_obs: List[Dict],
-        treatment_obs: List[Dict],
-    ) -> Optional[GuardrailViolation]:
+        control_obs: list[dict],
+        treatment_obs: list[dict],
+    ) -> GuardrailViolation | None:
         c_vals = [o[metric] for o in control_obs if metric in o]
         t_vals = [o[metric] for o in treatment_obs if metric in o]
         if not c_vals or not t_vals:
@@ -249,10 +250,10 @@ class ExperimentGuardrails:
 
     def _check_covariate_imbalance(
         self,
-        control_obs: List[Dict],
-        treatment_obs: List[Dict],
+        control_obs: list[dict],
+        treatment_obs: list[dict],
         covariate: str = "query_complexity",
-    ) -> Optional[str]:
+    ) -> str | None:
         c_vals = [o[covariate] for o in control_obs if covariate in o]
         t_vals = [o[covariate] for o in treatment_obs if covariate in o]
         if len(c_vals) < 10 or len(t_vals) < 10:
@@ -262,7 +263,7 @@ class ExperimentGuardrails:
         t_mean = sum(t_vals) / len(t_vals)
         c_std = math.sqrt(sum((v - c_mean) ** 2 for v in c_vals) / max(len(c_vals) - 1, 1))
         t_std = math.sqrt(sum((v - t_mean) ** 2 for v in t_vals) / max(len(t_vals) - 1, 1))
-        pooled_std = math.sqrt((c_std ** 2 + t_std ** 2) / 2 + 1e-9)
+        pooled_std = math.sqrt((c_std**2 + t_std**2) / 2 + 1e-9)
         smd = abs(c_mean - t_mean) / pooled_std
 
         if smd > 0.1:
@@ -279,7 +280,8 @@ class ExperimentGuardrails:
         if x <= 0:
             return 0.0
         try:
-            from math import lgamma, exp, log
+            from math import exp, lgamma, log
+
             k = df / 2
             log_cdf = k * log(x / 2 + 1e-12) - x / 2 - lgamma(k + 1)
             return min(exp(log_cdf), 1.0)

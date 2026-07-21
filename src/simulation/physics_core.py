@@ -11,11 +11,11 @@ Correctness is validated against that reference implementation in
 tests/test_physics_reference_validation.py.
 """
 
-import torch
-import numpy as np
 import json
-from typing import Dict, Optional
 import logging
+
+import numpy as np
+import torch
 
 from .batched_integrator import integrate_batch
 
@@ -111,13 +111,13 @@ def _initial_conditions_from_tensor(initial_conditions: torch.Tensor, dtype=torc
 
 def batch_simulate(
     batch_size: int,
-    B_field_schedule: Optional[Dict] = None,
-    alpha_schedule: Optional[Dict] = None,
-    initial_conditions: Optional[torch.Tensor] = None,
-    params: Optional[Dict] = None,
+    B_field_schedule: dict | None = None,
+    alpha_schedule: dict | None = None,
+    initial_conditions: torch.Tensor | None = None,
+    params: dict | None = None,
     num_steps: int = 10000,
-    device: Optional[str] = None,
-) -> Dict:
+    device: str | None = None,
+) -> dict:
     """
     Batched relativistic spin transport simulation.
 

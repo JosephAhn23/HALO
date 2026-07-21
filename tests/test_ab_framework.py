@@ -1,6 +1,7 @@
 """
 Tests for ABExperiment — variant assignment, run/metrics, and statistical analysis.
 """
+
 from __future__ import annotations
 
 import random
@@ -11,10 +12,10 @@ import pytest
 
 from src.experiments.ab_framework import ABExperiment, Variant
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_experiment(
     *,
@@ -23,7 +24,9 @@ def _make_experiment(
     mlflow_tracking: bool = False,
 ) -> ABExperiment:
     control = Variant("control", lambda: "c", traffic_pct=0.5, description="baseline")
-    treatment = Variant("treatment", lambda: "t", traffic_pct=traffic_treatment, description="candidate")
+    treatment = Variant(
+        "treatment", lambda: "t", traffic_pct=traffic_treatment, description="candidate"
+    )
     return ABExperiment(
         experiment_id=str(uuid.uuid4()),
         control=control,
@@ -57,9 +60,9 @@ class TestAssignVariant:
         total = sum(counts.values())
         for name, count in counts.items():
             ratio = count / total
-            assert abs(ratio - 0.5) < 0.05, (
-                f"Variant '{name}' got {ratio:.2%} traffic, expected ~50%"
-            )
+            assert (
+                abs(ratio - 0.5) < 0.05
+            ), f"Variant '{name}' got {ratio:.2%} traffic, expected ~50%"
 
     def test_non_uuid_user_id_does_not_crash(self) -> None:
         exp = _make_experiment()

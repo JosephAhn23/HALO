@@ -13,7 +13,6 @@ diagnostic-level comparison against that reference.
 """
 
 import math
-from typing import Dict, Tuple
 
 import torch
 
@@ -46,7 +45,7 @@ class BatchedB0Schedule:
         self.cum_at_node = torch.cat([zero, torch.cumsum(seg_contrib, dim=0)])
         self.n_rates = self.rates.shape[0]
 
-    def __call__(self, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         idx = torch.searchsorted(self.t_nodes, t.contiguous(), right=True) - 1
         idx = idx.clamp(0, self.n_rates - 1)
         t0 = self.t_nodes[idx]
@@ -75,7 +74,7 @@ class BatchedAlphaSchedule:
         self.slopes = (self.alpha_vals[1:] - self.alpha_vals[:-1]) / seg_len
         self.n_slopes = self.slopes.shape[0]
 
-    def __call__(self, t: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, t: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         idx = torch.searchsorted(self.t_nodes, t.contiguous(), right=True) - 1
         idx = idx.clamp(0, self.n_slopes - 1)
         t0 = self.t_nodes[idx]
@@ -99,7 +98,7 @@ def fields_batched(
     alpha_schedule: BatchedAlphaSchedule,
     field_scale: float = 1.0,
     length_scale: float = 1.0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Axisymmetric divergence-free B field + Faraday-induced E field. x: (..., 3)."""
     b0, dB0dt_val = b0_schedule(t)
     alpha, dalphadt_val = alpha_schedule(t)
@@ -135,10 +134,10 @@ def spin_omega_batched(t, x, v, q, m, c, a, eta, L_base, b0_schedule, alpha_sche
     term1 = (a + 1.0 / g).unsqueeze(-1) * B
     term2 = (a * g / (g + 1.0) * vB / (c * c)).unsqueeze(-1) * v
     term3 = (a + 1.0 / (g + 1.0)).unsqueeze(-1) * torch.cross(v, E, dim=-1) / (c * c)
-    term4 = 0.5 * eta * (
-        E / c
-        + torch.cross(v, B, dim=-1) / c
-        - (g / (g + 1.0) * vE / (c ** 3)).unsqueeze(-1) * v
+    term4 = (
+        0.5
+        * eta
+        * (E / c + torch.cross(v, B, dim=-1) / c - (g / (g + 1.0) * vE / (c**3)).unsqueeze(-1) * v)
     )
     return -(q / m) * (term1 - term2 - term3 + term4)
 
@@ -149,7 +148,7 @@ def spin_omega_eta_batched(t, x, v, q, m, c, L_base, b0_schedule, alpha_schedule
     E, B = fields_batched(t, x, L_base, b0_schedule, alpha_schedule)
     vE = (v * E).sum(-1)
     return -(q / (2.0 * m)) * (
-        E / c + torch.cross(v, B, dim=-1) / c - (g / (g + 1.0) * vE / (c ** 3)).unsqueeze(-1) * v
+        E / c + torch.cross(v, B, dim=-1) / c - (g / (g + 1.0) * vE / (c**3)).unsqueeze(-1) * v
     )
 
 
@@ -167,7 +166,9 @@ def translation_rhs_batched(
     return torch.cat([g.unsqueeze(-1), proper_v, dv], dim=-1)
 
 
-def rhs_batched(y, q, m, c, a, eta, L_base, sensitivity_eps, shape_eps, b0_schedule, alpha_schedule):
+def rhs_batched(
+    y, q, m, c, a, eta, L_base, sensitivity_eps, shape_eps, b0_schedule, alpha_schedule
+):
     """Full 44-state RHS: orbit + spin + first/second-order variational sensitivities.
 
     y: (batch, 44) -> (batch, 44). Column layout matches the reference exactly:
@@ -205,8 +206,12 @@ def rhs_batched(y, q, m, c, a, eta, L_base, sensitivity_eps, shape_eps, b0_sched
     minus = orbit - h * orbit_b0 + 0.5 * h * h * orbit_b02
 
     f0 = translation_rhs_batched(orbit, q, m, c, L_base, b0_schedule, alpha_schedule)
-    fp = translation_rhs_batched(plus, q, m, c, L_base, b0_schedule, alpha_schedule, field_scale=math.exp(h))
-    fm = translation_rhs_batched(minus, q, m, c, L_base, b0_schedule, alpha_schedule, field_scale=math.exp(-h))
+    fp = translation_rhs_batched(
+        plus, q, m, c, L_base, b0_schedule, alpha_schedule, field_scale=math.exp(h)
+    )
+    fm = translation_rhs_batched(
+        minus, q, m, c, L_base, b0_schedule, alpha_schedule, field_scale=math.exp(-h)
+    )
 
     k = shape_eps
     frp = translation_rhs_batched(
@@ -227,8 +232,15 @@ def rhs_batched(y, q, m, c, a, eta, L_base, sensitivity_eps, shape_eps, b0_sched
                 + 0.5 * h * h * orbit_b02
             )
             corners[sb, sl] = translation_rhs_batched(
-                corner, q, m, c, L_base, b0_schedule, alpha_schedule,
-                field_scale=math.exp(sb * h), length_scale=math.exp(sl * k),
+                corner,
+                q,
+                m,
+                c,
+                L_base,
+                b0_schedule,
+                alpha_schedule,
+                field_scale=math.exp(sb * h),
+                length_scale=math.exp(sl * k),
             )
 
     d_spin = g.unsqueeze(-1) * torch.cross(omega, spin_vec, dim=-1)
@@ -267,10 +279,10 @@ def integrate_batch(
     x0: torch.Tensor,
     v0: torch.Tensor,
     spin0: torch.Tensor,
-    params: Dict,
+    params: dict,
     device,
     dtype=torch.float64,
-) -> Dict[str, torch.Tensor]:
+) -> dict[str, torch.Tensor]:
     """Integrate a whole batch of trajectories with one RK4 tensor op per stage.
 
     Args:

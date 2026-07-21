@@ -1,17 +1,18 @@
 """Tests for cross-provider truth committee consensus (no live API calls)."""
+
 from __future__ import annotations
 
 import concurrent.futures
 
 import pytest
 
+from src.agents.multi_agent.base_agent import AgentStatus
 from src.agents.multi_agent.cross_provider_consensus import (
     CrossProviderConsensusNode,
     LLMProvider,
     ProviderAnswer,
     text_agreement_score,
 )
-from src.agents.multi_agent.base_agent import AgentStatus
 
 
 class _StubProvider(LLMProvider):

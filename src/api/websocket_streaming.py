@@ -2,12 +2,14 @@
 WebSocket streaming inference - real-time token-by-token output.
 Covers: WebSockets, real-time applications
 """
+
 import asyncio
 import json
 import os
 import time
 import uuid
-from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from openai import AsyncOpenAI
@@ -18,7 +20,7 @@ router = APIRouter()
 
 # Lazy-initialized so that missing OPENAI_API_KEY at import time does not
 # crash the entire FastAPI app during test collection or Docker build.
-_openai_client: Optional[AsyncOpenAI] = None
+_openai_client: AsyncOpenAI | None = None
 
 
 def _get_openai_client() -> AsyncOpenAI:
@@ -32,7 +34,7 @@ class ConnectionManager:
     """Manages active WebSocket connections."""
 
     def __init__(self):
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: dict[str, WebSocket] = {}
         self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket) -> str:
@@ -55,7 +57,9 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-async def prepare_rag_stream_context(query: str) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, str]]]:
+async def prepare_rag_stream_context(
+    query: str,
+) -> tuple[str, list[dict[str, Any]], list[dict[str, str]]]:
     """
     Retrieve + rerank + Chain-of-Thought scaffold for glass-box WebSocket clients.
 
@@ -215,7 +219,7 @@ async def websocket_query(websocket: WebSocket):
             except Exception as e:
                 await manager.send(conn_id, {"type": "error", "message": str(e)})
 
-    except (WebSocketDisconnect, asyncio.TimeoutError):
+    except (TimeoutError, WebSocketDisconnect):
         await manager.disconnect(conn_id)
 
 

@@ -15,9 +15,10 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC
 from pathlib import Path
-from typing import Any, Callable
 
 import pandas as pd
 
@@ -28,8 +29,8 @@ logger = logging.getLogger(__name__)
 class FeatureDefinition:
     name: str
     description: str
-    dtype: str                       # "float", "int", "str", "embedding"
-    transform_fn: Callable           # raw_df -> Series or ndarray
+    dtype: str  # "float", "int", "str", "embedding"
+    transform_fn: Callable  # raw_df -> Series or ndarray
     dependencies: list[str] = field(default_factory=list)
     version: str = "v1.0"
     tags: list[str] = field(default_factory=list)
@@ -47,14 +48,15 @@ class FeatureSnapshot:
     content_hash: str
 
     @classmethod
-    def create(cls, name: str, version: str, data: pd.Series) -> "FeatureSnapshot":
-        from datetime import datetime, timezone
+    def create(cls, name: str, version: str, data: pd.Series) -> FeatureSnapshot:
+        from datetime import datetime
+
         h = hashlib.sha256(data.to_json().encode()).hexdigest()
         return cls(
             feature_name=name,
             version=version,
             data=data,
-            computed_at=datetime.now(timezone.utc).isoformat(),
+            computed_at=datetime.now(UTC).isoformat(),
             content_hash=h,
         )
 
@@ -114,8 +116,7 @@ class FeatureStore:
     ) -> dict[str, FeatureSnapshot]:
         """Compute all registered features (optionally filtered by tag)."""
         to_compute = [
-            f for f in self._registry.values()
-            if tags is None or any(t in f.tags for t in tags)
+            f for f in self._registry.values() if tags is None or any(t in f.tags for t in tags)
         ]
         snapshots = {}
         for feat in self._resolve_dependency_order(to_compute):
@@ -151,9 +152,7 @@ class FeatureStore:
                 for name, snap in snapshots.items()
             ],
         }
-        (self.root_dir / f"{split}_features.meta.json").write_text(
-            json.dumps(meta, indent=2)
-        )
+        (self.root_dir / f"{split}_features.meta.json").write_text(json.dumps(meta, indent=2))
         logger.info("Materialized %d features -> %s", len(df.columns), out_path)
         return out_path
 
@@ -170,17 +169,19 @@ class FeatureStore:
 
     def catalog(self) -> pd.DataFrame:
         """Return a DataFrame describing all registered features."""
-        return pd.DataFrame([
-            {
-                "name": f.name,
-                "description": f.description,
-                "dtype": f.dtype,
-                "version": f.version,
-                "tags": ", ".join(f.tags),
-                "dependencies": ", ".join(f.dependencies),
-            }
-            for f in self._registry.values()
-        ])
+        return pd.DataFrame(
+            [
+                {
+                    "name": f.name,
+                    "description": f.description,
+                    "dtype": f.dtype,
+                    "version": f.version,
+                    "tags": ", ".join(f.tags),
+                    "dependencies": ", ".join(f.dependencies),
+                }
+                for f in self._registry.values()
+            ]
+        )
 
     # ------------------------------------------------------------------
     # Internal

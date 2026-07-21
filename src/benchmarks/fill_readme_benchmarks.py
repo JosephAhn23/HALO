@@ -15,6 +15,7 @@ Usage:
     # Skip specific suites
     python benchmarks/fill_readme_benchmarks.py --skip-vllm
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,7 +29,6 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 try:
     import httpx
@@ -93,10 +93,10 @@ class QpsResult:
 @dataclass
 class VllmResult:
     model: str
-    fp16_tokens_per_sec: Optional[float] = None
-    int4_awq_tokens_per_sec: Optional[float] = None
-    concurrent_qps: Optional[float] = None
-    mean_ttft_ms: Optional[float] = None
+    fp16_tokens_per_sec: float | None = None
+    int4_awq_tokens_per_sec: float | None = None
+    concurrent_qps: float | None = None
+    mean_ttft_ms: float | None = None
     note: str = ""
 
     def summary(self) -> str:
@@ -129,17 +129,15 @@ class RagasResult:
 
 @dataclass
 class BenchmarkReport:
-    timestamp: str = field(
-        default_factory=lambda: datetime.now().isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
     mock_mode: bool = False
     api_base_url: str = "http://localhost:8000"
 
-    realtime_latency: Optional[LatencyResult] = None
-    realtime_qps: Optional[QpsResult] = None
-    batch_qps: Optional[QpsResult] = None
-    vllm: Optional[VllmResult] = None
-    ragas: Optional[RagasResult] = None
+    realtime_latency: LatencyResult | None = None
+    realtime_qps: QpsResult | None = None
+    batch_qps: QpsResult | None = None
+    vllm: VllmResult | None = None
+    ragas: RagasResult | None = None
 
     errors: list = field(default_factory=list)
 
@@ -220,9 +218,7 @@ def run_latency_suite(
     latencies.sort()
     n = len(latencies)
     if n == 0:
-        raise RuntimeError(
-            f"All {errors} requests failed -- is the stack running?"
-        )
+        raise RuntimeError(f"All {errors} requests failed -- is the stack running?")
 
     return LatencyResult(
         p50_ms=round(statistics.median(latencies), 2),
@@ -259,8 +255,7 @@ def run_qps_suite(
             }
 
     print(
-        f"  -> QPS suite: {concurrency} concurrent workers x "
-        f"{duration_sec}s on {endpoint}..."
+        f"  -> QPS suite: {concurrency} concurrent workers x " f"{duration_sec}s on {endpoint}..."
     )
 
     if mock:
@@ -291,9 +286,7 @@ def run_qps_suite(
                 request_counter[0] += 1
                 start = time.perf_counter()
                 try:
-                    resp = client.post(
-                        f"{base_url}{endpoint}", json=payload_fn(i)
-                    )
+                    resp = client.post(f"{base_url}{endpoint}", json=payload_fn(i))
                     resp.raise_for_status()
                     completed.append(time.perf_counter() - start)
                 except Exception as e:
@@ -348,9 +341,7 @@ def run_vllm_suite(
         return VllmResult(
             model=model,
             fp16_tokens_per_sec=round(1580 + random.uniform(-80, 120), 0),
-            int4_awq_tokens_per_sec=round(
-                3240 + random.uniform(-100, 200), 0
-            ),
+            int4_awq_tokens_per_sec=round(3240 + random.uniform(-100, 200), 0),
             concurrent_qps=round(12.4 + random.uniform(-1, 2), 1),
             mean_ttft_ms=round(38 + random.uniform(-5, 10), 1),
             note="mock values",
@@ -359,9 +350,7 @@ def run_vllm_suite(
     if not HAS_HTTPX:
         raise RuntimeError("pip install httpx")
 
-    prompts = [
-        SAMPLE_QUERIES[i % len(SAMPLE_QUERIES)] for i in range(num_prompts)
-    ]
+    prompts = [SAMPLE_QUERIES[i % len(SAMPLE_QUERIES)] for i in range(num_prompts)]
 
     def _bench_one_config(
         extra_params: dict,
@@ -507,12 +496,8 @@ def run_ragas_suite(
     if mock:
         return RagasResult(
             faithfulness=round(0.847 + random.uniform(-0.03, 0.03), 3),
-            answer_relevancy=round(
-                0.812 + random.uniform(-0.03, 0.03), 3
-            ),
-            context_precision=round(
-                0.789 + random.uniform(-0.03, 0.03), 3
-            ),
+            answer_relevancy=round(0.812 + random.uniform(-0.03, 0.03), 3),
+            context_precision=round(0.789 + random.uniform(-0.03, 0.03), 3),
             context_recall=round(0.801 + random.uniform(-0.03, 0.03), 3),
             n_examples=n_examples,
         )
@@ -547,9 +532,7 @@ def run_ragas_suite(
                 data = resp.json()
                 questions.append(pair["question"])
                 answers.append(data.get("answer", ""))
-                contexts.append(
-                    data.get("contexts", [data.get("answer", "")])
-                )
+                contexts.append(data.get("contexts", [data.get("answer", "")]))
                 ground_truths.append(pair["ground_truth"])
             except Exception as e:
                 print(f"    x RAGAS query failed: {e}")
@@ -557,12 +540,14 @@ def run_ragas_suite(
     if not questions:
         raise RuntimeError("All RAGAS queries failed")
 
-    ds = Dataset.from_dict({
-        "question": questions,
-        "answer": answers,
-        "contexts": contexts,
-        "ground_truth": ground_truths,
-    })
+    ds = Dataset.from_dict(
+        {
+            "question": questions,
+            "answer": answers,
+            "contexts": contexts,
+            "ground_truth": ground_truths,
+        }
+    )
 
     result = ragas_evaluate(
         ds,
@@ -600,11 +585,7 @@ def update_readme(report: BenchmarkReport, readme_path: str = "README.md"):
 
     def replace_tbd(metric_name: str, value: str):
         nonlocal content
-        pattern = (
-            rf"(\|\s*{re.escape(metric_name)}\s*\|\s*)"
-            rf"`?TBD[^|`]*`?"
-            rf"(\s*\|)"
-        )
+        pattern = rf"(\|\s*{re.escape(metric_name)}\s*\|\s*)" rf"`?TBD[^|`]*`?" rf"(\s*\|)"
         replacement = rf"\1`{value}`\2"
         content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
 
@@ -623,18 +604,14 @@ def update_readme(report: BenchmarkReport, readme_path: str = "README.md"):
     if report.vllm:
         v = report.vllm
         if v.fp16_tokens_per_sec:
-            replace_tbd(
-                "vLLM fp16 tokens/sec", f"{v.fp16_tokens_per_sec:.0f}"
-            )
+            replace_tbd("vLLM fp16 tokens/sec", f"{v.fp16_tokens_per_sec:.0f}")
         if v.int4_awq_tokens_per_sec:
             replace_tbd(
                 "vLLM int4-AWQ tokens/sec",
                 f"{v.int4_awq_tokens_per_sec:.0f}",
             )
         if v.concurrent_qps:
-            replace_tbd(
-                "vLLM concurrent QPS (10 users)", f"{v.concurrent_qps}"
-            )
+            replace_tbd("vLLM concurrent QPS (10 users)", f"{v.concurrent_qps}")
 
     if report.ragas:
         r = report.ragas
@@ -661,21 +638,21 @@ def log_to_mlflow(report: BenchmarkReport):
         return
 
     mlflow.set_experiment("benchmark-suite")
-    with mlflow.start_run(
-        run_name=f"benchmarks-{report.timestamp[:10]}"
-    ):
+    with mlflow.start_run(run_name=f"benchmarks-{report.timestamp[:10]}"):
         mlflow.log_param("mock_mode", report.mock_mode)
         mlflow.log_param("api_base_url", report.api_base_url)
 
         if report.realtime_latency:
             r = report.realtime_latency
-            mlflow.log_metrics({
-                "latency_p50_ms": r.p50_ms,
-                "latency_p90_ms": r.p90_ms,
-                "latency_p99_ms": r.p99_ms,
-                "latency_mean_ms": r.mean_ms,
-                "latency_error_rate": r.errors / r.n_requests,
-            })
+            mlflow.log_metrics(
+                {
+                    "latency_p50_ms": r.p50_ms,
+                    "latency_p90_ms": r.p90_ms,
+                    "latency_p99_ms": r.p99_ms,
+                    "latency_mean_ms": r.mean_ms,
+                    "latency_error_rate": r.errors / r.n_requests,
+                }
+            )
 
         if report.realtime_qps:
             mlflow.log_metric("realtime_qps", report.realtime_qps.qps)
@@ -686,13 +663,9 @@ def log_to_mlflow(report: BenchmarkReport):
         if report.vllm:
             v = report.vllm
             if v.fp16_tokens_per_sec:
-                mlflow.log_metric(
-                    "vllm_fp16_tokens_per_sec", v.fp16_tokens_per_sec
-                )
+                mlflow.log_metric("vllm_fp16_tokens_per_sec", v.fp16_tokens_per_sec)
             if v.int4_awq_tokens_per_sec:
-                mlflow.log_metric(
-                    "vllm_awq_tokens_per_sec", v.int4_awq_tokens_per_sec
-                )
+                mlflow.log_metric("vllm_awq_tokens_per_sec", v.int4_awq_tokens_per_sec)
             if v.concurrent_qps:
                 mlflow.log_metric("vllm_concurrent_qps", v.concurrent_qps)
             if v.mean_ttft_ms:
@@ -700,12 +673,14 @@ def log_to_mlflow(report: BenchmarkReport):
 
         if report.ragas:
             r = report.ragas
-            mlflow.log_metrics({
-                "ragas_faithfulness": r.faithfulness,
-                "ragas_answer_relevancy": r.answer_relevancy,
-                "ragas_context_precision": r.context_precision,
-                "ragas_context_recall": r.context_recall,
-            })
+            mlflow.log_metrics(
+                {
+                    "ragas_faithfulness": r.faithfulness,
+                    "ragas_answer_relevancy": r.answer_relevancy,
+                    "ragas_context_precision": r.context_precision,
+                    "ragas_context_recall": r.context_recall,
+                }
+            )
 
         report_path = Path("benchmarks/last_run.json")
         report_path.parent.mkdir(exist_ok=True)
@@ -726,9 +701,7 @@ def print_report(report: BenchmarkReport):
     print("=" * 60)
 
     if report.realtime_latency:
-        print(
-            f"\n  API Latency:        {report.realtime_latency.summary()}"
-        )
+        print(f"\n  API Latency:        {report.realtime_latency.summary()}")
     if report.realtime_qps:
         print(f"  Realtime QPS:       {report.realtime_qps.summary()}")
     if report.batch_qps:
@@ -743,17 +716,12 @@ def print_report(report: BenchmarkReport):
     if not report.mock_mode:
         print("\n  README table updated +")
     else:
-        print(
-            "\n  Mock mode -- README NOT updated "
-            "(use real run to fill README)"
-        )
+        print("\n  Mock mode -- README NOT updated " "(use real run to fill README)")
     print("=" * 60 + "\n")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Fill LLMOps README benchmark table"
-    )
+    parser = argparse.ArgumentParser(description="Fill LLMOps README benchmark table")
     parser.add_argument(
         "--mock",
         action="store_true",
@@ -761,9 +729,7 @@ def main():
     )
     parser.add_argument("--api-url", default="http://localhost:8000")
     parser.add_argument("--vllm-url", default="http://localhost:8001")
-    parser.add_argument(
-        "--model", default="meta-llama/Llama-3.1-8B-Instruct"
-    )
+    parser.add_argument("--model", default="meta-llama/Llama-3.1-8B-Instruct")
     parser.add_argument("--skip-vllm", action="store_true")
     parser.add_argument("--skip-ragas", action="store_true")
     parser.add_argument("--skip-qps", action="store_true")
@@ -829,10 +795,7 @@ def main():
                 args.api_url,
                 endpoint="/batch",
                 payload_fn=lambda i: {
-                    "queries": [
-                        SAMPLE_QUERIES[j % len(SAMPLE_QUERIES)]
-                        for j in range(i, i + 5)
-                    ],
+                    "queries": [SAMPLE_QUERIES[j % len(SAMPLE_QUERIES)] for j in range(i, i + 5)],
                     "top_k": 5,
                 },
                 concurrency=10,
@@ -871,9 +834,7 @@ def main():
     if not args.skip_ragas:
         try:
             print("[5/5] RAGAS Evaluation Suite")
-            report.ragas = run_ragas_suite(
-                args.api_url, n_examples=8, mock=args.mock
-            )
+            report.ragas = run_ragas_suite(args.api_url, n_examples=8, mock=args.mock)
             print(f"      + {report.ragas.summary()}")
         except Exception as e:
             msg = f"RAGAS suite failed: {e}"
@@ -888,10 +849,7 @@ def main():
     if not args.mock:
         update_readme(report, readme_path=args.readme)
     else:
-        print(
-            "  i  Mock mode: README not updated. "
-            "Run without --mock on live stack.\n"
-        )
+        print("  i  Mock mode: README not updated. " "Run without --mock on live stack.\n")
 
     if not args.no_mlflow:
         try:

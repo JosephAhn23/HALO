@@ -3,10 +3,10 @@ Real diffusion conditioning - textual inversion + cross-attention manipulation.
 Retrieved context guides image generation via learned embeddings.
 Covers: Diffusion conditioning (real, not string concat)
 """
+
 import hashlib
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 import mlflow
 import numpy as np
@@ -34,8 +34,8 @@ class TextualInversionTrainer:
         placeholder_token: str = "<retrieved-concept>",
         n_train_steps: int = 500,
         lr: float = 5e-4,
-        text_encoder: Optional[CLIPTextModel] = None,
-        tokenizer: Optional[CLIPTokenizer] = None,
+        text_encoder: CLIPTextModel | None = None,
+        tokenizer: CLIPTokenizer | None = None,
     ):
         self.model_id = model_id
         self.placeholder_token = placeholder_token
@@ -44,24 +44,26 @@ class TextualInversionTrainer:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         self.tokenizer = tokenizer or CLIPTokenizer.from_pretrained(model_id, subfolder="tokenizer")
-        self.text_encoder = (text_encoder or CLIPTextModel.from_pretrained(model_id, subfolder="text_encoder")).to(
-            self.device
-        )
+        self.text_encoder = (
+            text_encoder or CLIPTextModel.from_pretrained(model_id, subfolder="text_encoder")
+        ).to(self.device)
 
         self.tokenizer.add_tokens([placeholder_token])
         self.placeholder_token_id = self.tokenizer.convert_tokens_to_ids(placeholder_token)
         self.text_encoder.resize_token_embeddings(len(self.tokenizer))
 
         token_embeds = self.text_encoder.get_input_embeddings().weight.data
-        init_token_ids = self.tokenizer.encode("knowledge document context", add_special_tokens=False)
+        init_token_ids = self.tokenizer.encode(
+            "knowledge document context", add_special_tokens=False
+        )
         init_embedding = token_embeds[init_token_ids].mean(0)
         token_embeds[self.placeholder_token_id] = init_embedding
 
     def train_on_retrieved_context(
         self,
-        retrieved_chunks: List[Dict],
-        training_images: Optional[List[Image.Image]] = None,  # reserved for future supervised variant
-    ) -> Dict:
+        retrieved_chunks: list[dict],
+        training_images: list[Image.Image] | None = None,  # reserved for future supervised variant
+    ) -> dict:
         _ = training_images
         self.text_encoder.train()
         for param in self.text_encoder.parameters():
@@ -103,7 +105,9 @@ class TextualInversionTrainer:
                 outputs = self.text_encoder(**inputs)
                 text_embeddings = outputs.last_hidden_state
 
-                token_positions = (inputs.input_ids == self.placeholder_token_id).nonzero(as_tuple=False)
+                token_positions = (inputs.input_ids == self.placeholder_token_id).nonzero(
+                    as_tuple=False
+                )
                 if token_positions.numel() == 0:
                     continue
                 concept_pos = int(token_positions[0, 1].item())
@@ -138,7 +142,12 @@ class TextualInversionTrainer:
 
     def save_learned_embedding(self, path: str = "models/textual_inversion"):
         Path(path).mkdir(parents=True, exist_ok=True)
-        learned_embedding = self.text_encoder.get_input_embeddings().weight[self.placeholder_token_id].detach().cpu()
+        learned_embedding = (
+            self.text_encoder.get_input_embeddings()
+            .weight[self.placeholder_token_id]
+            .detach()
+            .cpu()
+        )
         torch.save(
             {
                 "placeholder_token": self.placeholder_token,
@@ -150,7 +159,9 @@ class TextualInversionTrainer:
 
     def load_learned_embedding(self, path: str = "models/textual_inversion"):
         data = torch.load(f"{path}/concept_embedding.pt", map_location=self.device)
-        self.text_encoder.get_input_embeddings().weight.data[data["token_id"]] = data["embedding"].to(self.device)
+        self.text_encoder.get_input_embeddings().weight.data[data["token_id"]] = data[
+            "embedding"
+        ].to(self.device)
 
 
 class CrossAttentionRAGConditioner:
@@ -160,7 +171,7 @@ class CrossAttentionRAGConditioner:
 
     def __init__(self, pipe: StableDiffusionPipeline):
         self.pipe = pipe
-        self.attention_maps: Dict[str, torch.Tensor] = {}
+        self.attention_maps: dict[str, torch.Tensor] = {}
         self._register_hooks()
 
     def _register_hooks(self):
@@ -175,7 +186,9 @@ class CrossAttentionRAGConditioner:
             if "attn2" in name and hasattr(module, "to_q"):
                 module.register_forward_hook(make_hook(name))
 
-    def get_token_attention_maps(self, prompt: str, token_idx: int, image_size: int = 512) -> np.ndarray:
+    def get_token_attention_maps(
+        self, prompt: str, token_idx: int, image_size: int = 512
+    ) -> np.ndarray:
         generator = torch.Generator(self.pipe.device).manual_seed(42)
         _ = self.pipe(prompt, num_inference_steps=10, generator=generator, guidance_scale=7.5)
 
@@ -203,11 +216,11 @@ class CrossAttentionRAGConditioner:
     def generate_with_attention_guidance(
         self,
         query: str,
-        retrieved_chunks: List[Dict],
+        retrieved_chunks: list[dict],
         trainer: TextualInversionTrainer,
         n_steps: int = 20,
         guidance_scale: float = 7.5,
-    ) -> Dict:
+    ) -> dict:
         _ = retrieved_chunks
         concept_token = trainer.placeholder_token
         grounded_prompt = f"a detailed image of {concept_token}, {query}, high quality"
@@ -224,7 +237,11 @@ class CrossAttentionRAGConditioner:
         latency = time.perf_counter() - start
 
         tokens = trainer.tokenizer.encode(grounded_prompt)
-        concept_idx = tokens.index(trainer.placeholder_token_id) if trainer.placeholder_token_id in tokens else 1
+        concept_idx = (
+            tokens.index(trainer.placeholder_token_id)
+            if trainer.placeholder_token_id in tokens
+            else 1
+        )
         attention_map = self.get_token_attention_maps(grounded_prompt, concept_idx)
 
         ts = int(time.time())
@@ -273,10 +290,14 @@ class RAGConditionedDiffusion:
             tokenizer=self.pipe.tokenizer,
         )
         self.conditioner = CrossAttentionRAGConditioner(self.pipe)
-        self._concept_cache: Dict[str, str] = {}
+        self._concept_cache: dict[str, str] = {}
 
-    def generate(self, query: str, retrieved_chunks: List[Dict], force_retrain: bool = False) -> Dict:
-        context_hash = hashlib.md5("".join(c["text"][:50] for c in retrieved_chunks).encode()).hexdigest()[:8]
+    def generate(
+        self, query: str, retrieved_chunks: list[dict], force_retrain: bool = False
+    ) -> dict:
+        context_hash = hashlib.md5(
+            "".join(c["text"][:50] for c in retrieved_chunks).encode()
+        ).hexdigest()[:8]
 
         if context_hash not in self._concept_cache or force_retrain:
             train_result = self.trainer.train_on_retrieved_context(retrieved_chunks)

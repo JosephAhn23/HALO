@@ -2,11 +2,11 @@
 
 import json
 import logging
-import tempfile
-from pathlib import Path
-from typing import Dict, Any, Optional
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class FleetReconciler:
     """Wrapper around the dynamo fleet timer reconciler."""
 
-    def __init__(self, reconcile_script_path: Optional[str] = None):
+    def __init__(self, reconcile_script_path: str | None = None):
         """
         Initialize the reconciler.
 
@@ -25,14 +25,15 @@ class FleetReconciler:
             # Use the bundled dynamo reconciler (repo root, two levels up from src/scheduling/)
             base = Path(__file__).parent.parent.parent
             reconcile_script_path = str(
-                base / "dynamo-8b56404-systems-infrastructure-and-operations/task/solution/reconcile.py"
+                base
+                / "dynamo-8b56404-systems-infrastructure-and-operations/task/solution/reconcile.py"
             )
 
         self.reconcile_script = Path(reconcile_script_path)
         if not self.reconcile_script.exists():
             raise FileNotFoundError(f"Reconcile script not found: {reconcile_script_path}")
 
-    def reconcile(self, fleet_config: Dict[str, Any]) -> Dict[str, Any]:
+    def reconcile(self, fleet_config: dict[str, Any]) -> dict[str, Any]:
         """
         Run the fleet reconciler on a config.
 
@@ -86,8 +87,8 @@ def parse_fleet_config(
     jobs: list,
     window_start: str,
     window_end: str,
-    failed_attempts: Optional[list] = None,
-) -> Dict[str, Any]:
+    failed_attempts: list | None = None,
+) -> dict[str, Any]:
     """
     Build a fleet config dict for the reconciler.
 

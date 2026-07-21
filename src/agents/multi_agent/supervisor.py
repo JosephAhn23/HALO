@@ -20,6 +20,7 @@ OpenTelemetry tracing:
   - Span attributes: agent_name, task_id, latency_ms, confidence
   - Falls back gracefully if opentelemetry not installed
 """
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -27,8 +28,9 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from src.agents.multi_agent.base_agent import AgentResult, AgentStatus, AgentTask, TaskPriority
 from src.agents.multi_agent.consensus import (
@@ -39,7 +41,7 @@ from src.agents.multi_agent.consensus import (
     select_consensus_strategy,
 )
 from src.agents.multi_agent.critic_agent import CriticAgent
-from src.agents.multi_agent.failure_handling import CircuitBreaker, GracefulDegradation, RetryPolicy
+from src.agents.multi_agent.failure_handling import CircuitBreaker, RetryPolicy
 from src.agents.multi_agent.memory import WorkingMemory
 from src.agents.multi_agent.research_agent import ResearchAgent
 from src.agents.multi_agent.routing import ComplexityRouter, RoutingDecision
@@ -48,8 +50,15 @@ from src.agents.multi_agent.verifier_agent import VerifierAgent
 logger = logging.getLogger(__name__)
 
 SAFETY_KEYWORDS = [
-    "harm", "illegal", "weapon", "violence", "exploit", "jailbreak",
-    "bypass", "ignore instructions", "override safety",
+    "harm",
+    "illegal",
+    "weapon",
+    "violence",
+    "exploit",
+    "jailbreak",
+    "bypass",
+    "ignore instructions",
+    "override safety",
 ]
 
 
@@ -62,23 +71,23 @@ class HITLRequest:
     confidence: float
     timestamp: float = field(default_factory=time.time)
     resolved: bool = False
-    resolution: Optional[str] = None
+    resolution: str | None = None
 
 
 @dataclass
 class PipelineTrace:
     session_id: str
     query: str
-    routing_decision: Optional[RoutingDecision]
-    agent_results: List[AgentResult]
-    consensus: Optional[ConsensusResult]
+    routing_decision: RoutingDecision | None
+    agent_results: list[AgentResult]
+    consensus: ConsensusResult | None
     final_answer: str
     total_latency_ms: float
     iterations: int
     hitl_triggered: bool = False
-    hitl_request: Optional[HITLRequest] = None
+    hitl_request: HITLRequest | None = None
 
-    def to_log_dict(self) -> Dict[str, Any]:
+    def to_log_dict(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
             "total_latency_ms": round(self.total_latency_ms, 1),
@@ -89,18 +98,20 @@ class PipelineTrace:
         }
 
 
-def _try_otel_span(name: str, attributes: Dict[str, Any]):
+def _try_otel_span(name: str, attributes: dict[str, Any]):
     """OpenTelemetry span context manager. No-op if not installed."""
     try:
         from opentelemetry import trace
+
         tracer = trace.get_tracer("llmops.multi_agent")
         return tracer.start_as_current_span(name, attributes=attributes)
     except ImportError:
         from contextlib import nullcontext
+
         return nullcontext()
 
 
-def _maybe_langsmith_traceable(fn: Callable[..., "PipelineTrace"]) -> Callable[..., "PipelineTrace"]:
+def _maybe_langsmith_traceable(fn: Callable[..., PipelineTrace]) -> Callable[..., PipelineTrace]:
     """
     Conditionally wrap a callable with LangSmith tracing.
 
@@ -137,7 +148,7 @@ class Supervisor:
         quality_threshold: float = 0.78,
         max_iterations: int = 3,
         hitl_threshold: float = 0.55,
-        hitl_callback: Optional[Callable[[HITLRequest], None]] = None,
+        hitl_callback: Callable[[HITLRequest], None] | None = None,
         max_workers: int = 4,
     ):
         self.quality_threshold = quality_threshold
@@ -155,14 +166,12 @@ class Supervisor:
             "critic": self.critic,
             "verifier": self.verifier,
         }
-        self._circuit_breakers = {
-            name: CircuitBreaker(name) for name in self._agents
-        }
+        self._circuit_breakers = {name: CircuitBreaker(name) for name in self._agents}
         self._retry = RetryPolicy()
         self._router = ComplexityRouter()
-        self._hitl_queue: List[HITLRequest] = []
+        self._hitl_queue: list[HITLRequest] = []
 
-    def run(self, query: str, session_id: Optional[str] = None) -> PipelineTrace:
+    def run(self, query: str, session_id: str | None = None) -> PipelineTrace:
         session_id = session_id or str(uuid.uuid4())[:12]
         pipeline = _maybe_langsmith_traceable(self._run_pipeline)
         return pipeline(query=query, session_id=session_id)
@@ -183,11 +192,13 @@ class Supervisor:
             routing = self._router.route(task, list(self._agents.keys()))
             logger.info(
                 "Routing: session=%s strategy=%s agents=%s",
-                session_id, routing.strategy, routing.selected_agents,
+                session_id,
+                routing.strategy,
+                routing.selected_agents,
             )
 
-            all_results: List[AgentResult] = []
-            consensus: Optional[ConsensusResult] = None
+            all_results: list[AgentResult] = []
+            consensus: ConsensusResult | None = None
             iterations = 0
 
             for iteration in range(self.max_iterations):
@@ -207,7 +218,11 @@ class Supervisor:
 
                 if research_result.is_success():
                     memory.set("research_result", research_result.output, author="researcher")
-                    memory.set("retrieved_context", research_result.metadata.get("n_chunks", []), author="researcher")
+                    memory.set(
+                        "retrieved_context",
+                        research_result.metadata.get("n_chunks", []),
+                        author="researcher",
+                    )
 
                     critic_task = AgentTask(
                         query=query,
@@ -221,18 +236,23 @@ class Supervisor:
 
                     if critic_result.is_success():
                         score = critic_result.metadata.get("overall_score", 0.0)
-                        memory.set("critique", critic_result.metadata.get("issues", []), author="critic")
+                        memory.set(
+                            "critique", critic_result.metadata.get("issues", []), author="critic"
+                        )
 
                         if score >= self.quality_threshold:
                             logger.info(
                                 "Quality threshold reached: iteration=%d score=%.3f",
-                                iteration, score,
+                                iteration,
+                                score,
                             )
                             break
                         else:
                             logger.info(
                                 "Iteration %d: score=%.3f < %.3f, refining.",
-                                iteration, score, self.quality_threshold,
+                                iteration,
+                                score,
+                                self.quality_threshold,
                             )
 
             verifier_task = AgentTask(
@@ -245,7 +265,9 @@ class Supervisor:
             verifier_result = self._run_agent_safe("verifier", verifier_task)
             all_results.append(verifier_result)
 
-            research_results = [r for r in all_results if r.agent_name == "researcher" and r.is_success()]
+            research_results = [
+                r for r in all_results if r.agent_name == "researcher" and r.is_success()
+            ]
             if research_results:
                 strategy = select_consensus_strategy(research_results, complexity="medium")
                 consensus = self._apply_consensus(strategy, research_results)
@@ -261,13 +283,16 @@ class Supervisor:
 
             hitl_triggered = False
             hitl_request = None
-            if consensus.confidence < self.hitl_threshold or self._has_safety_trigger(consensus.final_output):
+            if consensus.confidence < self.hitl_threshold or self._has_safety_trigger(
+                consensus.final_output
+            ):
                 hitl_triggered = True
                 hitl_request = HITLRequest(
                     session_id=session_id,
                     task_id=task.task_id,
                     reason=(
-                        "Low confidence" if consensus.confidence < self.hitl_threshold
+                        "Low confidence"
+                        if consensus.confidence < self.hitl_threshold
                         else "Safety trigger detected"
                     ),
                     agent_output=consensus.final_output,
@@ -278,7 +303,9 @@ class Supervisor:
                     self.hitl_callback(hitl_request)
                 logger.warning(
                     "HITL triggered: session=%s reason=%s confidence=%.3f",
-                    session_id, hitl_request.reason, consensus.confidence,
+                    session_id,
+                    hitl_request.reason,
+                    consensus.confidence,
                 )
 
             memory.remember(
@@ -340,11 +367,10 @@ class Supervisor:
                     confidence=0.0,
                 )
 
-    def _run_parallel(self, agent_names: List[str], task: AgentTask) -> List[AgentResult]:
+    def _run_parallel(self, agent_names: list[str], task: AgentTask) -> list[AgentResult]:
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures = {
-                executor.submit(self._run_agent_safe, name, task): name
-                for name in agent_names
+                executor.submit(self._run_agent_safe, name, task): name for name in agent_names
             }
             results = []
             for future in concurrent.futures.as_completed(futures, timeout=task.timeout_seconds):
@@ -352,16 +378,18 @@ class Supervisor:
                     results.append(future.result())
                 except Exception as e:
                     name = futures[future]
-                    results.append(AgentResult(
-                        task_id=task.task_id,
-                        agent_name=name,
-                        status=AgentStatus.FAILED,
-                        error=str(e),
-                        confidence=0.0,
-                    ))
+                    results.append(
+                        AgentResult(
+                            task_id=task.task_id,
+                            agent_name=name,
+                            status=AgentStatus.FAILED,
+                            error=str(e),
+                            confidence=0.0,
+                        )
+                    )
         return results
 
-    def _apply_consensus(self, strategy: str, results: List[AgentResult]) -> ConsensusResult:
+    def _apply_consensus(self, strategy: str, results: list[AgentResult]) -> ConsensusResult:
         if strategy == "majority_vote":
             return MajorityVote().aggregate(results)
         elif strategy == "debate":
@@ -373,7 +401,7 @@ class Supervisor:
         text_lower = text.lower()
         return any(kw in text_lower for kw in SAFETY_KEYWORDS)
 
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         return {
             "agents": {name: agent.health().__dict__ for name, agent in self._agents.items()},
             "circuit_breakers": {name: cb.status() for name, cb in self._circuit_breakers.items()},

@@ -26,15 +26,16 @@ Usage:
 Run locally (CPU, no GPU needed):
     python inference/llamacpp_backend.py --eval --model <path-to.gguf>
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -44,14 +45,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Config
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class LlamaCppConfig:
     model_path: str = "models/model.gguf"
-    n_ctx: int = 4096           # context window
-    n_threads: int = 8          # CPU threads (0 = auto)
-    n_gpu_layers: int = 0       # layers to offload to GPU (0 = CPU only; -1 = all)
-    n_batch: int = 512          # prompt processing batch size
-    temperature: float = 0.0    # 0 = deterministic
+    n_ctx: int = 4096  # context window
+    n_threads: int = 8  # CPU threads (0 = auto)
+    n_gpu_layers: int = 0  # layers to offload to GPU (0 = CPU only; -1 = all)
+    n_batch: int = 512  # prompt processing batch size
+    temperature: float = 0.0  # 0 = deterministic
     top_p: float = 0.9
     top_k: int = 40
     repeat_penalty: float = 1.1
@@ -65,6 +67,7 @@ class LlamaCppConfig:
 # Generation result
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class GenerationResult:
     text: str
@@ -75,7 +78,7 @@ class GenerationResult:
     total_latency_ms: float
     tokens_per_second: float
     model_path: str
-    finish_reason: str          # "stop" | "length" | "error"
+    finish_reason: str  # "stop" | "length" | "error"
 
     def __str__(self) -> str:
         return (
@@ -90,6 +93,7 @@ class GenerationResult:
 # ──────────────────────────────────────────────────────────────────────────────
 # GGUF Model Manager
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class GGUFModelManager:
     """
@@ -116,6 +120,7 @@ class GGUFModelManager:
 
         logger.info("Downloading GGUF model: %s / %s", repo_id, filename)
         from huggingface_hub import hf_hub_download
+
         path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
@@ -124,7 +129,7 @@ class GGUFModelManager:
         logger.info("Downloaded to: %s", path)
         return path
 
-    def list_cached(self) -> List[str]:
+    def list_cached(self) -> list[str]:
         return [str(p) for p in self.cache_dir.glob("*.gguf")]
 
     @staticmethod
@@ -145,6 +150,7 @@ class GGUFModelManager:
 # ──────────────────────────────────────────────────────────────────────────────
 # llama.cpp runner
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class LlamaCppRunner:
     """
@@ -169,7 +175,7 @@ class LlamaCppRunner:
         model_path: str,
         n_gpu_layers: int = 0,
         n_ctx: int = 4096,
-    ) -> "LlamaCppRunner":
+    ) -> LlamaCppRunner:
         cfg = LlamaCppConfig(
             model_path=model_path,
             n_gpu_layers=n_gpu_layers,
@@ -183,7 +189,7 @@ class LlamaCppRunner:
         repo_id: str = "bartowski/Llama-3.2-1B-Instruct-GGUF",
         filename: str = "Llama-3.2-1B-Instruct-Q4_K_M.gguf",
         n_gpu_layers: int = 0,
-    ) -> "LlamaCppRunner":
+    ) -> LlamaCppRunner:
         """Download a GGUF model from HF Hub and return a runner."""
         manager = GGUFModelManager()
         path = manager.get_model_path(repo_id, filename)
@@ -215,12 +221,14 @@ class LlamaCppRunner:
         self._load_time_ms = (time.perf_counter() - t0) * 1000
         logger.info(
             "llama.cpp model loaded in %.1fms (n_gpu_layers=%d): %s",
-            self._load_time_ms, self.cfg.n_gpu_layers, self.cfg.model_path,
+            self._load_time_ms,
+            self.cfg.n_gpu_layers,
+            self.cfg.model_path,
         )
 
     # ── Text completion ──────────────────────────────────────────────────────
 
-    def generate(self, prompt: str, max_tokens: Optional[int] = None) -> GenerationResult:
+    def generate(self, prompt: str, max_tokens: int | None = None) -> GenerationResult:
         if self._model is None:
             self._load_model()
 
@@ -248,14 +256,15 @@ class LlamaCppRunner:
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=completion_tokens,
             total_tokens=usage.get("total_tokens", 0),
-            time_to_first_token_ms=total_ms * 0.1,   # estimated; llama-cpp doesn't expose TTFT directly
+            time_to_first_token_ms=total_ms
+            * 0.1,  # estimated; llama-cpp doesn't expose TTFT directly
             total_latency_ms=total_ms,
             tokens_per_second=completion_tokens / (total_ms / 1000) if total_ms > 0 else 0.0,
             model_path=self.cfg.model_path,
             finish_reason=output["choices"][0].get("finish_reason", "stop"),
         )
 
-    def stream(self, prompt: str, max_tokens: Optional[int] = None) -> Iterator[str]:
+    def stream(self, prompt: str, max_tokens: int | None = None) -> Iterator[str]:
         """Stream tokens as they are generated."""
         if self._model is None:
             self._load_model()
@@ -273,8 +282,8 @@ class LlamaCppRunner:
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
-        max_tokens: Optional[int] = None,
+        messages: list[dict[str, str]],
+        max_tokens: int | None = None,
         stream: bool = False,
     ) -> GenerationResult | Iterator[str]:
         """
@@ -310,9 +319,7 @@ class LlamaCppRunner:
             finish_reason=output["choices"][0].get("finish_reason", "stop"),
         )
 
-    def _stream_chat(
-        self, messages: List[Dict], max_tokens: Optional[int]
-    ) -> Iterator[str]:
+    def _stream_chat(self, messages: list[dict], max_tokens: int | None) -> Iterator[str]:
         for chunk in self._model.create_chat_completion(
             messages=messages,
             max_tokens=max_tokens or self.cfg.max_tokens,
@@ -329,7 +336,7 @@ class LlamaCppRunner:
     def synthesize(
         self,
         query: str,
-        documents: List[Dict],
+        documents: list[dict],
         stream: bool = False,
     ) -> GenerationResult | Iterator[str]:
         """
@@ -354,7 +361,7 @@ class LlamaCppRunner:
 
     # ── Tokenisation utilities ───────────────────────────────────────────────
 
-    def tokenize(self, text: str) -> List[int]:
+    def tokenize(self, text: str) -> list[int]:
         if self._model is None:
             self._load_model()
         return self._model.tokenize(text.encode("utf-8"))
@@ -367,7 +374,7 @@ class LlamaCppRunner:
 
     # ── Benchmarking ─────────────────────────────────────────────────────────
 
-    def benchmark(self, prompts: List[str], n_runs: int = 50) -> Dict:
+    def benchmark(self, prompts: list[str], n_runs: int = 50) -> dict:
         """Measure TTFT, total latency, and tokens/s across prompts."""
         import numpy as np
 
@@ -390,13 +397,14 @@ class LlamaCppRunner:
 # SLM evaluation tasks
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class EvalTask:
     task_id: str
-    category: str       # "qa" | "summarisation" | "classification" | "reasoning" | "long_context"
+    category: str  # "qa" | "summarisation" | "classification" | "reasoning" | "long_context"
     prompt: str
-    expected: Optional[str] = None
-    expected_labels: Optional[List[str]] = None
+    expected: str | None = None
+    expected_labels: list[str] | None = None
     context_len: int = 0
 
 
@@ -406,8 +414,8 @@ class EvalResult:
     category: str
     prompt_preview: str
     response: str
-    expected: Optional[str]
-    score: float            # 0–1
+    expected: str | None
+    score: float  # 0–1
     passed: bool
     latency_ms: float
     tokens_per_second: float
@@ -418,12 +426,12 @@ class EvalResult:
 class SLMEvalReport:
     model_path: str
     total_tasks: int
-    results: List[EvalResult]
-    category_scores: Dict[str, float]
+    results: list[EvalResult]
+    category_scores: dict[str, float]
     overall_score: float
     avg_latency_ms: float
     avg_tokens_per_second: float
-    contamination_flags: List[str] = field(default_factory=list)
+    contamination_flags: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         passed = sum(r.passed for r in self.results)
@@ -449,6 +457,7 @@ class SLMEvalReport:
     def log_to_mlflow(self) -> None:
         try:
             import mlflow
+
             with mlflow.start_run(run_name="slm-eval"):
                 mlflow.log_param("model", self.model_path)
                 mlflow.log_metric("overall_score", self.overall_score)
@@ -463,6 +472,7 @@ class SLMEvalReport:
 # ──────────────────────────────────────────────────────────────────────────────
 # SLM Evaluator
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class SLMEvaluator:
     """
@@ -487,6 +497,7 @@ class SLMEvaluator:
 
     def _token_overlap_f1(self, response: str, expected: str) -> float:
         """Token-level F1 — standard for open-domain QA evaluation."""
+
         def tokens(s):
             return set(re.findall(r"\w+", s.lower()))
 
@@ -501,7 +512,7 @@ class SLMEvaluator:
         recall = len(common) / len(gold)
         return 2 * precision * recall / (precision + recall)
 
-    def _classification_accuracy(self, response: str, expected_labels: List[str]) -> float:
+    def _classification_accuracy(self, response: str, expected_labels: list[str]) -> float:
         resp_lower = response.lower()
         return 1.0 if any(label.lower() in resp_lower for label in expected_labels) else 0.0
 
@@ -551,9 +562,9 @@ class SLMEvaluator:
 
     def evaluate_long_context(
         self,
-        depths: Optional[List[float]] = None,
-        context_lengths: Optional[List[int]] = None,
-    ) -> List[EvalResult]:
+        depths: list[float] | None = None,
+        context_lengths: list[int] | None = None,
+    ) -> list[EvalResult]:
         depths = depths or [10.0, 25.0, 50.0, 75.0, 90.0]
         context_lengths = context_lengths or [1000, 2000, 4000]
         needle = "The secret code for the vault is ALPHA-7734-ZETA."
@@ -568,24 +579,26 @@ class SLMEvaluator:
                 prompt, _ = self.build_needle_in_haystack(needle, ctx_len, depth)
                 result = self.runner.generate(prompt, max_tokens=100)
                 score = self._exact_match(result.text, expected)
-                results.append(EvalResult(
-                    task_id=f"needle_ctx{ctx_len}_depth{int(depth)}",
-                    category="long_context",
-                    prompt_preview=f"[{ctx_len}w, depth={depth}%] needle-in-haystack",
-                    response=result.text,
-                    expected=expected,
-                    score=score,
-                    passed=score >= self.pass_threshold,
-                    latency_ms=result.total_latency_ms,
-                    tokens_per_second=result.tokens_per_second,
-                    notes=f"ctx_len={ctx_len}, depth={depth}%",
-                ))
+                results.append(
+                    EvalResult(
+                        task_id=f"needle_ctx{ctx_len}_depth{int(depth)}",
+                        category="long_context",
+                        prompt_preview=f"[{ctx_len}w, depth={depth}%] needle-in-haystack",
+                        response=result.text,
+                        expected=expected,
+                        score=score,
+                        passed=score >= self.pass_threshold,
+                        latency_ms=result.total_latency_ms,
+                        tokens_per_second=result.tokens_per_second,
+                        notes=f"ctx_len={ctx_len}, depth={depth}%",
+                    )
+                )
 
         return results
 
     # ── Conversation dynamics ─────────────────────────────────────────────────
 
-    def evaluate_conversation_dynamics(self) -> List[EvalResult]:
+    def evaluate_conversation_dynamics(self) -> list[EvalResult]:
         """
         Test multi-turn coherence: does the model retain context across turns?
         """
@@ -601,15 +614,20 @@ class SLMEvaluator:
             },
             {
                 "turns": [
-                    {"role": "user",
-                     "content": "We're discussing Python programming. What language are we discussing?"},
+                    {
+                        "role": "user",
+                        "content": "We're discussing Python programming. What language are we discussing?",
+                    },
                 ],
                 "expected": "Python",
                 "task_id": "conv_topic_recall",
             },
             {
                 "turns": [
-                    {"role": "user", "content": "I prefer concise answers. Keep responses under 2 sentences."},
+                    {
+                        "role": "user",
+                        "content": "I prefer concise answers. Keep responses under 2 sentences.",
+                    },
                     {"role": "assistant", "content": "Understood, I'll keep responses brief."},
                     {"role": "user", "content": "What is a transformer?"},
                 ],
@@ -622,27 +640,29 @@ class SLMEvaluator:
         for conv in conversations:
             result = self.runner.chat(conv["turns"])
             score = self._exact_match(result.text, conv["expected"])
-            results.append(EvalResult(
-                task_id=conv["task_id"],
-                category="conversation",
-                prompt_preview=conv["turns"][-1]["content"],
-                response=result.text,
-                expected=conv["expected"],
-                score=score,
-                passed=score >= self.pass_threshold,
-                latency_ms=result.total_latency_ms,
-                tokens_per_second=result.tokens_per_second,
-            ))
+            results.append(
+                EvalResult(
+                    task_id=conv["task_id"],
+                    category="conversation",
+                    prompt_preview=conv["turns"][-1]["content"],
+                    response=result.text,
+                    expected=conv["expected"],
+                    score=score,
+                    passed=score >= self.pass_threshold,
+                    latency_ms=result.total_latency_ms,
+                    tokens_per_second=result.tokens_per_second,
+                )
+            )
         return results
 
     # ── Contamination detection ───────────────────────────────────────────────
 
     def detect_contamination(
         self,
-        benchmark_samples: List[str],
+        benchmark_samples: list[str],
         n_gram: int = 8,
         overlap_threshold: float = 0.4,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Detect potential training contamination by measuring n-gram overlap
         between model outputs and known benchmark samples.
@@ -659,56 +679,84 @@ class SLMEvaluator:
                 continue
             overlap = len(sample_ngrams & response_ngrams) / len(sample_ngrams)
             if overlap > overlap_threshold:
-                flags.append(
-                    f"High n-gram overlap ({overlap:.1%}) for: '{sample[:80]}...'"
-                )
+                flags.append(f"High n-gram overlap ({overlap:.1%}) for: '{sample[:80]}...'")
         return flags
 
     def _get_ngrams(self, text: str, n: int) -> set:
         tokens = text.lower().split()
-        return {" ".join(tokens[i:i+n]) for i in range(len(tokens) - n + 1)}
+        return {" ".join(tokens[i : i + n]) for i in range(len(tokens) - n + 1)}
 
     # ── Standard task suite ───────────────────────────────────────────────────
 
-    def build_standard_tasks(self) -> List[EvalTask]:
+    def build_standard_tasks(self) -> list[EvalTask]:
         return [
             # QA
-            EvalTask("qa_rag", "qa",
-                     "What does RAG stand for in the context of AI?",
-                     "Retrieval-Augmented Generation"),
-            EvalTask("qa_transformer", "qa",
-                     "Who introduced the Transformer architecture in the 'Attention is All You Need' paper?",
-                     "Vaswani"),
-            EvalTask("qa_faiss", "qa",
-                     "What does FAISS stand for?",
-                     "Facebook AI Similarity Search"),
+            EvalTask(
+                "qa_rag",
+                "qa",
+                "What does RAG stand for in the context of AI?",
+                "Retrieval-Augmented Generation",
+            ),
+            EvalTask(
+                "qa_transformer",
+                "qa",
+                "Who introduced the Transformer architecture in the 'Attention is All You Need' paper?",
+                "Vaswani",
+            ),
+            EvalTask(
+                "qa_faiss", "qa", "What does FAISS stand for?", "Facebook AI Similarity Search"
+            ),
             # Summarisation
-            EvalTask("sum_abstract", "summarisation",
-                     "Summarise in one sentence: Transformers use self-attention to model "
-                     "relationships between all tokens in a sequence simultaneously, enabling "
-                     "parallelism and long-range dependency capture.",
-                     "Transformers use self-attention for parallel sequence modelling."),
+            EvalTask(
+                "sum_abstract",
+                "summarisation",
+                "Summarise in one sentence: Transformers use self-attention to model "
+                "relationships between all tokens in a sequence simultaneously, enabling "
+                "parallelism and long-range dependency capture.",
+                "Transformers use self-attention for parallel sequence modelling.",
+            ),
             # Classification
-            EvalTask("cls_sentiment_pos", "classification",
-                     "Classify as positive or negative: 'The model performed exceptionally well.'",
-                     "positive", expected_labels=["positive"]),
-            EvalTask("cls_sentiment_neg", "classification",
-                     "Classify as positive or negative: 'The results were disappointing and below expectations.'",
-                     "negative", expected_labels=["negative"]),
-            EvalTask("cls_intent", "classification",
-                     "Classify the intent: 'What is the weather today?'",
-                     "question", expected_labels=["question", "informational"]),
+            EvalTask(
+                "cls_sentiment_pos",
+                "classification",
+                "Classify as positive or negative: 'The model performed exceptionally well.'",
+                "positive",
+                expected_labels=["positive"],
+            ),
+            EvalTask(
+                "cls_sentiment_neg",
+                "classification",
+                "Classify as positive or negative: 'The results were disappointing and below expectations.'",
+                "negative",
+                expected_labels=["negative"],
+            ),
+            EvalTask(
+                "cls_intent",
+                "classification",
+                "Classify the intent: 'What is the weather today?'",
+                "question",
+                expected_labels=["question", "informational"],
+            ),
             # Reasoning
-            EvalTask("reason_math", "reasoning",
-                     "If a model processes 1000 tokens/s and a prompt is 500 tokens, "
-                     "how many seconds to process? Show your reasoning.",
-                     "0.5"),
-            EvalTask("reason_logic", "reasoning",
-                     "All LLMs use attention. GPT-4 is an LLM. Does GPT-4 use attention? Answer yes or no.",
-                     "yes"),
-            EvalTask("reason_chain", "reasoning",
-                     "A rectangle has length 8 and width 5. What is its area? Think step by step.",
-                     "40"),
+            EvalTask(
+                "reason_math",
+                "reasoning",
+                "If a model processes 1000 tokens/s and a prompt is 500 tokens, "
+                "how many seconds to process? Show your reasoning.",
+                "0.5",
+            ),
+            EvalTask(
+                "reason_logic",
+                "reasoning",
+                "All LLMs use attention. GPT-4 is an LLM. Does GPT-4 use attention? Answer yes or no.",
+                "yes",
+            ),
+            EvalTask(
+                "reason_chain",
+                "reasoning",
+                "A rectangle has length 8 and width 5. What is its area? Think step by step.",
+                "40",
+            ),
         ]
 
     def run_task(self, task: EvalTask) -> EvalResult:
@@ -739,12 +787,12 @@ class SLMEvaluator:
         self,
         include_long_context: bool = True,
         include_conversation: bool = True,
-        contamination_samples: Optional[List[str]] = None,
+        contamination_samples: list[str] | None = None,
         log_mlflow: bool = False,
     ) -> SLMEvalReport:
         import numpy as np
 
-        all_results: List[EvalResult] = []
+        all_results: list[EvalResult] = []
 
         tasks = self.build_standard_tasks()
         logger.info("Running %d standard eval tasks…", len(tasks))
@@ -759,13 +807,13 @@ class SLMEvaluator:
             logger.info("Running conversation dynamics tests…")
             all_results.extend(self.evaluate_conversation_dynamics())
 
-        contamination_flags: List[str] = []
+        contamination_flags: list[str] = []
         if contamination_samples:
             logger.info("Running contamination detection…")
             contamination_flags = self.detect_contamination(contamination_samples)
 
-        category_scores: Dict[str, float] = {}
-        for cat in set(r.category for r in all_results):
+        category_scores: dict[str, float] = {}
+        for cat in {r.category for r in all_results}:
             cat_results = [r for r in all_results if r.category == cat]
             category_scores[cat] = float(np.mean([r.score for r in cat_results]))
 
@@ -790,6 +838,7 @@ class SLMEvaluator:
 # Quantization comparison
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class QuantizationComparison:
     """
     Compare quality vs speed across GGUF quantization levels.
@@ -807,11 +856,11 @@ class QuantizationComparison:
 
     def compare(
         self,
-        test_prompts: List[str],
-        quant_levels: Optional[List[str]] = None,
-    ) -> Dict[str, Dict]:
+        test_prompts: list[str],
+        quant_levels: list[str] | None = None,
+    ) -> dict[str, dict]:
         quants = quant_levels or self.QUANT_LEVELS
-        results: Dict[str, Dict] = {}
+        results: dict[str, dict] = {}
 
         for quant in quants:
             path = self._model_path(quant)
@@ -829,12 +878,12 @@ class QuantizationComparison:
             results[quant] = {
                 **bench,
                 "avg_quality_score": avg_score,
-                "model_size_mb": os.path.getsize(path) / (1024 ** 2),
+                "model_size_mb": os.path.getsize(path) / (1024**2),
             }
 
         return results
 
-    def print_comparison(self, results: Dict[str, Dict]) -> None:
+    def print_comparison(self, results: dict[str, dict]) -> None:
         print("\n" + "=" * 80)
         print(f"{'Quant':10s} | {'Size MB':>8s} | {'p50 ms':>8s} | {'tok/s':>8s} | {'Quality':>8s}")
         print("=" * 80)
@@ -856,18 +905,24 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="llama.cpp inference + SLM evaluation suite")
-    parser.add_argument("--model", default="models/llama-3.2-1b-instruct-q4_k_m.gguf",
-                        help="Path to GGUF model file")
-    parser.add_argument("--n-gpu-layers", type=int, default=0,
-                        help="GPU layers to offload (0=CPU, -1=all)")
-    parser.add_argument("--eval", action="store_true",
-                        help="Run full SLM evaluation suite")
-    parser.add_argument("--no-long-context", action="store_true",
-                        help="Skip needle-in-haystack tests (faster)")
-    parser.add_argument("--mlflow", action="store_true",
-                        help="Log eval results to MLflow")
-    parser.add_argument("--prompt", default="Explain retrieval-augmented generation in one sentence.",
-                        help="Single prompt to generate (when --eval not set)")
+    parser.add_argument(
+        "--model",
+        default="models/llama-3.2-1b-instruct-q4_k_m.gguf",
+        help="Path to GGUF model file",
+    )
+    parser.add_argument(
+        "--n-gpu-layers", type=int, default=0, help="GPU layers to offload (0=CPU, -1=all)"
+    )
+    parser.add_argument("--eval", action="store_true", help="Run full SLM evaluation suite")
+    parser.add_argument(
+        "--no-long-context", action="store_true", help="Skip needle-in-haystack tests (faster)"
+    )
+    parser.add_argument("--mlflow", action="store_true", help="Log eval results to MLflow")
+    parser.add_argument(
+        "--prompt",
+        default="Explain retrieval-augmented generation in one sentence.",
+        help="Single prompt to generate (when --eval not set)",
+    )
     args = parser.parse_args()
 
     runner = LlamaCppRunner.from_gguf(args.model, n_gpu_layers=args.n_gpu_layers)

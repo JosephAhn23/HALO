@@ -17,12 +17,13 @@ Key components:
   - LangChainSynthesizer — drop-in for SynthesizerAgent using LCEL chains
   - PromptOptimizer     — A/B-tests prompt variants and tracks scores in MLflow
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ class PromptLibrary:
     Wraps LangChain's PromptTemplate and FewShotPromptTemplate.
     """
 
-    _templates: Dict[str, str] = {
+    _templates: dict[str, str] = {
         "research_assistant": RESEARCH_ASSISTANT_TEMPLATE,
         "chain_of_thought": CHAIN_OF_THOUGHT_TEMPLATE,
         "summarisation": SUMMARISATION_TEMPLATE,
@@ -104,17 +105,18 @@ class PromptLibrary:
     }
 
     @classmethod
-    def get(cls, name: str) -> "Any":
+    def get(cls, name: str) -> Any:
         """Return a LangChain PromptTemplate for the named template."""
         from langchain.prompts import PromptTemplate
 
         if name not in cls._templates:
-            raise KeyError(f"Unknown prompt template: '{name}'. "
-                           f"Available: {list(cls._templates)}")
+            raise KeyError(
+                f"Unknown prompt template: '{name}'. " f"Available: {list(cls._templates)}"
+            )
         return PromptTemplate.from_template(cls._templates[name])
 
     @classmethod
-    def get_few_shot(cls, name: str = "research_assistant") -> "Any":
+    def get_few_shot(cls, name: str = "research_assistant") -> Any:
         """Return a FewShotPromptTemplate with built-in examples."""
         from langchain.prompts import FewShotPromptTemplate, PromptTemplate
 
@@ -137,13 +139,14 @@ class PromptLibrary:
         logger.info("Registered prompt template: %s", name)
 
     @classmethod
-    def list_templates(cls) -> List[str]:
+    def list_templates(cls) -> list[str]:
         return list(cls._templates.keys())
 
 
 # ---------------------------------------------------------------------------
 # RAG Prompt Builder — formats retrieved documents into context strings
 # ---------------------------------------------------------------------------
+
 
 class RAGPromptBuilder:
     """
@@ -167,7 +170,7 @@ class RAGPromptBuilder:
         else:
             self.prompt = PromptLibrary.get(template_name)
 
-    def format_context(self, documents: List[Dict[str, Any]]) -> str:
+    def format_context(self, documents: list[dict[str, Any]]) -> str:
         """
         Convert a list of retrieved document dicts into a numbered context block.
         Truncates to max_context_chars to stay within the model's context window.
@@ -184,14 +187,12 @@ class RAGPromptBuilder:
             total += len(chunk)
         return "\n\n".join(parts)
 
-    def build(self, query: str, documents: List[Dict[str, Any]]) -> str:
+    def build(self, query: str, documents: list[dict[str, Any]]) -> str:
         """Return the fully formatted prompt string."""
         context = self.format_context(documents)
         return self.prompt.format(context=context, question=query)
 
-    def build_messages(
-        self, query: str, documents: List[Dict[str, Any]]
-    ) -> List[Dict[str, str]]:
+    def build_messages(self, query: str, documents: list[dict[str, Any]]) -> list[dict[str, str]]:
         """
         Return OpenAI-style messages list (system + user).
         Useful when calling the LLM directly rather than through a chain.
@@ -216,7 +217,8 @@ class RAGPromptBuilder:
 # Output Parsers
 # ---------------------------------------------------------------------------
 
-def get_citation_parser() -> "Any":
+
+def get_citation_parser() -> Any:
     """
     LangChain output parser that extracts answer text and citation list.
     Returns a Pydantic-backed structured output.
@@ -226,7 +228,7 @@ def get_citation_parser() -> "Any":
 
     class CitedAnswer(BaseModel):
         answer: str = Field(description="The answer to the question")
-        citations: List[str] = Field(
+        citations: list[str] = Field(
             description="List of source references used, e.g. ['source_1', 'source_2']"
         )
         confidence: float = Field(
@@ -237,15 +239,17 @@ def get_citation_parser() -> "Any":
     return PydanticOutputParser(pydantic_object=CitedAnswer)
 
 
-def get_query_rewrite_parser() -> "Any":
+def get_query_rewrite_parser() -> Any:
     """Simple string output parser for query rewriting."""
     from langchain.schema.output_parser import StrOutputParser
+
     return StrOutputParser()
 
 
 # ---------------------------------------------------------------------------
 # LangChain Synthesizer — drop-in for SynthesizerAgent
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class LangChainSynthesizerConfig:
@@ -274,7 +278,7 @@ class LangChainSynthesizer:
       - Streaming via .stream()
     """
 
-    def __init__(self, config: Optional[LangChainSynthesizerConfig] = None):
+    def __init__(self, config: LangChainSynthesizerConfig | None = None):
         self.config = config or LangChainSynthesizerConfig()
         self._llm = None
         self._rag_chain = None
@@ -290,6 +294,7 @@ class LangChainSynthesizer:
 
         if self.config.use_azure:
             from langchain_openai import AzureChatOpenAI
+
             self._llm = AzureChatOpenAI(
                 azure_deployment=self.config.azure_deployment,
                 azure_endpoint=self.config.azure_endpoint,
@@ -300,6 +305,7 @@ class LangChainSynthesizer:
             )
         else:
             from langchain_openai import ChatOpenAI
+
             self._llm = ChatOpenAI(
                 model=self.config.model,
                 temperature=self.config.temperature,
@@ -313,7 +319,6 @@ class LangChainSynthesizer:
             return self._rag_chain
 
         from langchain.schema.output_parser import StrOutputParser
-        from langchain.schema.runnable import RunnableLambda
 
         prompt = PromptLibrary.get(self.config.template_name)
         self._rag_chain = prompt | self._get_llm() | StrOutputParser()
@@ -346,7 +351,7 @@ class LangChainSynthesizer:
     def synthesize(
         self,
         query: str,
-        documents: List[Dict[str, Any]],
+        documents: list[dict[str, Any]],
         stream: bool = False,
     ) -> str:
         """
@@ -375,13 +380,12 @@ class LangChainSynthesizer:
     def synthesize_with_citations(
         self,
         query: str,
-        documents: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        documents: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """
         Synthesize and parse structured output with citations.
         Returns {"answer": str, "citations": list, "confidence": float}.
         """
-        from langchain.schema.output_parser import StrOutputParser
 
         parser = get_citation_parser()
         prompt = PromptLibrary.get(self.config.template_name)
@@ -400,6 +404,7 @@ class LangChainSynthesizer:
 # ---------------------------------------------------------------------------
 # Prompt Optimizer — A/B tests prompt variants, tracks results in MLflow
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PromptVariant:
@@ -421,19 +426,19 @@ class PromptOptimizer:
         )
     """
 
-    def __init__(self, config: Optional[LangChainSynthesizerConfig] = None):
+    def __init__(self, config: LangChainSynthesizerConfig | None = None):
         self.config = config or LangChainSynthesizerConfig()
 
     def run(
         self,
-        variants: List[PromptVariant],
-        test_cases: List[Dict[str, Any]],
+        variants: list[PromptVariant],
+        test_cases: list[dict[str, Any]],
         experiment_name: str = "prompt-optimization",
     ) -> PromptVariant:
         import mlflow
 
         mlflow.set_experiment(experiment_name)
-        scores: Dict[str, float] = {}
+        scores: dict[str, float] = {}
 
         for variant in variants:
             PromptLibrary.register(variant.name, variant.template)
@@ -472,9 +477,10 @@ class PromptOptimizer:
 # Convenience: patch SynthesizerAgent to use LangChain under the hood
 # ---------------------------------------------------------------------------
 
+
 def patch_synthesizer_with_langchain(
-    config: Optional[LangChainSynthesizerConfig] = None,
-) -> "LangChainSynthesizer":
+    config: LangChainSynthesizerConfig | None = None,
+) -> LangChainSynthesizer:
     """
     Factory that returns a LangChainSynthesizer pre-configured to match
     the interface of the existing SynthesizerAgent.

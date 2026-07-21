@@ -2,10 +2,10 @@
 SageMaker Model Registry + A/B deployment + approval gate.
 Covers: SageMaker weakness - not just a pipeline, actual model management
 """
+
 import os
 import time
 from datetime import datetime
-
 
 MODEL_PACKAGE_GROUP = os.getenv("SAGEMAKER_MODEL_GROUP", "llmops-embedder")
 
@@ -38,6 +38,7 @@ class SageMakerModelRegistry:
     def role(self) -> str:
         if self._role is None:
             import sagemaker
+
             self._role = sagemaker.get_execution_role()
         return self._role
 
@@ -45,6 +46,7 @@ class SageMakerModelRegistry:
     def sm_client(self):
         if self._sm_client is None:
             import boto3
+
             self._sm_client = boto3.client("sagemaker", region_name=self._region)
         return self._sm_client
 
@@ -172,9 +174,7 @@ class SageMakerModelRegistry:
             "InitialVariantWeight": candidate_traffic_pct,
         }
 
-        data_capture_uri = (
-            f"s3://{self._s3_bucket}/data-capture/{endpoint_name}"
-        )
+        data_capture_uri = f"s3://{self._s3_bucket}/data-capture/{endpoint_name}"
 
         try:
             self.sm_client.create_endpoint_config(

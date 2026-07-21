@@ -1,10 +1,10 @@
 from src.tokenization.tokenization_suite import (
     BPETokenizer,
-    WordPieceTokenizer,
     HFBPETokenizer,
+    MultilingualTokenizationAnalyzer,
     SentencePieceWrapper,
     TokenizerAnalyzer,
-    MultilingualTokenizationAnalyzer,
+    WordPieceTokenizer,
 )
 
 __all__ = [

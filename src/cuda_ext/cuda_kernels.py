@@ -31,12 +31,12 @@ Usage:
     tokens = topk_sample(probs, k=50)
     q      = rope_embedding(q, cos, sin)
 """
+
 from __future__ import annotations
 
 import logging
 import time
 from pathlib import Path
-from typing import Dict, Optional
 
 import torch
 import torch.nn.functional as F
@@ -57,6 +57,7 @@ def _try_load_extension() -> None:
     # 1. Try pre-compiled wheel
     try:
         import llmops_cuda_kernels as _ext
+
         _cuda_ext = _ext
         CUDA_KERNELS_AVAILABLE = True
         logger.info("CUDA kernels loaded (pre-compiled wheel).")
@@ -320,6 +321,7 @@ setup(
 # Public API — CUDA kernel or PyTorch fallback
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def fused_softmax_temperature(
     logits: torch.Tensor,
     temperature: float = 1.0,
@@ -429,15 +431,19 @@ def rope_embedding(
     x1, x2 = x[..., :half], x[..., half:]
     cos = cos.unsqueeze(1)  # (seq, 1, half) — broadcast over heads
     sin = sin.unsqueeze(1)
-    return torch.cat([
-        x1 * cos - x2 * sin,
-        x2 * cos + x1 * sin,
-    ], dim=-1)
+    return torch.cat(
+        [
+            x1 * cos - x2 * sin,
+            x2 * cos + x1 * sin,
+        ],
+        dim=-1,
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Benchmarking
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def benchmark_kernels(
     batch_size: int = 8,
@@ -447,7 +453,7 @@ def benchmark_kernels(
     head_dim: int = 128,
     n_runs: int = 1000,
     device: str = "cuda",
-) -> Dict:
+) -> dict:
     """
     Benchmark custom kernels vs naive PyTorch equivalents.
 
@@ -477,7 +483,7 @@ def benchmark_kernels(
             latencies.append((time.perf_counter() - t0) * 1000)
         return float(np.mean(latencies))
 
-    results: Dict = {"device": device, "cuda_ext": CUDA_KERNELS_AVAILABLE}
+    results: dict = {"device": device, "cuda_ext": CUDA_KERNELS_AVAILABLE}
 
     # 1. Fused softmax + temperature
     logits = torch.randn(batch_size, vocab_size, device=device)
@@ -525,6 +531,7 @@ def benchmark_kernels(
 # Write CUDA source files to disk
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def write_cuda_sources(output_dir: str = "cuda_ext") -> list:
     """
     Write CUDA kernel source files to disk for compilation.
@@ -558,10 +565,12 @@ if __name__ == "__main__":
     import json
 
     parser = argparse.ArgumentParser(description="CUDA kernel utilities")
-    parser.add_argument("--write-sources", action="store_true",
-                        help="Write .cu / .cpp / setup.py to disk")
-    parser.add_argument("--benchmark", action="store_true",
-                        help="Benchmark kernels vs PyTorch baseline")
+    parser.add_argument(
+        "--write-sources", action="store_true", help="Write .cu / .cpp / setup.py to disk"
+    )
+    parser.add_argument(
+        "--benchmark", action="store_true", help="Benchmark kernels vs PyTorch baseline"
+    )
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
     parser.add_argument("--n-runs", type=int, default=500)
     args = parser.parse_args()

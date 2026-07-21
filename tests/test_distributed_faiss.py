@@ -1,6 +1,7 @@
 """
 Tests for distributed FAISS - shard building, search, aggregation.
 """
+
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -16,11 +17,15 @@ class TestShardBuilding:
         norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
         embeddings = embeddings / norms
 
-        metadata = [{"text": f"chunk {i}", "source": "test", "chunk_id": str(i)} for i in range(400)]
+        metadata = [
+            {"text": f"chunk {i}", "source": "test", "chunk_id": str(i)} for i in range(400)
+        ]
 
-        with patch("infra.distributed_faiss_service.os.makedirs"), patch(
-            "infra.distributed_faiss_service.faiss.write_index"
-        ), patch("builtins.open", MagicMock()):
+        with (
+            patch("infra.distributed_faiss_service.os.makedirs"),
+            patch("infra.distributed_faiss_service.faiss.write_index"),
+            patch("builtins.open", MagicMock()),
+        ):
             build_shard_indexes(embeddings, metadata, n_shards=4)
 
     def test_shard_size_even_distribution(self):

@@ -1,6 +1,7 @@
 """
 AWS CloudWatch logging + S3 data storage integration.
 """
+
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ import logging
 import os
 import time
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 import boto3
 import pandas as pd
@@ -46,17 +47,17 @@ class CloudWatchLogger:
         except self.client.exceptions.ResourceAlreadyExistsException:
             pass
 
-    def log(self, event: Dict[str, Any]):
-        kwargs = dict(
-            logGroupName=LOG_GROUP,
-            logStreamName=LOG_STREAM,
-            logEvents=[
+    def log(self, event: dict[str, Any]):
+        kwargs = {
+            "logGroupName": LOG_GROUP,
+            "logStreamName": LOG_STREAM,
+            "logEvents": [
                 {
                     "timestamp": int(time.time() * 1000),
                     "message": json.dumps(event),
                 }
             ],
-        )
+        }
         if self.sequence_token:
             kwargs["sequenceToken"] = self.sequence_token
 
@@ -75,7 +76,9 @@ class CloudWatchLogger:
             }
         )
 
-    def emit_metric(self, name: str, value: float, unit: str = "Count", model_name: str = "unknown"):
+    def emit_metric(
+        self, name: str, value: float, unit: str = "Count", model_name: str = "unknown"
+    ):
         self.metrics_client.put_metric_data(
             Namespace="LLMOps/Inference",
             MetricData=[

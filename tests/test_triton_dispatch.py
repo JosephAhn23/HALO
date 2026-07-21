@@ -2,8 +2,9 @@
 
 import pytest
 import torch
+
 from src.inference.cuda_dispatch.dispatcher import dispatch_model, get_hardware_info
-from src.inference.cuda_dispatch.triton_backend import morphos_backend_phase3, TRITON_AVAILABLE
+from src.inference.cuda_dispatch.triton_backend import TRITON_AVAILABLE, morphos_backend_phase3
 
 
 class TestHardwareInfo:
@@ -29,6 +30,7 @@ class TestTritonBackend:
     def test_kernel_registry(self):
         """Test that Triton kernels are registered."""
         from src.inference.cuda_dispatch.triton_backend import TRITON_KERNELS
+
         assert "add" in TRITON_KERNELS
         assert "mul" in TRITON_KERNELS
         assert "relu" in TRITON_KERNELS
@@ -57,6 +59,7 @@ class TestDispatcher:
 
     def test_morphos_backend_phase3(self):
         """Test morphos_backend_phase3 directly on a simple graph."""
+
         class SimpleModel(torch.nn.Module):
             def forward(self, x):
                 x = x + 1.0

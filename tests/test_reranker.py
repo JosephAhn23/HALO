@@ -47,6 +47,7 @@ def test_reranker_does_not_mutate_input_candidates() -> None:
         {"text": "doc b", "source": "b.md"},
     ]
     import copy
+
     snapshot = copy.deepcopy(original)
     agent.rerank("query", original)
     assert original == snapshot, "rerank() must not mutate the input list"

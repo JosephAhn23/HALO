@@ -21,6 +21,7 @@ serve). They're used to exercise the retrieval-abstention path: a real corpus
 would return low-similarity or empty hits for these, and the router should
 decline rather than let the synthesizer hallucinate an answer.
 """
+
 from __future__ import annotations
 
 from typing import TypedDict

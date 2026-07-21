@@ -17,8 +17,9 @@ import hashlib
 import logging
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Literal
+from typing import Any, Literal
 
 import numpy as np
 
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Variant:
@@ -90,6 +92,7 @@ class GuardrailConfig:
 # ---------------------------------------------------------------------------
 # Core framework
 # ---------------------------------------------------------------------------
+
 
 class ABExperiment:
     """
@@ -249,6 +252,7 @@ class ABExperiment:
         mde : minimum detectable effect (absolute)
         """
         from scipy import stats
+
         z_alpha = stats.norm.ppf(1 - alpha / 2)
         z_beta = stats.norm.ppf(power)
         n = 2 * ((z_alpha + z_beta) * baseline_std / mde) ** 2
@@ -328,7 +332,7 @@ class ABExperiment:
         null_diffs = []
         for _ in range(n_boot):
             perm = np.random.permutation(combined)
-            null_diffs.append(perm[: len(trt)].mean() - perm[len(trt):].mean())
+            null_diffs.append(perm[: len(trt)].mean() - perm[len(trt) :].mean())
         p = float(np.mean(np.abs(null_diffs) >= abs(observed_diff)))
         ci = self._bootstrap_ci(ctrl, trt)
         return p, ci
@@ -336,6 +340,7 @@ class ABExperiment:
     def _estimate_power(self, ctrl: np.ndarray, trt: np.ndarray) -> float:
         try:
             from scipy import stats
+
             pooled_std = np.sqrt((ctrl.std() ** 2 + trt.std() ** 2) / 2)
             if pooled_std == 0:
                 return 0.0
@@ -353,7 +358,10 @@ class ABExperiment:
             if val is not None and g.min_value is not None and val < g.min_value:
                 logger.warning(
                     "Guardrail violation: %s=%.4f < %.4f (variant=%s)",
-                    g.metric, val, g.min_value, obs.variant,
+                    g.metric,
+                    val,
+                    g.min_value,
+                    obs.variant,
                 )
 
     def _check_guardrails_post(
@@ -364,21 +372,17 @@ class ABExperiment:
         violations = []
         for g in self.guardrails:
             ctrl_vals = [
-                o.secondary_metrics[g.metric] for o in ctrl_obs
-                if g.metric in o.secondary_metrics
+                o.secondary_metrics[g.metric] for o in ctrl_obs if g.metric in o.secondary_metrics
             ]
             trt_vals = [
-                o.secondary_metrics[g.metric] for o in trt_obs
-                if g.metric in o.secondary_metrics
+                o.secondary_metrics[g.metric] for o in trt_obs if g.metric in o.secondary_metrics
             ]
             if not ctrl_vals or not trt_vals:
                 continue
             ctrl_mean = float(np.mean(ctrl_vals))
             trt_mean = float(np.mean(trt_vals))
             if g.min_value is not None and trt_mean < g.min_value:
-                violations.append(
-                    f"{g.metric}: {trt_mean:.4f} < min {g.min_value:.4f}"
-                )
+                violations.append(f"{g.metric}: {trt_mean:.4f} < min {g.min_value:.4f}")
             if g.max_degradation_pct is not None and ctrl_mean != 0:
                 degradation = (ctrl_mean - trt_mean) / abs(ctrl_mean)
                 if degradation > g.max_degradation_pct:
@@ -390,6 +394,7 @@ class ABExperiment:
     def _init_mlflow(self) -> None:
         try:
             import mlflow
+
             mlflow.set_experiment(f"ab_{self.experiment_id}")
         except ImportError:
             logger.warning("mlflow not installed, disabling tracking")
@@ -398,22 +403,27 @@ class ABExperiment:
     def _log_to_mlflow(self, result: ExperimentResult) -> None:
         try:
             import mlflow
+
             with mlflow.start_run(run_name=result.experiment_id):
-                mlflow.log_params({
-                    "control": result.control,
-                    "treatment": result.treatment,
-                    "test": result.test_used,
-                })
-                mlflow.log_metrics({
-                    "control_mean": result.control_mean,
-                    "treatment_mean": result.treatment_mean,
-                    "absolute_lift": result.absolute_lift,
-                    "relative_lift_pct": result.relative_lift_pct,
-                    "p_value": result.p_value,
-                    "power": result.power,
-                    "significant": float(result.significant),
-                    "n_control": float(result.n_control),
-                    "n_treatment": float(result.n_treatment),
-                })
+                mlflow.log_params(
+                    {
+                        "control": result.control,
+                        "treatment": result.treatment,
+                        "test": result.test_used,
+                    }
+                )
+                mlflow.log_metrics(
+                    {
+                        "control_mean": result.control_mean,
+                        "treatment_mean": result.treatment_mean,
+                        "absolute_lift": result.absolute_lift,
+                        "relative_lift_pct": result.relative_lift_pct,
+                        "p_value": result.p_value,
+                        "power": result.power,
+                        "significant": float(result.significant),
+                        "n_control": float(result.n_control),
+                        "n_treatment": float(result.n_treatment),
+                    }
+                )
         except Exception as e:
             logger.warning("MLflow logging failed: %s", e)

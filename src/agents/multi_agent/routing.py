@@ -10,14 +10,13 @@ Routing strategies:
 The supervisor uses these routers to decide which agents to invoke
 and in what configuration (parallel, sequential, or ensemble).
 """
+
 from __future__ import annotations
 
 import logging
-import time
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
+from dataclasses import dataclass
 
-from src.agents.multi_agent.base_agent import AgentHealth, AgentStatus, AgentTask, TaskPriority
+from src.agents.multi_agent.base_agent import AgentHealth, AgentStatus, AgentTask
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,9 @@ logger = logging.getLogger(__name__)
 @dataclass
 class AgentCapability:
     """Describes what an agent can do."""
+
     name: str
-    capabilities: Set[str]
+    capabilities: set[str]
     max_concurrent: int = 1
     avg_latency_ms: float = 1000.0
     quality_score: float = 0.8
@@ -35,7 +35,7 @@ class AgentCapability:
 
 @dataclass
 class RoutingDecision:
-    selected_agents: List[str]
+    selected_agents: list[str]
     strategy: str
     reasoning: str
     parallel: bool = True
@@ -45,13 +45,29 @@ class RoutingDecision:
 
 COMPLEXITY_SIGNALS = {
     "high": [
-        "compare", "analyze", "critique", "design", "tradeoff", "evaluate",
-        "explain why", "what are the implications", "how would you", "debate",
-        "argue", "synthesize", "multi-step",
+        "compare",
+        "analyze",
+        "critique",
+        "design",
+        "tradeoff",
+        "evaluate",
+        "explain why",
+        "what are the implications",
+        "how would you",
+        "debate",
+        "argue",
+        "synthesize",
+        "multi-step",
     ],
     "low": [
-        "what is", "define", "list", "when was", "who is", "how many",
-        "yes or no", "true or false",
+        "what is",
+        "define",
+        "list",
+        "when was",
+        "who is",
+        "how many",
+        "yes or no",
+        "true or false",
     ],
 }
 
@@ -94,7 +110,7 @@ class ComplexityRouter:
         },
     }
 
-    def route(self, task: AgentTask, available_agents: List[str]) -> RoutingDecision:
+    def route(self, task: AgentTask, available_agents: list[str]) -> RoutingDecision:
         complexity = classify_complexity(task.query)
         config = self.ROUTING_TABLE.get(complexity, self.ROUTING_TABLE["medium"])
 
@@ -121,19 +137,20 @@ class CapabilityRouter:
     all required capabilities.
     """
 
-    def __init__(self, agent_capabilities: Dict[str, AgentCapability]):
+    def __init__(self, agent_capabilities: dict[str, AgentCapability]):
         self.capabilities = agent_capabilities
 
     def route(
         self,
         task: AgentTask,
-        required_capabilities: Optional[Set[str]] = None,
+        required_capabilities: set[str] | None = None,
     ) -> RoutingDecision:
         if not required_capabilities:
             required_capabilities = self._infer_capabilities(task.query)
 
         matching = [
-            name for name, cap in self.capabilities.items()
+            name
+            for name, cap in self.capabilities.items()
             if required_capabilities.issubset(cap.capabilities)
         ]
 
@@ -147,7 +164,10 @@ class CapabilityRouter:
                 consensus_strategy="weighted_confidence",
             )
 
-        best = min(matching, key=lambda n: self.capabilities[n].avg_latency_ms / self.capabilities[n].quality_score)
+        best = min(
+            matching,
+            key=lambda n: self.capabilities[n].avg_latency_ms / self.capabilities[n].quality_score,
+        )
         return RoutingDecision(
             selected_agents=[best],
             strategy="capability:best_match",
@@ -156,7 +176,7 @@ class CapabilityRouter:
             consensus_strategy="weighted_confidence",
         )
 
-    def _infer_capabilities(self, query: str) -> Set[str]:
+    def _infer_capabilities(self, query: str) -> set[str]:
         caps = {"reasoning"}
         q = query.lower()
         if any(w in q for w in ["fact", "verify", "check", "true", "accurate"]):
@@ -167,8 +187,7 @@ class CapabilityRouter:
             caps.add("code_execution")
         return caps
 
-    def _find_covering_set(self, required: Set[str]) -> List[str]:
-        covered: Set[str] = set()
+    def _find_covering_set(self, required: set[str]) -> list[str]:
         selected = []
         remaining = set(required)
         sorted_agents = sorted(
@@ -199,12 +218,17 @@ class PerformanceRouter:
 
     def __init__(self, epsilon: float = 0.05):
         self.epsilon = epsilon
-        self._performance: Dict[str, Dict[str, float]] = {}
+        self._performance: dict[str, dict[str, float]] = {}
 
-    def record(self, agent_name: str, success: bool, latency_ms: float, quality: float = 0.8) -> None:
+    def record(
+        self, agent_name: str, success: bool, latency_ms: float, quality: float = 0.8
+    ) -> None:
         if agent_name not in self._performance:
             self._performance[agent_name] = {
-                "n": 0, "successes": 0, "total_latency": 0.0, "total_quality": 0.0,
+                "n": 0,
+                "successes": 0,
+                "total_latency": 0.0,
+                "total_quality": 0.0,
             }
         p = self._performance[agent_name]
         p["n"] += 1
@@ -222,8 +246,9 @@ class PerformanceRouter:
         latency_score = max(0.0, 1.0 - avg_latency / 10000.0)
         return 0.5 * success_rate + 0.3 * avg_quality + 0.2 * latency_score
 
-    def route(self, available_agents: List[str], task: AgentTask) -> RoutingDecision:
+    def route(self, available_agents: list[str], task: AgentTask) -> RoutingDecision:
         import random
+
         if random.random() < self.epsilon:
             selected = random.choice(available_agents)
             return RoutingDecision(
@@ -251,18 +276,19 @@ class LoadBalancer:
     """
 
     def __init__(self):
-        self._counters: Dict[str, int] = {}
+        self._counters: dict[str, int] = {}
         self._round_robin_idx = 0
 
     def select(
         self,
-        available_agents: List[str],
-        health_map: Optional[Dict[str, AgentHealth]] = None,
+        available_agents: list[str],
+        health_map: dict[str, AgentHealth] | None = None,
     ) -> str:
         healthy = available_agents
         if health_map:
             healthy = [
-                a for a in available_agents
+                a
+                for a in available_agents
                 if not health_map.get(a, AgentHealth(a, AgentStatus.IDLE)).circuit_open
                 and health_map.get(a, AgentHealth(a, AgentStatus.IDLE)).success_rate > 0.5
             ]
@@ -274,5 +300,5 @@ class LoadBalancer:
         self._counters[selected] = self._counters.get(selected, 0) + 1
         return selected
 
-    def stats(self) -> Dict[str, int]:
+    def stats(self) -> dict[str, int]:
         return dict(self._counters)

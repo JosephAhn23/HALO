@@ -2,12 +2,12 @@
 HuggingFace Datasets Pipeline - training data prep.
 Closes gaps: HuggingFace Datasets, NLP processing, data quality, dedup
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 import numpy as np
 from datasets import Dataset, DatasetDict, concatenate_datasets, load_dataset
@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class DatasetConfig:
-    hf_datasets: Optional[list] = None
-    local_jsonl_paths: Optional[list] = None
+    hf_datasets: list | None = None
+    local_jsonl_paths: list | None = None
     min_token_length: int = 50
     max_token_length: int = 2048
     min_avg_word_length: float = 3.0
     max_symbol_ratio: float = 0.1
-    languages: Optional[list] = None
+    languages: list | None = None
     dedup_min_hash: bool = True
     dedup_n_gram: int = 13
     dedup_threshold: float = 0.85
@@ -88,19 +88,17 @@ class HFDatasetPipeline:
             remove_columns=["text"],
             desc="Tokenizing",
         )
-        combined = combined.filter(
-            lambda x: x["length_ok"], num_proc=self.config.num_proc
-        )
+        combined = combined.filter(lambda x: x["length_ok"], num_proc=self.config.num_proc)
         combined = combined.remove_columns(["length_ok"])
         logger.info("Final: %s examples", f"{len(combined):,}")
 
-        split = combined.train_test_split(
-            train_size=self.config.train_split, seed=42
+        split = combined.train_test_split(train_size=self.config.train_split, seed=42)
+        dataset_dict = DatasetDict(
+            {
+                "train": split["train"],
+                "validation": split["test"],
+            }
         )
-        dataset_dict = DatasetDict({
-            "train": split["train"],
-            "validation": split["test"],
-        })
         dataset_dict.save_to_disk(self.config.output_path)
         return dataset_dict
 
@@ -139,17 +137,13 @@ class HFDatasetPipeline:
             "_minhash_dedup runs single-threaded; for large datasets consider "
             "a distributed dedup pass (e.g. datatrove or Spark)."
         )
-        lsh = MinHashLSH(
-            threshold=self.config.dedup_threshold, num_perm=128
-        )
+        lsh = MinHashLSH(threshold=self.config.dedup_threshold, num_perm=128)
         keep_indices = []
 
         for i, ex in enumerate(ds):
             text = ex["text"]
             n = self.config.dedup_n_gram
-            ngrams = set(
-                text[j : j + n] for j in range(len(text) - n + 1)
-            )
+            ngrams = {text[j : j + n] for j in range(len(text) - n + 1)}
             m = MinHash(num_perm=128)
             for ng in ngrams:
                 m.update(ng.encode("utf8"))
@@ -165,22 +159,16 @@ class HFDatasetPipeline:
         return ds.select(keep_indices)
 
     def _tokenize_and_filter(self, examples: dict) -> dict:
-        tokenized = self.tokenizer(
-            examples["text"], truncation=False, padding=False
-        )
+        tokenized = self.tokenizer(examples["text"], truncation=False, padding=False)
         lengths = [len(ids) for ids in tokenized["input_ids"]]
         length_ok = [
             self.config.min_token_length <= length <= self.config.max_token_length
             for length in lengths
         ]
         result = {
-            "input_ids": [
-                ids[: self.config.max_token_length]
-                for ids in tokenized["input_ids"]
-            ],
+            "input_ids": [ids[: self.config.max_token_length] for ids in tokenized["input_ids"]],
             "attention_mask": [
-                m[: self.config.max_token_length]
-                for m in tokenized["attention_mask"]
+                m[: self.config.max_token_length] for m in tokenized["attention_mask"]
             ],
             "length_ok": length_ok,
         }
@@ -188,8 +176,7 @@ class HFDatasetPipeline:
         # truncate them to avoid shape mismatches in the data collator.
         if "token_type_ids" in tokenized:
             result["token_type_ids"] = [
-                t[: self.config.max_token_length]
-                for t in tokenized["token_type_ids"]
+                t[: self.config.max_token_length] for t in tokenized["token_type_ids"]
             ]
         return result
 

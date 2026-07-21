@@ -1,7 +1,7 @@
 from src.mlops.compat import mlflow
 from src.mlops.evaluation import EvalSample, retrieval_hit_rate
 from src.mlops.grounding_trace import log_grounding_metrics
-from src.mlops.tracking import track_pipeline, log_evaluation
+from src.mlops.tracking import log_evaluation, track_pipeline
 
 __all__ = [
     "mlflow",

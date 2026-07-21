@@ -1,8 +1,9 @@
 """Dispatch PyTorch models through Triton kernels via morphos_backend_phase3."""
 
-import torch
 import logging
-from typing import Callable, Any
+from collections.abc import Callable
+
+import torch
 
 from .triton_backend import morphos_backend_phase3
 
@@ -47,8 +48,10 @@ def dispatch_physics(batch_size: int, num_steps: int, use_triton: bool = True) -
         dict with compiled physics function and hardware info
     """
     hardware = get_hardware_info()
-    logger.info(f"Dispatching physics simulation: batch_size={batch_size}, "
-                f"num_steps={num_steps}, hardware={hardware.get('device_name', 'cpu')}")
+    logger.info(
+        f"Dispatching physics simulation: batch_size={batch_size}, "
+        f"num_steps={num_steps}, hardware={hardware.get('device_name', 'cpu')}"
+    )
 
     def physics_wrapper(simulate_fn: Callable) -> Callable:
         """Wrap physics simulator with hardware optimization."""
@@ -81,7 +84,7 @@ def get_hardware_info() -> dict:
         info["device_name"] = torch.cuda.get_device_name(0)
         info["device_capability"] = torch.cuda.get_device_capability(0)
 
-    if hasattr(torch.version, 'hip'):
+    if hasattr(torch.version, "hip"):
         info["rocm_available"] = True
     else:
         info["rocm_available"] = False

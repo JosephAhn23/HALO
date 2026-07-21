@@ -5,13 +5,13 @@ Runs two providers in parallel (e.g. Claude + GPT-4o), optionally with a judge,
 and on disagreement appends a **self-correction** block before retrying (instead
 of immediately halting), up to ``max_self_corrections``.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
 
 from src.agents.multi_agent.cross_provider_consensus import (
     AnthropicMessagesProvider,
@@ -38,9 +38,9 @@ class ConsensusNodeResult:
     state: ConsensusState
     final_answer: str
     attempts: int
-    discrepancy_notes: Optional[str] = None
-    last_raw: Optional[CrossProviderConsensusResult] = None
-    self_correction_trace: List[str] = field(default_factory=list)
+    discrepancy_notes: str | None = None
+    last_raw: CrossProviderConsensusResult | None = None
+    self_correction_trace: list[str] = field(default_factory=list)
 
 
 def _self_correction_block(raw: CrossProviderConsensusResult) -> str:
@@ -111,9 +111,9 @@ class ConsensusNode:
         )
 
     def run(self, prompt: str, system: str = "") -> ConsensusNodeResult:
-        trace: List[str] = []
+        trace: list[str] = []
         user = prompt
-        last: Optional[CrossProviderConsensusResult] = None
+        last: CrossProviderConsensusResult | None = None
 
         max_attempts = 1 + max(0, self.max_self_corrections)
         for attempt in range(1, max_attempts + 1):

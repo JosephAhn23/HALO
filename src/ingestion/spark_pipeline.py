@@ -2,8 +2,8 @@
 Apache Spark pipeline for large-scale distributed data processing.
 Covers: Apache Spark, distributed data processing, scalable pipelines
 """
+
 import re
-from typing import Dict
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -75,7 +75,7 @@ class SparkIngestionPipeline:
 
         return df
 
-    def compute_dataset_statistics(self, df) -> Dict:
+    def compute_dataset_statistics(self, df) -> dict:
         """High-dimensional data analysis over corpus."""
         stats = (
             df.agg(

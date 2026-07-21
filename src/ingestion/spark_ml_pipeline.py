@@ -12,29 +12,25 @@ Extends the base Spark ingestion pipeline with MLlib transformers:
 Covers gaps: Spark ML, MLlib, distributed feature engineering,
              ML Pipeline API, cluster-based corpus analysis.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from pyspark.ml import Pipeline as SparkMLPipeline
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
 from pyspark.ml.feature import (
-    HashingTF,
     IDF,
-    Normalizer,
     PCA,
+    HashingTF,
+    Normalizer,
     RegexTokenizer,
     StopWordsRemover,
-    StringIndexer,
-    VectorAssembler,
     Word2Vec,
 )
-from pyspark.ml.linalg import Vectors
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
-from pyspark.sql.types import FloatType
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +69,7 @@ class TFIDFFeaturePipeline:
         self.output_col = output_col
         self.num_features = num_features
         self.min_doc_freq = min_doc_freq
-        self._pipeline: Optional[SparkMLPipeline] = None
+        self._pipeline: SparkMLPipeline | None = None
         self._fitted = None
 
     def build(self) -> SparkMLPipeline:
@@ -96,9 +92,7 @@ class TFIDFFeaturePipeline:
         )
         normalizer = Normalizer(inputCol="idf_features", outputCol=self.output_col, p=2.0)
 
-        self._pipeline = SparkMLPipeline(
-            stages=[tokenizer, remover, hashing_tf, idf, normalizer]
-        )
+        self._pipeline = SparkMLPipeline(stages=[tokenizer, remover, hashing_tf, idf, normalizer])
         return self._pipeline
 
     def fit_transform(self, df: DataFrame) -> DataFrame:
@@ -119,7 +113,7 @@ class TFIDFFeaturePipeline:
         logger.info("TF-IDF pipeline saved to %s", path)
 
     @classmethod
-    def load(cls, path: str) -> "TFIDFFeaturePipeline":
+    def load(cls, path: str) -> TFIDFFeaturePipeline:
         from pyspark.ml import PipelineModel
 
         obj = cls()
@@ -162,8 +156,10 @@ class Word2VecEmbeddingPipeline:
 
     def fit_transform(self, df: DataFrame) -> DataFrame:
         tokenizer = RegexTokenizer(
-            inputCol=self.input_col, outputCol="_w2v_tokens",
-            pattern=r"\W+", minTokenLength=2,
+            inputCol=self.input_col,
+            outputCol="_w2v_tokens",
+            pattern=r"\W+",
+            minTokenLength=2,
         )
         remover = StopWordsRemover(inputCol="_w2v_tokens", outputCol="_w2v_filtered")
         w2v = Word2Vec(
@@ -181,7 +177,8 @@ class Word2VecEmbeddingPipeline:
         result = self._fitted.transform(df)
         logger.info(
             "Word2Vec fitted — vector_size=%d  min_count=%d",
-            self.vector_size, self.min_count,
+            self.vector_size,
+            self.min_count,
         )
         return result
 
@@ -216,9 +213,7 @@ class SparkPCAReducer:
         pca = PCA(k=self.k, inputCol=self.input_col, outputCol=self.output_col)
         self._fitted = pca.fit(df)
         explained = sum(self._fitted.explainedVariance.toArray())
-        logger.info(
-            "PCA fitted — k=%d  explained_variance=%.3f", self.k, explained
-        )
+        logger.info("PCA fitted — k=%d  explained_variance=%.3f", self.k, explained)
         return self._fitted.transform(df)
 
 
@@ -250,7 +245,7 @@ class CorpusClusteringPipeline:
         self.seed = seed
         self._model = None
 
-    def fit(self, df: DataFrame) -> "CorpusClusteringPipeline":
+    def fit(self, df: DataFrame) -> CorpusClusteringPipeline:
         kmeans = KMeans(
             featuresCol=self.feature_col,
             predictionCol="cluster_id",
@@ -259,14 +254,10 @@ class CorpusClusteringPipeline:
             seed=self.seed,
         )
         self._model = kmeans.fit(df)
-        evaluator = ClusteringEvaluator(
-            featuresCol=self.feature_col, predictionCol="cluster_id"
-        )
+        evaluator = ClusteringEvaluator(featuresCol=self.feature_col, predictionCol="cluster_id")
         predictions = self._model.transform(df)
         silhouette = evaluator.evaluate(predictions)
-        logger.info(
-            "K-Means fitted — k=%d  silhouette=%.4f", self.k, silhouette
-        )
+        logger.info("K-Means fitted — k=%d  silhouette=%.4f", self.k, silhouette)
         return self
 
     def transform(self, df: DataFrame) -> DataFrame:
@@ -320,9 +311,7 @@ class SparkMLPreprocessingPipeline:
         self.tfidf = TFIDFFeaturePipeline(num_features=tfidf_features)
         self.w2v = Word2VecEmbeddingPipeline(vector_size=w2v_dim)
         self.pca = SparkPCAReducer(input_col="tfidf_features", k=pca_k)
-        self.clustering = CorpusClusteringPipeline(
-            feature_col="pca_features", k=n_clusters
-        )
+        self.clustering = CorpusClusteringPipeline(feature_col="pca_features", k=n_clusters)
 
     def run(
         self,
@@ -357,9 +346,9 @@ class SparkMLPreprocessingPipeline:
 
         # Save
         (
-            sampled
-            .select("id", "text_clean", "source", "quality_score",
-                    "cluster_id", "w2v_embedding")
+            sampled.select(
+                "id", "text_clean", "source", "quality_score", "cluster_id", "w2v_embedding"
+            )
             .repartition(20)
             .write.mode("overwrite")
             .parquet(output_path)

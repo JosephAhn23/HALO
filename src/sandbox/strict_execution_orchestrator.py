@@ -5,12 +5,13 @@ Combines agent code with an auto-generated or supplied test block, runs inside
 :class:`CodeSandbox`, captures a structured **execution log**, and loops on
 stack traces via an injectable ``revise`` callable (typically an LLM).
 """
+
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
 
 from src.sandbox.code_sandbox import CodeSandbox, ExecutionResult, SandboxConfig
 
@@ -39,8 +40,8 @@ class StrictExecutionResult:
     success: bool
     final_code: str
     execution_log_text: str
-    entries: List[ExecutionLogEntry] = field(default_factory=list)
-    last_result: Optional[ExecutionResult] = None
+    entries: list[ExecutionLogEntry] = field(default_factory=list)
+    last_result: ExecutionResult | None = None
 
 
 class StrictExecutionOrchestrator:
@@ -52,11 +53,11 @@ class StrictExecutionOrchestrator:
 
     def __init__(
         self,
-        sandbox: Optional[CodeSandbox] = None,
+        sandbox: CodeSandbox | None = None,
         *,
         max_rounds: int = 5,
         language: str = "python",
-        config: Optional[SandboxConfig] = None,
+        config: SandboxConfig | None = None,
     ) -> None:
         self.sandbox = sandbox or CodeSandbox()
         self.max_rounds = max_rounds
@@ -70,11 +71,13 @@ class StrictExecutionOrchestrator:
         revise: Callable[[str, str], str],
     ) -> StrictExecutionResult:
         code = implementation_code.strip()
-        entries: List[ExecutionLogEntry] = []
-        last: Optional[ExecutionResult] = None
+        entries: list[ExecutionLogEntry] = []
+        last: ExecutionResult | None = None
 
         for r in range(1, self.max_rounds + 1):
-            last = self.sandbox.run_with_tests(code, test_code, language=self.language, config=self.config)
+            last = self.sandbox.run_with_tests(
+                code, test_code, language=self.language, config=self.config
+            )
             ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
             ent = ExecutionLogEntry(
                 round_index=r,
@@ -114,11 +117,15 @@ class StrictExecutionOrchestrator:
         )
 
     @staticmethod
-    def _format_log(entries: List[ExecutionLogEntry]) -> str:
+    def _format_log(entries: list[ExecutionLogEntry]) -> str:
         lines = ["=== EXECUTION LOG (Docker sandbox) ==="]
         for e in entries:
             lines.append(e.format_line())
             if e.stdout_excerpt.strip():
-                lines.append(f"  stdout: {e.stdout_excerpt[:500]}…" if len(e.stdout_excerpt) > 500 else f"  stdout: {e.stdout_excerpt}")
+                lines.append(
+                    f"  stdout: {e.stdout_excerpt[:500]}…"
+                    if len(e.stdout_excerpt) > 500
+                    else f"  stdout: {e.stdout_excerpt}"
+                )
         lines.append("=== END EXECUTION LOG ===")
         return "\n".join(lines)

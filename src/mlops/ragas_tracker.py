@@ -2,6 +2,7 @@
 RAGAS Evaluation + MLflow Regression Tracker.
 Closes gaps: evaluation pipelines, MLflow, observability, benchmark results
 """
+
 from __future__ import annotations
 
 import json
@@ -9,7 +10,6 @@ import logging
 import math
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from datasets import Dataset
 from ragas import evaluate
@@ -55,9 +55,7 @@ class RAGASTracker:
         self.regression_threshold = regression_threshold
         mlflow.set_experiment(experiment_name)
 
-    def evaluate(
-        self, eval_dataset: Dataset, run_name: Optional[str] = None
-    ) -> dict:
+    def evaluate(self, eval_dataset: Dataset, run_name: str | None = None) -> dict:
         """
         Run RAGAS evaluation and log to MLflow.
 
@@ -66,11 +64,7 @@ class RAGASTracker:
         """
         logger.info("Running RAGAS eval on %d examples", len(eval_dataset))
         result = evaluate(eval_dataset, metrics=METRICS)
-        raw_scores = {
-            name: float(result[name])
-            for name in METRIC_NAMES
-            if name in result
-        }
+        raw_scores = {name: float(result[name]) for name in METRIC_NAMES if name in result}
         scores = {k: v for k, v in raw_scores.items() if not math.isnan(v)}
         if not scores:
             logger.warning("All RAGAS scores are NaN — skipping MLflow log.")
@@ -157,9 +151,7 @@ class RAGASTracker:
             ax.plot(range(len(values)), values, marker="o", linewidth=2)
             ax.set_title(metric.replace("_", " ").title())
             ax.set_ylim(0, 1)
-            ax.axhline(
-                y=0.8, color="green", linestyle="--", alpha=0.5, label="Target"
-            )
+            ax.axhline(y=0.8, color="green", linestyle="--", alpha=0.5, label="Target")
             ax.set_xlabel("Evaluation Run")
             ax.set_ylabel("Score")
             ax.legend()
@@ -179,12 +171,14 @@ class RAGASTracker:
 
 def build_eval_dataset(qa_pairs: list) -> Dataset:
     """Build RAGAS-compatible dataset from QA pairs."""
-    return Dataset.from_dict({
-        "question": [qa["question"] for qa in qa_pairs],
-        "answer": [qa["answer"] for qa in qa_pairs],
-        "contexts": [qa["contexts"] for qa in qa_pairs],
-        "ground_truth": [qa.get("ground_truth", "") for qa in qa_pairs],
-    })
+    return Dataset.from_dict(
+        {
+            "question": [qa["question"] for qa in qa_pairs],
+            "answer": [qa["answer"] for qa in qa_pairs],
+            "contexts": [qa["contexts"] for qa in qa_pairs],
+            "ground_truth": [qa.get("ground_truth", "") for qa in qa_pairs],
+        }
+    )
 
 
 class PhysicsEvaluator:
@@ -223,8 +217,10 @@ class PhysicsEvaluator:
             "physics_regressed": float(regressed),
         }
 
-        logger.info(f"Physics trajectory stability: {stability:.3f}, "
-                    f"spin_drift={spin_drift:.6f}%, gates={'pass' if gates_passed else 'fail'}")
+        logger.info(
+            f"Physics trajectory stability: {stability:.3f}, "
+            f"spin_drift={spin_drift:.6f}%, gates={'pass' if gates_passed else 'fail'}"
+        )
 
         return metrics
 
@@ -236,7 +232,7 @@ class PhysicsEvaluator:
             mlflow.log_metrics(stability_metrics)
             mlflow.set_tag("evaluation_type", "physics_trajectory_stability")
             mlflow.end_run()
-            logger.info(f"Logged physics stability metrics to MLflow")
+            logger.info("Logged physics stability metrics to MLflow")
         except Exception as e:
             logger.warning(f"Could not log physics metrics to MLflow: {e}")
 
@@ -247,17 +243,12 @@ if __name__ == "__main__":
         {
             "question": "What is retrieval-augmented generation?",
             "answer": (
-                "RAG combines retrieval of relevant documents "
-                "with language model generation."
+                "RAG combines retrieval of relevant documents " "with language model generation."
             ),
             "contexts": [
-                "RAG is a technique that retrieves relevant passages "
-                "then generates answers."
+                "RAG is a technique that retrieves relevant passages " "then generates answers."
             ],
-            "ground_truth": (
-                "RAG retrieves documents and uses them to augment "
-                "LLM generation."
-            ),
+            "ground_truth": ("RAG retrieves documents and uses them to augment " "LLM generation."),
         }
     ]
     ds = build_eval_dataset(sample_data)

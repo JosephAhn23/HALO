@@ -33,17 +33,17 @@ Usage:
     # Parity check: token cost per language for the same concept
     parity = MultilingualTokenizationAnalyzer.parity_check("AI", translations)
 """
+
 from __future__ import annotations
 
-import collections
 import json
 import logging
 import re
 import unicodedata
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -52,6 +52,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. BPE Tokenizer (from scratch — GPT-2/Llama style)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class BPETokenizer:
     """
@@ -74,9 +75,9 @@ class BPETokenizer:
     def __init__(self, vocab_size: int = 1000, min_frequency: int = 2):
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
-        self.merges: List[Tuple[str, str]] = []
-        self.vocab: Dict[str, int] = {}
-        self.inv_vocab: Dict[int, str] = {}
+        self.merges: list[tuple[str, str]] = []
+        self.vocab: dict[str, int] = {}
+        self.inv_vocab: dict[int, str] = {}
         self._trained = False
 
     # ── Training ──────────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ class BPETokenizer:
                 pairs[(syms[i], syms[i + 1])] += freq
         return pairs
 
-    def _merge_vocab(self, pair: Tuple[str, str], vocab: Counter) -> Counter:
+    def _merge_vocab(self, pair: tuple[str, str], vocab: Counter) -> Counter:
         """Apply a merge to all words in the vocabulary (regex-based, GPT-2 style)."""
         new_vocab: Counter = Counter()
         bigram = re.escape(" ".join(pair))
@@ -108,7 +109,7 @@ class BPETokenizer:
             new_vocab[pat.sub(merged, word)] += freq
         return new_vocab
 
-    def train(self, corpus: Iterable[str]) -> "BPETokenizer":
+    def train(self, corpus: Iterable[str]) -> BPETokenizer:
         """Train BPE on a corpus of strings."""
         vocab = self._build_word_vocab(corpus)
         chars = {s for word in vocab for s in word.split()}
@@ -118,7 +119,9 @@ class BPETokenizer:
 
         logger.info(
             "BPE training: %d unique words, %d initial symbols, %d merges to do",
-            len(vocab), len(self.vocab), n_merges,
+            len(vocab),
+            len(self.vocab),
+            n_merges,
         )
 
         for i in range(max(0, n_merges)):
@@ -141,7 +144,7 @@ class BPETokenizer:
 
     # ── Encoding / decoding ───────────────────────────────────────────────────
 
-    def _tokenize_word(self, word: str) -> List[str]:
+    def _tokenize_word(self, word: str) -> list[str]:
         """Apply learned BPE merges to a single word."""
         syms = list(word) + ["</w>"]
         for left, right in self.merges:
@@ -156,16 +159,14 @@ class BPETokenizer:
             syms = new
         return syms
 
-    def encode(self, text: str) -> List[int]:
+    def encode(self, text: str) -> list[int]:
         unk = self.vocab.get("[UNK]", 1)
-        return [self.vocab.get(t, unk)
-                for word in text.split()
-                for t in self._tokenize_word(word)]
+        return [self.vocab.get(t, unk) for word in text.split() for t in self._tokenize_word(word)]
 
-    def tokenize(self, text: str) -> List[str]:
+    def tokenize(self, text: str) -> list[str]:
         return [t for word in text.split() for t in self._tokenize_word(word)]
 
-    def decode(self, ids: List[int]) -> str:
+    def decode(self, ids: list[int]) -> str:
         return "".join(self.inv_vocab.get(i, "[UNK]") for i in ids).replace("</w>", " ").strip()
 
     def vocab_size_actual(self) -> int:
@@ -175,14 +176,20 @@ class BPETokenizer:
 
     def save(self, path: str) -> None:
         Path(path).write_text(
-            json.dumps({"vocab": self.vocab, "merges": self.merges,
-                        "vocab_size": self.vocab_size, "min_frequency": self.min_frequency},
-                       indent=2),
+            json.dumps(
+                {
+                    "vocab": self.vocab,
+                    "merges": self.merges,
+                    "vocab_size": self.vocab_size,
+                    "min_frequency": self.min_frequency,
+                },
+                indent=2,
+            ),
             encoding="utf-8",
         )
 
     @classmethod
-    def load(cls, path: str) -> "BPETokenizer":
+    def load(cls, path: str) -> BPETokenizer:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
         tok = cls(vocab_size=data["vocab_size"], min_frequency=data["min_frequency"])
         tok.vocab = data["vocab"]
@@ -195,6 +202,7 @@ class BPETokenizer:
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. WordPiece Tokenizer (from scratch — BERT style)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class WordPieceTokenizer:
     """
@@ -216,15 +224,15 @@ class WordPieceTokenizer:
     def __init__(self, vocab_size: int = 1000, min_frequency: int = 2):
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
-        self.vocab: Dict[str, int] = {}
-        self.inv_vocab: Dict[int, str] = {}
+        self.vocab: dict[str, int] = {}
+        self.inv_vocab: dict[int, str] = {}
         self._trained = False
 
-    def _split_word(self, word: str) -> List[str]:
+    def _split_word(self, word: str) -> list[str]:
         """Initial split: first char as-is, rest prefixed with ##."""
         return [word[0]] + [self.CONTINUATION + c for c in word[1:]]
 
-    def train(self, corpus: Iterable[str]) -> "WordPieceTokenizer":
+    def train(self, corpus: Iterable[str]) -> WordPieceTokenizer:
         """Train WordPiece on a corpus."""
         wc: Counter = Counter()
         for text in corpus:
@@ -233,7 +241,7 @@ class WordPieceTokenizer:
         wc = Counter({w: f for w, f in wc.items() if f >= self.min_frequency})
 
         # Initial character vocabulary
-        tokenised: Dict[str, List[str]] = {w: self._split_word(w) for w in wc}
+        tokenised: dict[str, list[str]] = {w: self._split_word(w) for w in wc}
         freq: Counter = Counter()
         for w, toks in tokenised.items():
             for t in toks:
@@ -243,7 +251,9 @@ class WordPieceTokenizer:
 
         logger.info(
             "WordPiece training: %d words, %d initial symbols, target vocab=%d",
-            len(wc), len(self.vocab), self.vocab_size,
+            len(wc),
+            len(self.vocab),
+            self.vocab_size,
         )
 
         while len(self.vocab) < self.vocab_size:
@@ -262,12 +272,14 @@ class WordPieceTokenizer:
             )
             left, right = best
             # Strip ## from right side when merging
-            merged = left + (right[len(self.CONTINUATION):] if right.startswith(self.CONTINUATION) else right)
+            merged = left + (
+                right[len(self.CONTINUATION) :] if right.startswith(self.CONTINUATION) else right
+            )
             self.vocab[merged] = len(self.vocab)
             freq[merged] = pair_freq[best]
 
             # Apply merge to all words
-            new_tokenised: Dict[str, List[str]] = {}
+            new_tokenised: dict[str, list[str]] = {}
             for w, toks in tokenised.items():
                 nt, i = [], 0
                 while i < len(toks):
@@ -287,7 +299,7 @@ class WordPieceTokenizer:
 
     # ── Inference: greedy longest-match-first ─────────────────────────────────
 
-    def _encode_word(self, word: str) -> List[str]:
+    def _encode_word(self, word: str) -> list[str]:
         if len(word) > 200:
             return ["[UNK]"]
         toks, start = [], 0
@@ -308,24 +320,25 @@ class WordPieceTokenizer:
                 start += 1
         return toks
 
-    def tokenize(self, text: str) -> List[str]:
+    def tokenize(self, text: str) -> list[str]:
         return [t for word in text.lower().split() for t in self._encode_word(word)]
 
-    def encode(self, text: str) -> List[int]:
+    def encode(self, text: str) -> list[int]:
         unk = self.vocab.get("[UNK]", 1)
         return [self.vocab.get(t, unk) for t in self.tokenize(text)]
 
-    def decode(self, ids: List[int]) -> str:
+    def decode(self, ids: list[int]) -> str:
         tokens = [self.inv_vocab.get(i, "[UNK]") for i in ids]
         out = ""
         for t in tokens:
-            out += t[len(self.CONTINUATION):] if t.startswith(self.CONTINUATION) else " " + t
+            out += t[len(self.CONTINUATION) :] if t.startswith(self.CONTINUATION) else " " + t
         return out.strip()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. HuggingFace BPE (production-grade, Rust backend)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class HFBPETokenizer:
     """
@@ -338,13 +351,13 @@ class HFBPETokenizer:
         self.vocab_size = vocab_size
         self._tokenizer = None
 
-    def train(self, texts: List[str], save_path: Optional[str] = None) -> "HFBPETokenizer":
+    def train(self, texts: list[str], save_path: str | None = None) -> HFBPETokenizer:
         from tokenizers import Tokenizer
         from tokenizers.models import BPE
-        from tokenizers.trainers import BpeTrainer
-        from tokenizers.pre_tokenizers import Whitespace
         from tokenizers.normalizers import NFD, Lowercase, StripAccents
         from tokenizers.normalizers import Sequence as NormSeq
+        from tokenizers.pre_tokenizers import Whitespace
+        from tokenizers.trainers import BpeTrainer
 
         tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
         tokenizer.normalizer = NormSeq([NFD(), Lowercase(), StripAccents()])
@@ -364,19 +377,20 @@ class HFBPETokenizer:
             logger.info("HF BPE tokenizer saved: %s", save_path)
         return self
 
-    def encode(self, text: str) -> List[int]:
+    def encode(self, text: str) -> list[int]:
         if self._tokenizer is None:
             raise RuntimeError("Call .train() first")
         return self._tokenizer.encode(text).ids
 
-    def decode(self, ids: List[int]) -> str:
+    def decode(self, ids: list[int]) -> str:
         if self._tokenizer is None:
             raise RuntimeError("Call .train() first")
         return self._tokenizer.decode(ids)
 
     @classmethod
-    def from_pretrained(cls, name_or_path: str) -> "HFBPETokenizer":
+    def from_pretrained(cls, name_or_path: str) -> HFBPETokenizer:
         from tokenizers import Tokenizer
+
         obj = cls()
         obj._tokenizer = Tokenizer.from_pretrained(name_or_path)
         return obj
@@ -385,6 +399,7 @@ class HFBPETokenizer:
 # ──────────────────────────────────────────────────────────────────────────────
 # 4. SentencePiece wrapper
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class SentencePieceWrapper:
     """
@@ -399,27 +414,30 @@ class SentencePieceWrapper:
     Requires: pip install sentencepiece
     """
 
-    def __init__(self, model_path: Optional[str] = None):
+    def __init__(self, model_path: str | None = None):
         self._sp = None
         if model_path:
             self.load(model_path)
 
     def train(
         self,
-        texts: List[str],
+        texts: list[str],
         model_prefix: str = "spm_model",
         vocab_size: int = 8000,
         model_type: str = "bpe",
         character_coverage: float = 0.9995,
-    ) -> "SentencePieceWrapper":
+    ) -> SentencePieceWrapper:
         try:
             import sentencepiece as spm
         except ImportError:
             raise ImportError("sentencepiece required: pip install sentencepiece")
 
-        import tempfile, os
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False,
-                                         encoding="utf-8") as f:
+        import os
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".txt", delete=False, encoding="utf-8"
+        ) as f:
             f.write("\n".join(texts))
             tmp_path = f.name
 
@@ -430,7 +448,10 @@ class SentencePieceWrapper:
                 vocab_size=vocab_size,
                 model_type=model_type,
                 character_coverage=character_coverage,
-                pad_id=0, unk_id=1, bos_id=2, eos_id=3,
+                pad_id=0,
+                unk_id=1,
+                bos_id=2,
+                eos_id=3,
             )
         finally:
             os.unlink(tmp_path)
@@ -439,7 +460,7 @@ class SentencePieceWrapper:
         logger.info("SentencePiece trained: %s.model (vocab_size=%d)", model_prefix, vocab_size)
         return self
 
-    def load(self, model_path: str) -> "SentencePieceWrapper":
+    def load(self, model_path: str) -> SentencePieceWrapper:
         try:
             import sentencepiece as spm
         except ImportError:
@@ -448,17 +469,21 @@ class SentencePieceWrapper:
         self._sp.load(model_path)
         return self
 
-    def encode(self, text: str) -> List[int]:
-        self._check(); return self._sp.encode(text, out_type=int)
+    def encode(self, text: str) -> list[int]:
+        self._check()
+        return self._sp.encode(text, out_type=int)
 
-    def decode(self, ids: List[int]) -> str:
-        self._check(); return self._sp.decode(ids)
+    def decode(self, ids: list[int]) -> str:
+        self._check()
+        return self._sp.decode(ids)
 
-    def tokenize(self, text: str) -> List[str]:
-        self._check(); return self._sp.encode(text, out_type=str)
+    def tokenize(self, text: str) -> list[str]:
+        self._check()
+        return self._sp.encode(text, out_type=str)
 
     def vocab_size(self) -> int:
-        self._check(); return self._sp.get_piece_size()
+        self._check()
+        return self._sp.get_piece_size()
 
     def _check(self):
         if self._sp is None:
@@ -468,6 +493,7 @@ class SentencePieceWrapper:
 # ──────────────────────────────────────────────────────────────────────────────
 # 5. TokenizerStats dataclass
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class TokenizerStats:
@@ -481,12 +507,13 @@ class TokenizerStats:
     oov_rate:           fraction of words that map to [UNK]
     language_fertility: per-language fertility from multilingual analysis
     """
+
     tokenizer_name: str
     vocab_size: int
     fertility: float
     compression_ratio: float
     oov_rate: float
-    language_fertility: Dict[str, float] = field(default_factory=dict)
+    language_fertility: dict[str, float] = field(default_factory=dict)
 
     def __str__(self) -> str:
         return (
@@ -502,17 +529,17 @@ class TokenizerStats:
 # ──────────────────────────────────────────────────────────────────────────────
 
 # 10-language sample set covering diverse scripts
-MULTILINGUAL_SAMPLES: Dict[str, str] = {
-    "english":     "The transformer architecture revolutionized natural language processing.",
-    "spanish":     "El aprendizaje automático está transformando la inteligencia artificial.",
-    "french":      "L'apprentissage automatique transforme le traitement du langage naturel.",
-    "german":      "Maschinelles Lernen revolutioniert die Verarbeitung natürlicher Sprache.",
-    "chinese":     "变压器架构彻底改变了自然语言处理领域。",
-    "japanese":    "トランスフォーマーアーキテクチャは自然言語処理を革命的に変えました。",
-    "arabic":      "أحدثت بنية المحول ثورة في معالجة اللغة الطبيعية.",
-    "hindi":       "ट्रांसफार्मर आर्किटेक्चर ने प्राकृतिक भाषा प्रसंस्करण में क्रांति ला दी।",
-    "korean":      "트랜스포머 아키텍처는 자연어 처리를 혁신적으로 변화시켰습니다.",
-    "russian":     "Архитектура трансформера произвела революцию в обработке естественного языка.",
+MULTILINGUAL_SAMPLES: dict[str, str] = {
+    "english": "The transformer architecture revolutionized natural language processing.",
+    "spanish": "El aprendizaje automático está transformando la inteligencia artificial.",
+    "french": "L'apprentissage automatique transforme le traitement du langage naturel.",
+    "german": "Maschinelles Lernen revolutioniert die Verarbeitung natürlicher Sprache.",
+    "chinese": "变压器架构彻底改变了自然语言处理领域。",
+    "japanese": "トランスフォーマーアーキテクチャは自然言語処理を革命的に変えました。",
+    "arabic": "أحدثت بنية المحول ثورة في معالجة اللغة الطبيعية.",
+    "hindi": "ट्रांसफार्मर आर्किटेक्चर ने प्राकृतिक भाषा प्रसंस्करण में क्रांति ला दी।",
+    "korean": "트랜스포머 아키텍처는 자연어 처리를 혁신적으로 변화시켰습니다.",
+    "russian": "Архитектура трансформера произвела революцию в обработке естественного языка.",
     "code_python": "def fibonacci(n): return n if n <= 1 else fibonacci(n-1) + fibonacci(n-2)",
 }
 
@@ -532,19 +559,20 @@ class TokenizerAnalyzer:
     def _get(self):
         if self._tok is None:
             from transformers import AutoTokenizer
+
             self._tok = AutoTokenizer.from_pretrained(self.tokenizer_name)
         return self._tok
 
     @classmethod
-    def from_pretrained(cls, name: str) -> "TokenizerAnalyzer":
+    def from_pretrained(cls, name: str) -> TokenizerAnalyzer:
         return cls(name)
 
     # ── Multilingual analysis ─────────────────────────────────────────────────
 
     def analyze_multilingual(
         self,
-        samples: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Dict]:
+        samples: dict[str, str] | None = None,
+    ) -> dict[str, dict]:
         """
         Tokenize each language sample and return per-language metrics.
 
@@ -577,11 +605,13 @@ class TokenizerAnalyzer:
 
         return results
 
-    def print_multilingual_report(self, results: Dict[str, Dict]) -> None:
+    def print_multilingual_report(self, results: dict[str, dict]) -> None:
         """Print a formatted fertility table."""
         print(f"\nTokenizer: {self.tokenizer_name}")
-        print(f"{'Language':15s} {'Words':>6s} {'Tokens':>7s} {'Fertility':>10s} "
-              f"{'Compress':>9s} {'UNK':>5s}")
+        print(
+            f"{'Language':15s} {'Words':>6s} {'Tokens':>7s} {'Fertility':>10s} "
+            f"{'Compress':>9s} {'UNK':>5s}"
+        )
         print("-" * 60)
         for lang, d in results.items():
             if "error" in d:
@@ -595,7 +625,7 @@ class TokenizerAnalyzer:
 
     # ── Corpus analysis ───────────────────────────────────────────────────────
 
-    def analyze_corpus(self, texts: List[str]) -> TokenizerStats:
+    def analyze_corpus(self, texts: list[str]) -> TokenizerStats:
         """
         Compute fertility, compression ratio, and OOV rate over a corpus.
         """
@@ -622,7 +652,7 @@ class TokenizerAnalyzer:
 
     # ── Multi-tokenizer comparison ────────────────────────────────────────────
 
-    def compare(self, names: List[str], texts: List[str]) -> List[TokenizerStats]:
+    def compare(self, names: list[str], texts: list[str]) -> list[TokenizerStats]:
         """
         Compare multiple tokenizers on the same corpus.
 
@@ -636,9 +666,7 @@ class TokenizerAnalyzer:
                 stats = self.analyze_corpus(texts)
                 ml = self.analyze_multilingual()
                 stats.language_fertility = {
-                    lang: d.get("fertility", 0.0)
-                    for lang, d in ml.items()
-                    if "error" not in d
+                    lang: d.get("fertility", 0.0) for lang, d in ml.items() if "error" not in d
                 }
                 results.append(stats)
                 logger.info("Analyzed %s: %s", name, stats)
@@ -649,7 +677,7 @@ class TokenizerAnalyzer:
 
     # ── Vocabulary coverage ───────────────────────────────────────────────────
 
-    def vocab_coverage(self, texts: List[str]) -> Dict:
+    def vocab_coverage(self, texts: list[str]) -> dict:
         """
         Fraction of whitespace-split words that tokenize without [UNK].
         Also returns top-N most and least frequent tokens.
@@ -681,6 +709,7 @@ class TokenizerAnalyzer:
 # 7. MultilingualTokenizationAnalyzer — script detection, byte fallback, parity
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class MultilingualTokenizationAnalyzer:
     """
     Script detection, byte-fallback encoding, and tokenization parity analysis.
@@ -691,8 +720,16 @@ class MultilingualTokenizationAnalyzer:
     """
 
     SCRIPT_NAMES = [
-        "LATIN", "CJK", "ARABIC", "DEVANAGARI", "HANGUL",
-        "CYRILLIC", "HIRAGANA", "KATAKANA", "HEBREW", "THAI",
+        "LATIN",
+        "CJK",
+        "ARABIC",
+        "DEVANAGARI",
+        "HANGUL",
+        "CYRILLIC",
+        "HIRAGANA",
+        "KATAKANA",
+        "HEBREW",
+        "THAI",
     ]
 
     @staticmethod
@@ -713,7 +750,7 @@ class MultilingualTokenizationAnalyzer:
         return counts.most_common(1)[0][0] if counts else "Unknown"
 
     @staticmethod
-    def byte_fallback_encode(text: str) -> List[str]:
+    def byte_fallback_encode(text: str) -> list[str]:
         """
         Encode text as UTF-8 byte tokens (GPT-4 / LLaMA-3 approach).
 
@@ -725,9 +762,9 @@ class MultilingualTokenizationAnalyzer:
     @staticmethod
     def parity_check(
         concept: str,
-        translations: Dict[str, str],
+        translations: dict[str, str],
         tokenizer_name: str = "gpt2",
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
         Measure token cost for the same concept across languages.
 
@@ -740,12 +777,13 @@ class MultilingualTokenizationAnalyzer:
             {language: n_tokens} sorted by token count
         """
         from transformers import AutoTokenizer
+
         tok = AutoTokenizer.from_pretrained(tokenizer_name)
         costs = {lang: len(tok.encode(text)) for lang, text in translations.items()}
         return dict(sorted(costs.items(), key=lambda x: x[1]))
 
     @staticmethod
-    def parity_bar_chart(costs: Dict[str, int]) -> str:
+    def parity_bar_chart(costs: dict[str, int]) -> str:
         """Render parity check results as an ASCII bar chart."""
         lines = []
         for lang, n in costs.items():
@@ -756,14 +794,15 @@ class MultilingualTokenizationAnalyzer:
     @staticmethod
     def script_fertility_analysis(
         tokenizer_name: str = "gpt2",
-        samples: Optional[Dict[str, str]] = None,
-    ) -> Dict[str, Dict]:
+        samples: dict[str, str] | None = None,
+    ) -> dict[str, dict]:
         """
         Combine script detection with fertility analysis.
         Reveals which scripts are under-served by a tokenizer.
         """
         samples = samples or MULTILINGUAL_SAMPLES
         from transformers import AutoTokenizer
+
         tok = AutoTokenizer.from_pretrained(tokenizer_name)
         results = {}
 
@@ -777,7 +816,8 @@ class MultilingualTokenizationAnalyzer:
                 "n_tokens": len(ids),
                 "byte_tokens": len(MultilingualTokenizationAnalyzer.byte_fallback_encode(text)),
                 "byte_overhead": round(
-                    len(MultilingualTokenizationAnalyzer.byte_fallback_encode(text)) / max(len(ids), 1),
+                    len(MultilingualTokenizationAnalyzer.byte_fallback_encode(text))
+                    / max(len(ids), 1),
                     2,
                 ),
             }
@@ -802,8 +842,9 @@ if __name__ == "__main__":
     ana_p.add_argument("--model", default="gpt2")
 
     cmp_p = sub.add_parser("compare", help="Compare multiple tokenizers")
-    cmp_p.add_argument("--models", nargs="+",
-                       default=["gpt2", "bert-base-uncased", "bert-base-multilingual-cased"])
+    cmp_p.add_argument(
+        "--models", nargs="+", default=["gpt2", "bert-base-uncased", "bert-base-multilingual-cased"]
+    )
 
     par_p = sub.add_parser("parity", help="Token cost parity across languages")
     par_p.add_argument("--model", default="gpt2")
@@ -848,7 +889,9 @@ if __name__ == "__main__":
         print(f"{'Language':15s} {'Script':12s} {'Fertility':>10s} {'Byte overhead':>14s}")
         print("-" * 56)
         for lang, d in script_results.items():
-            print(f"{lang:15s} {d['script']:12s} {d['fertility']:10.2f} {d['byte_overhead']:14.2f}x")
+            print(
+                f"{lang:15s} {d['script']:12s} {d['fertility']:10.2f} {d['byte_overhead']:14.2f}x"
+            )
 
     elif args.cmd == "compare":
         print(f"=== Tokenizer comparison: {args.models} ===")
@@ -857,20 +900,22 @@ if __name__ == "__main__":
         print(f"\n{'Tokenizer':35s} {'Vocab':>8s} {'Fertility':>10s} {'Compress':>10s} {'OOV':>6s}")
         print("-" * 75)
         for s in stats_list:
-            print(f"{s.tokenizer_name:35s} {s.vocab_size:8,d} {s.fertility:10.3f} "
-                  f"{s.compression_ratio:10.1f} {s.oov_rate:6.2%}")
+            print(
+                f"{s.tokenizer_name:35s} {s.vocab_size:8,d} {s.fertility:10.3f} "
+                f"{s.compression_ratio:10.1f} {s.oov_rate:6.2%}"
+            )
 
     elif args.cmd == "parity":
         print(f"=== Tokenization parity check ({args.model}) ===")
         translations = {
-            "english":  "artificial intelligence",
-            "spanish":  "inteligencia artificial",
-            "french":   "intelligence artificielle",
-            "chinese":  "人工智能",
-            "arabic":   "الذكاء الاصطناعي",
-            "hindi":    "कृत्रिम बुद्धिमत्ता",
+            "english": "artificial intelligence",
+            "spanish": "inteligencia artificial",
+            "french": "intelligence artificielle",
+            "chinese": "人工智能",
+            "arabic": "الذكاء الاصطناعي",
+            "hindi": "कृत्रिम बुद्धिमत्ता",
             "japanese": "人工知能",
-            "russian":  "искусственный интеллект",
+            "russian": "искусственный интеллект",
         }
         costs = MultilingualTokenizationAnalyzer.parity_check(
             "artificial intelligence", translations, args.model
@@ -878,7 +923,7 @@ if __name__ == "__main__":
         print(f'\nConcept: "artificial intelligence"  |  Tokenizer: {args.model}\n')
         print(MultilingualTokenizationAnalyzer.parity_bar_chart(costs))
         english_cost = costs.get("english", 1)
-        print(f"\nOverhead vs English:")
+        print("\nOverhead vs English:")
         for lang, n in costs.items():
             ratio = n / english_cost
             print(f"  {lang:12s}: {ratio:.1f}x")

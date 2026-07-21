@@ -11,13 +11,13 @@ Mount in api/main.py:
     from src.agents.multi_agent.api_router import router as multi_agent_router
     app.include_router(multi_agent_router, prefix="/multi-agent", tags=["multi-agent"])
 """
+
 from __future__ import annotations
 
 import logging
-import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from src.agents.multi_agent.supervisor import Supervisor
@@ -25,7 +25,7 @@ from src.agents.multi_agent.supervisor import Supervisor
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_supervisor: Optional[Supervisor] = None
+_supervisor: Supervisor | None = None
 
 
 def get_supervisor() -> Supervisor:
@@ -37,11 +37,12 @@ def get_supervisor() -> Supervisor:
 
 # ── Request / Response models ──────────────────────────────────────────────────
 
+
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=4096, description="The user query.")
-    session_id: Optional[str] = Field(None, description="Optional session ID for memory continuity.")
+    session_id: str | None = Field(None, description="Optional session ID for memory continuity.")
     priority: str = Field("normal", description="Task priority: low, normal, high, critical.")
-    max_iterations: Optional[int] = Field(None, ge=1, le=5)
+    max_iterations: int | None = Field(None, ge=1, le=5)
 
 
 class AgentResultResponse(BaseModel):
@@ -50,7 +51,7 @@ class AgentResultResponse(BaseModel):
     confidence: float
     output_preview: str
     latency_ms: float
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class QueryResponse(BaseModel):
@@ -62,9 +63,9 @@ class QueryResponse(BaseModel):
     consensus_strategy: str
     iterations: int
     total_latency_ms: float
-    agent_results: List[AgentResultResponse]
+    agent_results: list[AgentResultResponse]
     hitl_triggered: bool
-    hitl_reason: Optional[str] = None
+    hitl_reason: str | None = None
 
 
 class HITLResolveRequest(BaseModel):
@@ -73,15 +74,18 @@ class HITLResolveRequest(BaseModel):
 
 class StatusResponse(BaseModel):
     status: str
-    agents: Dict[str, Any]
-    circuit_breakers: Dict[str, Any]
+    agents: dict[str, Any]
+    circuit_breakers: dict[str, Any]
     hitl_queue_size: int
     pending_hitl: int
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────────
 
-@router.post("/query", response_model=QueryResponse, summary="Submit a query to the multi-agent pipeline")
+
+@router.post(
+    "/query", response_model=QueryResponse, summary="Submit a query to the multi-agent pipeline"
+)
 async def multi_agent_query(request: QueryRequest) -> QueryResponse:
     """
     Routes the query through the Research -> Critic -> Verifier pipeline.
@@ -147,7 +151,7 @@ async def multi_agent_status() -> StatusResponse:
 
 
 @router.get("/hitl", summary="List pending human-in-the-loop requests")
-async def list_hitl_requests() -> List[Dict[str, Any]]:
+async def list_hitl_requests() -> list[dict[str, Any]]:
     """Returns all unresolved HITL requests requiring human review."""
     supervisor = get_supervisor()
     return [
@@ -166,7 +170,7 @@ async def list_hitl_requests() -> List[Dict[str, Any]]:
 
 
 @router.post("/hitl/{session_id}/resolve", summary="Resolve a HITL request")
-async def resolve_hitl(session_id: str, request: HITLResolveRequest) -> Dict[str, Any]:
+async def resolve_hitl(session_id: str, request: HITLResolveRequest) -> dict[str, Any]:
     """
     Marks a HITL request as resolved with a human-provided response.
     The resolution is stored and can be used to improve future responses.

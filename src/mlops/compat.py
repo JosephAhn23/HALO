@@ -4,6 +4,7 @@ Shared MLflow compatibility shim.
 Import ``mlflow`` from this module instead of directly so that all code
 gracefully degrades when MLflow is not installed.
 """
+
 from __future__ import annotations
 
 try:

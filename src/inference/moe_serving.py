@@ -42,6 +42,7 @@ Usage:
     balancer.update(routing_weights)
     balancer.report()
 """
+
 from __future__ import annotations
 
 import json
@@ -49,7 +50,6 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -62,6 +62,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # ──────────────────────────────────────────────────────────────────────────────
 # MoE Router
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class MoERouter(nn.Module):
     """
@@ -88,7 +89,7 @@ class MoERouter(nn.Module):
         top_k: int = 2,
         routing_type: str = "softmax",
         aux_loss_coef: float = 0.01,
-        capacity_factor: float = 1.25,   # expert capacity = capacity_factor * (tokens / n_experts)
+        capacity_factor: float = 1.25,  # expert capacity = capacity_factor * (tokens / n_experts)
     ):
         super().__init__()
         self.n_experts = n_experts
@@ -101,7 +102,7 @@ class MoERouter(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         """
         Args:
             hidden_states: [batch * seq_len, hidden_size]
@@ -112,7 +113,7 @@ class MoERouter(nn.Module):
             router_logits:     [batch * seq_len, n_experts] — raw gate logits
             aux_loss:          scalar auxiliary load-balancing loss (or None)
         """
-        router_logits = self.gate(hidden_states)   # [T, E]
+        router_logits = self.gate(hidden_states)  # [T, E]
 
         if self.routing_type == "sigmoid":
             # DeepSeek-MoE: independent expert probabilities, no competition
@@ -122,9 +123,7 @@ class MoERouter(nn.Module):
         else:
             # Mixtral-style: softmax over all experts, then top-k
             routing_weights_full = F.softmax(router_logits, dim=-1)
-            routing_weights, selected_experts = torch.topk(
-                routing_weights_full, self.top_k, dim=-1
-            )
+            routing_weights, selected_experts = torch.topk(routing_weights_full, self.top_k, dim=-1)
             routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
 
         # Auxiliary load-balancing loss (Switch Transformer / ST-MoE)
@@ -152,24 +151,24 @@ class MoERouter(nn.Module):
         P = F.softmax(router_logits, dim=-1).mean(0)  # [E]
         return self.aux_loss_coef * self.n_experts * (f * P).sum()
 
-    def get_routing_stats(self, router_logits: torch.Tensor) -> Dict:
+    def get_routing_stats(self, router_logits: torch.Tensor) -> dict:
         """Return expert utilisation statistics for monitoring."""
         with torch.no_grad():
             probs = F.softmax(router_logits, dim=-1)
             _, top_experts = torch.topk(probs, self.top_k, dim=-1)
             counts = torch.zeros(self.n_experts, device=router_logits.device)
-            counts.scatter_add_(0, top_experts.flatten(),
-                                torch.ones_like(top_experts.flatten(), dtype=torch.float))
+            counts.scatter_add_(
+                0, top_experts.flatten(), torch.ones_like(top_experts.flatten(), dtype=torch.float)
+            )
             total = top_experts.numel()
             utilisation = (counts / total * 100).tolist()
-        return {
-            f"expert_{i}_pct": f"{u:.1f}%" for i, u in enumerate(utilisation)
-        }
+        return {f"expert_{i}_pct": f"{u:.1f}%" for i, u in enumerate(utilisation)}
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Expert parallelism configuration
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class ExpertParallelConfig:
@@ -187,22 +186,25 @@ class ExpertParallelConfig:
     DeepSeek-MoE-16B on 8 GPUs:
       ep_size=8, tp_size=1  → 8 expert groups (2 experts/GPU for 16 experts)
     """
+
     model: str = "mixtral-8x7b"
     n_experts: int = 8
     top_k: int = 2
     n_gpus: int = 8
-    ep_size: int = 8            # expert parallel degree
-    tp_size: int = 1            # tensor parallel degree
-    pp_size: int = 1            # pipeline parallel degree
+    ep_size: int = 8  # expert parallel degree
+    tp_size: int = 1  # tensor parallel degree
+    pp_size: int = 1  # pipeline parallel degree
     hidden_size: int = 4096
     intermediate_size: int = 14336
     n_layers: int = 32
 
     def __post_init__(self):
-        assert self.ep_size * self.tp_size * self.pp_size <= self.n_gpus, \
-            f"ep={self.ep_size} * tp={self.tp_size} * pp={self.pp_size} > n_gpus={self.n_gpus}"
-        assert self.n_experts % self.ep_size == 0, \
-            f"n_experts={self.n_experts} must be divisible by ep_size={self.ep_size}"
+        assert (
+            self.ep_size * self.tp_size * self.pp_size <= self.n_gpus
+        ), f"ep={self.ep_size} * tp={self.tp_size} * pp={self.pp_size} > n_gpus={self.n_gpus}"
+        assert (
+            self.n_experts % self.ep_size == 0
+        ), f"n_experts={self.n_experts} must be divisible by ep_size={self.ep_size}"
 
     @property
     def experts_per_gpu(self) -> int:
@@ -212,7 +214,7 @@ class ExpertParallelConfig:
     def world_size(self) -> int:
         return self.ep_size * self.tp_size * self.pp_size
 
-    def gpu_layout(self) -> Dict[int, Dict]:
+    def gpu_layout(self) -> dict[int, dict]:
         """Return which experts and layers each GPU handles."""
         layout = {}
         for gpu_id in range(self.n_gpus):
@@ -239,22 +241,24 @@ class ExpertParallelConfig:
         print(f"  World size: {self.world_size}")
         print()
         for gpu_id, info in self.gpu_layout().items():
-            print(f"  GPU {gpu_id:2d}: experts={info['experts']}  "
-                  f"layers={info['layers'][0]}..{info['layers'][-1]}  "
-                  f"ep_rank={info['ep_rank']}  tp_rank={info['tp_rank']}")
+            print(
+                f"  GPU {gpu_id:2d}: experts={info['experts']}  "
+                f"layers={info['layers'][0]}..{info['layers'][-1]}  "
+                f"ep_rank={info['ep_rank']}  tp_rank={info['tp_rank']}"
+            )
 
-    def to_vllm_args(self) -> List[str]:
+    def to_vllm_args(self) -> list[str]:
         """Generate vLLM launch arguments for this parallelism config."""
         return [
             f"--tensor-parallel-size={self.tp_size}",
             f"--pipeline-parallel-size={self.pp_size}",
             f"--model={self.model}",
-            f"--max-model-len=32768",
+            "--max-model-len=32768",
             "--enable-chunked-prefill",
             "--gpu-memory-utilization=0.92",
         ]
 
-    def to_deepspeed_config(self) -> Dict:
+    def to_deepspeed_config(self) -> dict:
         """Generate DeepSpeed-Inference config for this MoE layout."""
         return {
             "replace_with_kernel_inject": True,
@@ -276,6 +280,7 @@ class ExpertParallelConfig:
 # MoE load balancer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class MoELoadBalancer:
     """
     Monitors expert utilisation and detects load imbalance.
@@ -291,7 +296,7 @@ class MoELoadBalancer:
         self,
         n_experts: int = 8,
         window_size: int = 1000,
-        imbalance_threshold: float = 2.0,   # alert if max/mean > 2x
+        imbalance_threshold: float = 2.0,  # alert if max/mean > 2x
     ):
         self.n_experts = n_experts
         self.window_size = window_size
@@ -328,7 +333,7 @@ class MoELoadBalancer:
             return 1.0
         return (util.max() / mean).item()
 
-    def report(self) -> Dict:
+    def report(self) -> dict:
         util = self.utilisation()
         ratio = self.imbalance_ratio()
         report = {
@@ -344,7 +349,8 @@ class MoELoadBalancer:
             logger.warning(
                 "MoE load imbalance detected: ratio=%.2f (threshold=%.1f). "
                 "Consider increasing aux_loss_coef or using capacity_factor.",
-                ratio, self.imbalance_threshold,
+                ratio,
+                self.imbalance_threshold,
             )
         return report
 
@@ -352,6 +358,7 @@ class MoELoadBalancer:
         """Push expert utilisation metrics to Prometheus."""
         try:
             from src.observability.metrics import metrics
+
             if metrics is None:
                 return
             util = self.utilisation()
@@ -366,6 +373,7 @@ class MoELoadBalancer:
 # MoE architecture config + named presets
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class MoEArchConfig:
     """
@@ -375,18 +383,19 @@ class MoEArchConfig:
     decisions so that memory estimation and parallelism advice can be
     computed without loading the model.
     """
+
     model_id: str
     num_experts: int
     top_k_experts: int
     num_layers: int
     hidden_size: int
-    intermediate_size: int      # per-expert FFN intermediate width
+    intermediate_size: int  # per-expert FFN intermediate width
     num_attention_heads: int
     num_kv_heads: int
     vocab_size: int
     max_position_embeddings: int
-    total_params_b: float       # total parameters (billions)
-    active_params_b: float      # active params per forward pass (billions)
+    total_params_b: float  # total parameters (billions)
+    active_params_b: float  # active params per forward pass (billions)
     expert_type: str = "dense"  # dense | sparse | shared
 
     def efficiency_ratio(self) -> float:
@@ -405,33 +414,51 @@ class MoEArchConfig:
 # Named architecture presets
 MIXTRAL_8X7B = MoEArchConfig(
     model_id="mistralai/Mixtral-8x7B-Instruct-v0.1",
-    num_experts=8, top_k_experts=2,
-    num_layers=32, hidden_size=4096, intermediate_size=14336,
-    num_attention_heads=32, num_kv_heads=8,
-    vocab_size=32000, max_position_embeddings=32768,
-    total_params_b=46.7, active_params_b=12.9,
+    num_experts=8,
+    top_k_experts=2,
+    num_layers=32,
+    hidden_size=4096,
+    intermediate_size=14336,
+    num_attention_heads=32,
+    num_kv_heads=8,
+    vocab_size=32000,
+    max_position_embeddings=32768,
+    total_params_b=46.7,
+    active_params_b=12.9,
 )
 
 MIXTRAL_8X22B = MoEArchConfig(
     model_id="mistralai/Mixtral-8x22B-Instruct-v0.1",
-    num_experts=8, top_k_experts=2,
-    num_layers=56, hidden_size=6144, intermediate_size=16384,
-    num_attention_heads=48, num_kv_heads=8,
-    vocab_size=32000, max_position_embeddings=65536,
-    total_params_b=141.0, active_params_b=39.1,
+    num_experts=8,
+    top_k_experts=2,
+    num_layers=56,
+    hidden_size=6144,
+    intermediate_size=16384,
+    num_attention_heads=48,
+    num_kv_heads=8,
+    vocab_size=32000,
+    max_position_embeddings=65536,
+    total_params_b=141.0,
+    active_params_b=39.1,
 )
 
 DEEPSEEK_V2 = MoEArchConfig(
     model_id="deepseek-ai/DeepSeek-V2",
-    num_experts=160, top_k_experts=6,
-    num_layers=60, hidden_size=5120, intermediate_size=1536,
-    num_attention_heads=128, num_kv_heads=128,
-    vocab_size=102400, max_position_embeddings=163840,
-    total_params_b=236.0, active_params_b=21.0,
+    num_experts=160,
+    top_k_experts=6,
+    num_layers=60,
+    hidden_size=5120,
+    intermediate_size=1536,
+    num_attention_heads=128,
+    num_kv_heads=128,
+    vocab_size=102400,
+    max_position_embeddings=163840,
+    total_params_b=236.0,
+    active_params_b=21.0,
     expert_type="sparse",
 )
 
-ARCH_PRESETS: Dict[str, MoEArchConfig] = {
+ARCH_PRESETS: dict[str, MoEArchConfig] = {
     "mixtral-8x7b": MIXTRAL_8X7B,
     "mixtral-8x22b": MIXTRAL_8X22B,
     "deepseek-v2": DEEPSEEK_V2,
@@ -441,6 +468,7 @@ ARCH_PRESETS: Dict[str, MoEArchConfig] = {
 # ──────────────────────────────────────────────────────────────────────────────
 # MoE layer (router + expert pool) — runnable nn.Module
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class MoELayer(nn.Module):
     """
@@ -468,16 +496,18 @@ class MoELayer(nn.Module):
             routing_type=routing_type,
         )
         # SwiGLU-style experts (gate proj + up proj + down proj)
-        self.experts = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(hidden_size, intermediate_size, bias=False),
-                nn.SiLU(),
-                nn.Linear(intermediate_size, hidden_size, bias=False),
-            )
-            for _ in range(num_experts)
-        ])
+        self.experts = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Linear(hidden_size, intermediate_size, bias=False),
+                    nn.SiLU(),
+                    nn.Linear(intermediate_size, hidden_size, bias=False),
+                )
+                for _ in range(num_experts)
+            ]
+        )
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Args:
             x: [batch * seq_len, hidden_size]  (caller must flatten batch/seq dims)
@@ -490,7 +520,7 @@ class MoELayer(nn.Module):
 
         output = torch.zeros_like(x)
         for k in range(self.router.top_k):
-            expert_idx = selected_experts[:, k]        # (T,)
+            expert_idx = selected_experts[:, k]  # (T,)
             weights = routing_weights[:, k].unsqueeze(-1)  # (T, 1)
             for e_id, expert in enumerate(self.experts):
                 mask = expert_idx == e_id
@@ -503,6 +533,7 @@ class MoELayer(nn.Module):
 # ──────────────────────────────────────────────────────────────────────────────
 # High-level vLLM serving config
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class MoEServingConfig:
@@ -521,6 +552,7 @@ class MoEServingConfig:
         print(cfg.generate_vllm_launch_cmd())
         print(cfg.estimate_gpu_memory_gb())
     """
+
     arch: MoEArchConfig = field(default_factory=lambda: MIXTRAL_8X7B)
     tp_size: int = 1
     ep_size: int = 1
@@ -530,10 +562,10 @@ class MoEServingConfig:
     max_num_seqs: int = 256
     max_num_batched_tokens: int = 8192
     enable_chunked_prefill: bool = True
-    quantization: Optional[str] = None     # None | awq | gptq | fp8
+    quantization: str | None = None  # None | awq | gptq | fp8
     kv_cache_dtype: str = "auto"
     use_speculative: bool = False
-    speculative_model: Optional[str] = None
+    speculative_model: str | None = None
     num_speculative_tokens: int = 5
 
     @property
@@ -541,17 +573,17 @@ class MoEServingConfig:
         return self.tp_size * self.ep_size * self.pp_size
 
     @classmethod
-    def for_mixtral(cls, n_gpus: int = 4) -> "MoEServingConfig":
+    def for_mixtral(cls, n_gpus: int = 4) -> MoEServingConfig:
         """Mixtral-8x7B: tensor-parallel across all GPUs."""
         return cls(arch=MIXTRAL_8X7B, tp_size=n_gpus, ep_size=1, pp_size=1)
 
     @classmethod
-    def for_mixtral_22b(cls, n_gpus: int = 8) -> "MoEServingConfig":
+    def for_mixtral_22b(cls, n_gpus: int = 8) -> MoEServingConfig:
         """Mixtral-8x22B: TP=4, PP=2 for 8-GPU nodes."""
         return cls(arch=MIXTRAL_8X22B, tp_size=4, ep_size=1, pp_size=n_gpus // 4)
 
     @classmethod
-    def for_deepseek_v2(cls, n_gpus: int = 8) -> "MoEServingConfig":
+    def for_deepseek_v2(cls, n_gpus: int = 8) -> MoEServingConfig:
         """DeepSeek-V2: expert-parallel (160 experts → 8 EP groups)."""
         return cls(arch=DEEPSEEK_V2, tp_size=1, ep_size=n_gpus, pp_size=1)
 
@@ -582,31 +614,35 @@ class MoEServingConfig:
             ]
         return " \\\n  ".join(parts)
 
-    def generate_ray_serve_config(self, deployment_name: str = "moe-llm") -> Dict:
+    def generate_ray_serve_config(self, deployment_name: str = "moe-llm") -> dict:
         """Generate Ray Serve deployment config dict (serialisable to YAML)."""
         return {
-            "applications": [{
-                "name": deployment_name,
-                "route_prefix": "/",
-                "import_path": "vllm.entrypoints.openai.api_server:build_app",
-                "args": {
-                    "model": self.arch.model_id,
-                    "tensor_parallel_size": self.tp_size,
-                    "pipeline_parallel_size": self.pp_size,
-                    "max_model_len": self.max_model_len,
-                    "gpu_memory_utilization": self.gpu_memory_utilization,
-                    "trust_remote_code": True,
-                },
-                "deployments": [{
-                    "name": "VLLMDeployment",
-                    "num_replicas": 1,
-                    "ray_actor_options": {"num_gpus": self.world_size},
-                    "max_concurrent_queries": self.max_num_seqs,
-                }],
-            }]
+            "applications": [
+                {
+                    "name": deployment_name,
+                    "route_prefix": "/",
+                    "import_path": "vllm.entrypoints.openai.api_server:build_app",
+                    "args": {
+                        "model": self.arch.model_id,
+                        "tensor_parallel_size": self.tp_size,
+                        "pipeline_parallel_size": self.pp_size,
+                        "max_model_len": self.max_model_len,
+                        "gpu_memory_utilization": self.gpu_memory_utilization,
+                        "trust_remote_code": True,
+                    },
+                    "deployments": [
+                        {
+                            "name": "VLLMDeployment",
+                            "num_replicas": 1,
+                            "ray_actor_options": {"num_gpus": self.world_size},
+                            "max_concurrent_queries": self.max_num_seqs,
+                        }
+                    ],
+                }
+            ]
         }
 
-    def estimate_gpu_memory_gb(self) -> Dict:
+    def estimate_gpu_memory_gb(self) -> dict:
         """
         Estimate GPU memory requirements.
 
@@ -614,22 +650,26 @@ class MoEServingConfig:
         (proportional to max_model_len × max_num_seqs × layer/head dims).
         """
         bytes_per_param = {
-            "float16": 2, "bfloat16": 2,
-            "fp8": 1, "awq": 0.5, "gptq": 0.5, "int4": 0.5,
+            "float16": 2,
+            "bfloat16": 2,
+            "fp8": 1,
+            "awq": 0.5,
+            "gptq": 0.5,
+            "int4": 0.5,
         }
         bpp = bytes_per_param.get(self.quantization or "float16", 2)
-        model_gb = self.arch.total_params_b * 1e9 * bpp / (1024 ** 3)
+        model_gb = self.arch.total_params_b * 1e9 * bpp / (1024**3)
 
         head_dim = self.arch.hidden_size // self.arch.num_attention_heads
         kv_gb = (
-            2                               # K and V
+            2  # K and V
             * self.arch.num_layers
             * self.arch.num_kv_heads
             * head_dim
             * self.max_model_len
             * self.max_num_seqs
-            * 2                             # fp16 KV cache
-            / (1024 ** 3)
+            * 2  # fp16 KV cache
+            / (1024**3)
         )
         total_gb = model_gb + kv_gb
         per_gpu_gb = total_gb / self.world_size
@@ -687,6 +727,7 @@ volumes:
 # DeepSpeed-Inference MoE config
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class DeepSpeedMoEConfig:
     """
@@ -699,15 +740,16 @@ class DeepSpeedMoEConfig:
       - CUDA graph capture
       - Dynamic batching
     """
+
     model_name: str = "mistralai/Mixtral-8x7B-Instruct-v0.1"
     ep_config: ExpertParallelConfig = field(default_factory=ExpertParallelConfig)
-    dtype: str = "fp16"                 # fp16 | bf16 | int8
+    dtype: str = "fp16"  # fp16 | bf16 | int8
     max_tokens: int = 4096
     enable_cuda_graph: bool = True
     cuda_graph_max_batch_size: int = 32
-    quantization: str = "none"          # none | int8 | int4
+    quantization: str = "none"  # none | int8 | int4
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         cfg = {
             "replace_with_kernel_inject": True,
             "dtype": self.dtype,
@@ -761,6 +803,7 @@ class DeepSpeedMoEConfig:
 # Multi-GPU inference config (transformers device_map)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class MultiGPUInferenceConfig:
     """
@@ -773,13 +816,14 @@ class MultiGPUInferenceConfig:
       "sequential" — Layers assigned sequentially (pipeline parallelism)
       custom dict  — Explicit layer-to-device mapping
     """
+
     model_name: str = "mistralai/Mixtral-8x7B-Instruct-v0.1"
-    device_map: str = "auto"            # "auto" | "balanced" | "sequential" | dict
+    device_map: str = "auto"  # "auto" | "balanced" | "sequential" | dict
     dtype: str = "float16"
     load_in_8bit: bool = False
     load_in_4bit: bool = False
-    max_memory: Optional[Dict[int, str]] = None   # e.g. {0: "20GiB", 1: "20GiB"}
-    offload_folder: Optional[str] = None          # CPU offload for very large models
+    max_memory: dict[int, str] | None = None  # e.g. {0: "20GiB", 1: "20GiB"}
+    offload_folder: str | None = None  # CPU offload for very large models
 
     def load(self):
         """Load model with the configured multi-GPU strategy."""
@@ -810,20 +854,20 @@ class MultiGPUInferenceConfig:
 
         # Log actual device assignment
         if hasattr(model, "hf_device_map"):
-            device_counts: Dict[str, int] = {}
+            device_counts: dict[str, int] = {}
             for dev in model.hf_device_map.values():
                 device_counts[str(dev)] = device_counts.get(str(dev), 0) + 1
             logger.info("Device map: %s", device_counts)
 
         return model, tokenizer
 
-    def generate_device_map(self, n_gpus: int, n_layers: int) -> Dict[str, str]:
+    def generate_device_map(self, n_gpus: int, n_layers: int) -> dict[str, str]:
         """
         Generate a balanced manual device map for pipeline parallelism.
         Assigns equal numbers of transformer layers to each GPU.
         """
         layers_per_gpu = n_layers // n_gpus
-        device_map: Dict[str, str] = {
+        device_map: dict[str, str] = {
             "model.embed_tokens": "cuda:0",
             "model.norm": f"cuda:{n_gpus - 1}",
             "lm_head": f"cuda:{n_gpus - 1}",
@@ -838,10 +882,11 @@ class MultiGPUInferenceConfig:
 # Ray Serve deployment
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def create_ray_serve_moe_deployment(
     ep_config: ExpertParallelConfig,
     num_replicas: int = 2,
-    ray_actor_options: Optional[Dict] = None,
+    ray_actor_options: dict | None = None,
 ):
     """
     Create a Ray Serve deployment for MoE model serving.
@@ -853,7 +898,6 @@ def create_ray_serve_moe_deployment(
     """
     try:
         from ray import serve
-        from ray.serve.handle import DeploymentHandle
     except ImportError:
         raise ImportError("ray[serve] required: pip install 'ray[serve]'")
 
@@ -888,7 +932,7 @@ def create_ray_serve_moe_deployment(
                 self._model, self._tokenizer = multi_gpu_cfg.load()
                 logger.info("Model loaded on replica")
 
-        async def __call__(self, request) -> Dict:
+        async def __call__(self, request) -> dict:
             self._load_model()
             data = await request.json()
             prompt = data.get("prompt", "")
@@ -944,14 +988,15 @@ if __name__ == "__main__":
     router_p.add_argument("--seq-len", type=int, default=128)
 
     # High-level serving config
-    serve_p = subparsers.add_parser("serve-config", help="Show vLLM launch command + memory estimate")
-    serve_p.add_argument("--model", default="mixtral-8x7b",
-                         choices=list(ARCH_PRESETS.keys()))
+    serve_p = subparsers.add_parser(
+        "serve-config", help="Show vLLM launch command + memory estimate"
+    )
+    serve_p.add_argument("--model", default="mixtral-8x7b", choices=list(ARCH_PRESETS.keys()))
     serve_p.add_argument("--n-gpus", type=int, default=4)
-    serve_p.add_argument("--gen-compose", action="store_true",
-                         help="Also print Docker Compose YAML")
-    serve_p.add_argument("--gen-ray", action="store_true",
-                         help="Also print Ray Serve config JSON")
+    serve_p.add_argument(
+        "--gen-compose", action="store_true", help="Also print Docker Compose YAML"
+    )
+    serve_p.add_argument("--gen-ray", action="store_true", help="Also print Ray Serve config JSON")
 
     # MoE layer forward-pass demo
     layer_demo_p = subparsers.add_parser("layer-demo", help="Run MoE layer forward pass")

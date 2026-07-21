@@ -14,7 +14,7 @@ Also supports:
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 import pandas as pd
@@ -51,10 +51,12 @@ class CounterfactualEvaluator:
         from sklearn.pipeline import Pipeline
         from sklearn.preprocessing import StandardScaler
 
-        self._proxy_model = Pipeline([
-            ("scaler", StandardScaler()),
-            ("ridge", Ridge(alpha=1.0)),
-        ])
+        self._proxy_model = Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("ridge", Ridge(alpha=1.0)),
+            ]
+        )
         self._proxy_model.fit(df[feature_cols].values, df[outcome_col].values)
         self._feature_cols = feature_cols
         logger.info("Proxy model fitted on %d samples", len(df))
@@ -103,12 +105,14 @@ class CounterfactualEvaluator:
         rows = []
         for k in k_values:
             cf = self.counterfactual_score(df, {chunk_count_col: float(k)})
-            rows.append({
-                "k": k,
-                "mean_faithfulness": cf["cf_faithfulness"].mean(),
-                "std_faithfulness": cf["cf_faithfulness"].std(),
-                "n": len(cf),
-            })
+            rows.append(
+                {
+                    "k": k,
+                    "mean_faithfulness": cf["cf_faithfulness"].mean(),
+                    "std_faithfulness": cf["cf_faithfulness"].std(),
+                    "n": len(cf),
+                }
+            )
         return pd.DataFrame(rows)
 
     def min_chunks_for_threshold(
@@ -138,6 +142,4 @@ class CounterfactualEvaluator:
             return np.array([self.scoring_fn(row) for _, row in df.iterrows()])
         if self._proxy_model is not None:
             return self._proxy_model.predict(df[self._feature_cols].values)
-        raise RuntimeError(
-            "No scoring function available. Call fit_proxy() or pass scoring_fn."
-        )
+        raise RuntimeError("No scoring function available. Call fit_proxy() or pass scoring_fn.")

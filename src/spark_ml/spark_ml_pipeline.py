@@ -18,12 +18,12 @@ Covers gaps: Spark ML, GBT classifier, MLlib, MLflow + Spark, Delta Lake,
 Run locally:
     python spark_ml/spark_ml_pipeline.py
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class SparkMLConfig:
@@ -40,7 +41,7 @@ class SparkMLConfig:
     executor_memory: str = "8g"
     shuffle_partitions: int = 50
     # Feature engineering
-    tfidf_num_features: int = 2 ** 16
+    tfidf_num_features: int = 2**16
     embedding_dim: int = 384
     embedding_model: str = "all-MiniLM-L6-v2"
     # GBT classifier
@@ -63,6 +64,7 @@ class SparkMLConfig:
 # ---------------------------------------------------------------------------
 # Spark session factory
 # ---------------------------------------------------------------------------
+
 
 def build_spark_session(config: SparkMLConfig):
     from pyspark.sql import SparkSession
@@ -89,6 +91,7 @@ def build_spark_session(config: SparkMLConfig):
 # Feature Engineer
 # ---------------------------------------------------------------------------
 
+
 class SparkFeatureEngineer:
     """
     Distributed feature engineering on raw text corpora.
@@ -109,14 +112,19 @@ class SparkFeatureEngineer:
         """TF-IDF vectorisation pipeline. Returns (transformed_df, fitted_pipeline_model)."""
         from pyspark.ml import Pipeline
         from pyspark.ml.feature import (
-            HashingTF, IDF, Normalizer, RegexTokenizer, StopWordsRemover,
+            IDF,
+            HashingTF,
+            Normalizer,
+            RegexTokenizer,
+            StopWordsRemover,
         )
 
         stages = [
             RegexTokenizer(inputCol=text_col, outputCol="tokens_raw", pattern=r"\W+"),
             StopWordsRemover(inputCol="tokens_raw", outputCol="tokens"),
-            HashingTF(inputCol="tokens", outputCol="tf",
-                      numFeatures=self.config.tfidf_num_features),
+            HashingTF(
+                inputCol="tokens", outputCol="tf", numFeatures=self.config.tfidf_num_features
+            ),
             IDF(inputCol="tf", outputCol="tfidf", minDocFreq=5),
             Normalizer(inputCol="tfidf", outputCol="features", p=2.0),
         ]
@@ -139,10 +147,9 @@ class SparkFeatureEngineer:
         @pandas_udf(ArrayType(FloatType()))
         def embed_batch(texts: pd.Series) -> pd.Series:
             from sentence_transformers import SentenceTransformer
+
             model = SentenceTransformer(embedding_model_name)
-            embeddings = model.encode(
-                texts.tolist(), batch_size=32, show_progress_bar=False
-            )
+            embeddings = model.encode(texts.tolist(), batch_size=32, show_progress_bar=False)
             return pd.Series([emb.tolist() for emb in embeddings])
 
         return df.withColumn("embedding", embed_batch(df[text_col]))
@@ -152,8 +159,8 @@ class SparkFeatureEngineer:
         Compute text quality signals as ML features:
           char_count, word_count, avg_word_len, punct_density, unique_word_ratio
         """
-        from pyspark.sql import functions as F
         from pyspark.ml.feature import VectorAssembler
+        from pyspark.sql import functions as F
 
         df = (
             df.withColumn("char_count", F.length(F.col(text_col)).cast("float"))
@@ -172,9 +179,9 @@ class SparkFeatureEngineer:
             .withColumn(
                 "unique_word_ratio",
                 (
-                    F.size(
-                        F.array_distinct(F.split(F.lower(F.col(text_col)), r"\s+"))
-                    ).cast("float")
+                    F.size(F.array_distinct(F.split(F.lower(F.col(text_col)), r"\s+"))).cast(
+                        "float"
+                    )
                     / (F.col("word_count") + 1e-6)
                 ),
             )
@@ -182,29 +189,28 @@ class SparkFeatureEngineer:
 
         assembler = VectorAssembler(
             inputCols=[
-                "char_count", "word_count", "avg_word_len",
-                "punct_density", "unique_word_ratio",
+                "char_count",
+                "word_count",
+                "avg_word_len",
+                "punct_density",
+                "unique_word_ratio",
             ],
             outputCol="quality_features",
             handleInvalid="keep",
         )
         return assembler.transform(df)
 
-    def save_feature_store(self, df, path: Optional[str] = None) -> None:
+    def save_feature_store(self, df, path: str | None = None) -> None:
         """Persist features as a Delta Lake table."""
         dest = path or self.config.feature_store_path
-        (
-            df.write.format("delta")
-            .mode("overwrite")
-            .option("overwriteSchema", "true")
-            .save(dest)
-        )
+        (df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(dest))
         logger.info("Feature store written to %s", dest)
 
 
 # ---------------------------------------------------------------------------
 # GBT Query Intent Classifier
 # ---------------------------------------------------------------------------
+
 
 class SparkMLClassifier:
     """
@@ -216,8 +222,11 @@ class SparkMLClassifier:
     """
 
     INTENT_LABELS = [
-        "factual_lookup", "reasoning", "summarisation",
-        "code_generation", "comparison",
+        "factual_lookup",
+        "reasoning",
+        "summarisation",
+        "code_generation",
+        "comparison",
     ]
 
     def __init__(self, spark, config: SparkMLConfig):
@@ -228,6 +237,7 @@ class SparkMLClassifier:
     def _make_synthetic_dataset(self):
         """Create a labelled synthetic dataset for demo/testing."""
         import random
+
         from pyspark.sql import Row
 
         random.seed(42)
@@ -248,7 +258,7 @@ class SparkMLClassifier:
                 rows.append(Row(text=text, label=float(label)))
         return self.spark.createDataFrame(rows)
 
-    def train(self, df=None, label_col: str = "label", feature_col: str = "features") -> Dict:
+    def train(self, df=None, label_col: str = "label", feature_col: str = "features") -> dict:
         """
         Train a GBT classifier. Uses synthetic data if df is None.
         Logs params, metrics, and the Spark model artifact to MLflow.
@@ -259,7 +269,10 @@ class SparkMLClassifier:
         from pyspark.ml.classification import GBTClassifier
         from pyspark.ml.evaluation import MulticlassClassificationEvaluator
         from pyspark.ml.feature import (
-            HashingTF, IDF, RegexTokenizer, StopWordsRemover,
+            IDF,
+            HashingTF,
+            RegexTokenizer,
+            StopWordsRemover,
         )
 
         if df is None:
@@ -267,8 +280,9 @@ class SparkMLClassifier:
 
         tokenizer = RegexTokenizer(inputCol="text", outputCol="tokens_raw", pattern=r"\W+")
         remover = StopWordsRemover(inputCol="tokens_raw", outputCol="tokens")
-        tf = HashingTF(inputCol="tokens", outputCol="tf",
-                       numFeatures=self.config.tfidf_num_features)
+        tf = HashingTF(
+            inputCol="tokens", outputCol="tf", numFeatures=self.config.tfidf_num_features
+        )
         idf = IDF(inputCol="tf", outputCol=feature_col, minDocFreq=1)
         gbt = GBTClassifier(
             featuresCol=feature_col,
@@ -286,11 +300,13 @@ class SparkMLClassifier:
         mlflow.set_experiment(self.config.mlflow_experiment)
 
         with mlflow.start_run(run_name="gbt-query-intent"):
-            mlflow.log_params({
-                "maxIter": self.config.num_trees,
-                "maxDepth": self.config.max_depth,
-                "maxBins": self.config.max_bins,
-            })
+            mlflow.log_params(
+                {
+                    "maxIter": self.config.num_trees,
+                    "maxDepth": self.config.max_depth,
+                    "maxBins": self.config.max_bins,
+                }
+            )
             self.model = pipeline.fit(train_df)
             preds = self.model.transform(val_df)
 
@@ -314,14 +330,15 @@ class SparkMLClassifier:
             raise RuntimeError("Model not trained. Call train() first.")
         return self.model.transform(df)
 
-    def save(self, path: Optional[str] = None) -> None:
+    def save(self, path: str | None = None) -> None:
         dest = path or os.path.join(self.config.model_output_path, "gbt_classifier")
         if self.model:
             self.model.write().overwrite().save(dest)
             logger.info("Spark ML model saved to %s", dest)
 
-    def load(self, path: Optional[str] = None) -> "SparkMLClassifier":
+    def load(self, path: str | None = None) -> SparkMLClassifier:
         from pyspark.ml.classification import GBTClassificationModel
+
         src = path or os.path.join(self.config.model_output_path, "gbt_classifier")
         self.model = GBTClassificationModel.load(src)
         logger.info("GBT model loaded from %s", src)
@@ -331,6 +348,7 @@ class SparkMLClassifier:
 # ---------------------------------------------------------------------------
 # KMeans Topic Clusterer
 # ---------------------------------------------------------------------------
+
 
 class SparkDocumentClusterer:
     """
@@ -348,36 +366,45 @@ class SparkDocumentClusterer:
     def _build_features(self, df):
         from pyspark.ml import Pipeline
         from pyspark.ml.feature import (
-            HashingTF, IDF, Normalizer, RegexTokenizer, StopWordsRemover,
+            IDF,
+            HashingTF,
+            Normalizer,
+            RegexTokenizer,
+            StopWordsRemover,
         )
-        pipeline = Pipeline(stages=[
-            RegexTokenizer(inputCol="text", outputCol="tokens_raw", pattern=r"\W+"),
-            StopWordsRemover(inputCol="tokens_raw", outputCol="tokens"),
-            HashingTF(inputCol="tokens", outputCol="tf",
-                      numFeatures=self.config.tfidf_num_features),
-            IDF(inputCol="tf", outputCol="tfidf", minDocFreq=1),
-            Normalizer(inputCol="tfidf", outputCol="features", p=2.0),
-        ])
+
+        pipeline = Pipeline(
+            stages=[
+                RegexTokenizer(inputCol="text", outputCol="tokens_raw", pattern=r"\W+"),
+                StopWordsRemover(inputCol="tokens_raw", outputCol="tokens"),
+                HashingTF(
+                    inputCol="tokens", outputCol="tf", numFeatures=self.config.tfidf_num_features
+                ),
+                IDF(inputCol="tf", outputCol="tfidf", minDocFreq=1),
+                Normalizer(inputCol="tfidf", outputCol="features", p=2.0),
+            ]
+        )
         model = pipeline.fit(df)
         return model.transform(df), model
 
-    def find_optimal_k(self, df) -> Tuple[int, Dict[int, float]]:
+    def find_optimal_k(self, df) -> tuple[int, dict[int, float]]:
         """
         Elbow method: fit KMeans for k in [min_clusters, max_clusters].
         Returns (optimal_k, {k: silhouette_score}).
         """
-        import mlflow
         from pyspark.ml.clustering import KMeans
         from pyspark.ml.evaluation import ClusteringEvaluator
 
         df_feat, _ = self._build_features(df)
         evaluator = ClusteringEvaluator(featuresCol="features", metricName="silhouette")
-        scores: Dict[int, float] = {}
+        scores: dict[int, float] = {}
 
         for k in range(self.config.min_clusters, self.config.max_clusters + 1):
             km = KMeans(
-                featuresCol="features", k=k,
-                maxIter=self.config.kmeans_max_iter, seed=self.config.kmeans_seed,
+                featuresCol="features",
+                k=k,
+                maxIter=self.config.kmeans_max_iter,
+                seed=self.config.kmeans_seed,
             )
             model = km.fit(df_feat)
             score = float(evaluator.evaluate(model.transform(df_feat)))
@@ -391,7 +418,7 @@ class SparkDocumentClusterer:
     def cluster(
         self,
         df,
-        k: Optional[int] = None,
+        k: int | None = None,
         feature_col: str = "features",
     ):
         """
@@ -407,8 +434,10 @@ class SparkDocumentClusterer:
             k, _ = self.find_optimal_k(df)
 
         km = KMeans(
-            featuresCol=feature_col, k=k,
-            maxIter=self.config.kmeans_max_iter, seed=self.config.kmeans_seed,
+            featuresCol=feature_col,
+            k=k,
+            maxIter=self.config.kmeans_max_iter,
+            seed=self.config.kmeans_seed,
         )
 
         mlflow.set_tracking_uri(self.config.mlflow_uri)
@@ -424,7 +453,7 @@ class SparkDocumentClusterer:
         self._k = k
         return clustered, self._model, silhouette
 
-    def save_to_delta(self, df, path: Optional[str] = None) -> None:
+    def save_to_delta(self, df, path: str | None = None) -> None:
         """Persist cluster assignments to Delta Lake (Parquet fallback)."""
         dest = path or os.path.join(self.config.feature_store_path, "document_clusters")
         clustered = self._model.transform(self._feat_model.transform(df))
@@ -448,6 +477,7 @@ class SparkDocumentClusterer:
 # Delta Lake Feature Store
 # ---------------------------------------------------------------------------
 
+
 class DeltaFeatureStore:
     """
     Persist and retrieve feature vectors from Delta Lake.
@@ -460,12 +490,7 @@ class DeltaFeatureStore:
     def write(self, df, table_name: str, mode: str = "overwrite") -> None:
         path = os.path.join(self.base_path, table_name)
         try:
-            (
-                df.write.format("delta")
-                .mode(mode)
-                .option("overwriteSchema", "true")
-                .save(path)
-            )
+            (df.write.format("delta").mode(mode).option("overwriteSchema", "true").save(path))
             logger.info("Feature table '%s' written to Delta Lake: %s", table_name, path)
         except Exception as e:
             logger.warning("Delta write failed — falling back to Parquet: %s", e)
@@ -481,6 +506,7 @@ class DeltaFeatureStore:
     def upsert(self, spark, new_df, table_name: str, merge_key: str = "id") -> None:
         """Delta Lake MERGE (upsert) — insert new rows, update existing."""
         from delta.tables import DeltaTable
+
         path = os.path.join(self.base_path, table_name)
         try:
             if DeltaTable.isDeltaTable(spark, path):

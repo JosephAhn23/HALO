@@ -25,16 +25,17 @@ Run:
     ui = LLMOpsGradioUI(inference_fn=my_rag_pipeline)
     ui.launch(share=True)
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -44,21 +45,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Feedback data model
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class FeedbackRecord:
     """Human preference label — used for RLHF training data collection."""
+
     record_id: str
     query: str
     response_a: str
     response_b: str
-    preferred: str          # "A" | "B" | "tie" | "both_bad"
-    rating_a: int           # 1–5
-    rating_b: int           # 1–5
+    preferred: str  # "A" | "B" | "tie" | "both_bad"
+    rating_a: int  # 1–5
+    rating_b: int  # 1–5
     comment: str
     model_a: str
     model_b: str
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    context_chunks: List[str] = field(default_factory=list)
+    context_chunks: list[str] = field(default_factory=list)
 
     def to_rlhf_pair(self) -> dict:
         """Convert to Anthropic HH-RLHF format for direct use with TRL DPO/RLHF trainers."""
@@ -88,7 +91,7 @@ class FeedbackStore:
             f.write(json.dumps(record.__dict__) + "\n")
         logger.info("Feedback saved: %s", record.record_id)
 
-    def load_all(self) -> List[FeedbackRecord]:
+    def load_all(self) -> list[FeedbackRecord]:
         if not Path(self.path).exists():
             return []
         records = []
@@ -114,9 +117,13 @@ class FeedbackStore:
         records = self.load_all()
         if not records:
             return {
-                "total": 0, "preferred_A": 0, "preferred_B": 0,
-                "ties": 0, "both_bad": 0,
-                "avg_rating_A": 0.0, "avg_rating_B": 0.0,
+                "total": 0,
+                "preferred_A": 0,
+                "preferred_B": 0,
+                "ties": 0,
+                "both_bad": 0,
+                "avg_rating_A": 0.0,
+                "avg_rating_B": 0.0,
             }
         from collections import Counter
 
@@ -136,9 +143,8 @@ class FeedbackStore:
 # Mock inference (replace with real pipeline)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def _mock_inference(
-    query: str, model: str = "gpt-4o-mini"
-) -> Tuple[str, List[str], float]:
+
+def _mock_inference(query: str, model: str = "gpt-4o-mini") -> tuple[str, list[str], float]:
     """
     Returns (answer, context_chunks, latency_ms).
     Swap this out for the real RAG pipeline in production.
@@ -163,6 +169,7 @@ def _mock_inference(
 # Gradio UI
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class LLMOpsGradioUI:
     """
     Five-tab Gradio evaluation UI for the HALO.
@@ -182,7 +189,7 @@ class LLMOpsGradioUI:
 
     def __init__(
         self,
-        inference_fn: Optional[Callable] = None,
+        inference_fn: Callable | None = None,
         feedback_path: str = "data/human_feedback.jsonl",
         metrics_path: str = "mlops/baselines/",
     ):
@@ -195,30 +202,22 @@ class LLMOpsGradioUI:
 
     def _query_rag(
         self, query: str, model: str, top_k: int, show_context: bool
-    ) -> Tuple[str, str, str]:
+    ) -> tuple[str, str, str]:
         if not query.strip():
             return "Please enter a query.", "", ""
         answer, chunks, latency = self.inference_fn(query, model)
-        context_text = (
-            "\n\n---\n\n".join(chunks[:top_k]) if show_context else "(context hidden)"
-        )
-        stats = (
-            f"Model: {model} | Latency: {latency:.0f} ms | Chunks retrieved: {len(chunks)}"
-        )
+        context_text = "\n\n---\n\n".join(chunks[:top_k]) if show_context else "(context hidden)"
+        stats = f"Model: {model} | Latency: {latency:.0f} ms | Chunks retrieved: {len(chunks)}"
         return answer, context_text, stats
 
     # ── Tab 2: Model Comparison ──────────────────────────────────────────────
 
-    def _compare_models(
-        self, query: str, model_a: str, model_b: str
-    ) -> Tuple[str, str, str, str]:
+    def _compare_models(self, query: str, model_a: str, model_b: str) -> tuple[str, str, str, str]:
         if not query.strip():
             return "Enter a query.", "", "", ""
         ans_a, _, lat_a = self.inference_fn(query, model_a)
         ans_b, _, lat_b = self.inference_fn(query, model_b)
-        stats = (
-            f"Model A ({model_a}): {lat_a:.0f} ms  |  Model B ({model_b}): {lat_b:.0f} ms"
-        )
+        stats = f"Model A ({model_a}): {lat_a:.0f} ms  |  Model B ({model_b}): {lat_b:.0f} ms"
         return ans_a, ans_b, stats, str(time.time())
 
     def _save_feedback(
@@ -256,16 +255,17 @@ class LLMOpsGradioUI:
 
     # ── Tab 3: Quantization Benchmark ────────────────────────────────────────
 
-    def _run_quant_bench(
-        self, query: str, quant_levels: List[str]
-    ) -> List[List[str]]:
+    def _run_quant_bench(self, query: str, quant_levels: list[str]) -> list[list[str]]:
         rows = []
         for quant in quant_levels:
             _, _, latency = self.inference_fn(query, f"llama-3.2-1b-{quant}")
             # Size estimates (MB) for a 1B model at each quant level
             size_map = {
-                "q3_k_m": "~600 MB", "q4_k_m": "~750 MB",
-                "q5_k_m": "~900 MB", "q8_0": "~1.3 GB", "f16": "~2.5 GB",
+                "q3_k_m": "~600 MB",
+                "q4_k_m": "~750 MB",
+                "q5_k_m": "~900 MB",
+                "q8_0": "~1.3 GB",
+                "f16": "~2.5 GB",
             }
             rows.append([quant, f"{latency:.0f} ms", "—", size_map.get(quant, "—")])
         return rows
@@ -289,10 +289,10 @@ class LLMOpsGradioUI:
 
     # ── Tab 5: Metrics Dashboard ─────────────────────────────────────────────
 
-    def _load_metrics(self) -> List[List[str]]:
+    def _load_metrics(self) -> list[list[str]]:
         ragas_path = Path(self.metrics_path) / "ragas_baseline.json"
         deepeval_path = Path(self.metrics_path) / "deepeval_baseline.json"
-        rows: List[List[str]] = []
+        rows: list[list[str]] = []
 
         for path, framework in [(ragas_path, "RAGAS"), (deepeval_path, "DeepEval")]:
             if path.exists():
@@ -302,10 +302,14 @@ class LLMOpsGradioUI:
                     score = vals.get("score", vals) if isinstance(vals, dict) else vals
                     try:
                         score_f = float(score)
-                        rows.append([
-                            framework, metric, f"{score_f:.4f}",
-                            "PASS" if score_f >= 0.70 else "FAIL",
-                        ])
+                        rows.append(
+                            [
+                                framework,
+                                metric,
+                                f"{score_f:.4f}",
+                                "PASS" if score_f >= 0.70 else "FAIL",
+                            ]
+                        )
                     except (TypeError, ValueError):
                         rows.append([framework, metric, str(score), "—"])
             else:
@@ -402,9 +406,16 @@ class LLMOpsGradioUI:
                 fb_btn.click(
                     fn=self._save_feedback,
                     inputs=[
-                        cmp_query, cmp_ans_a, cmp_ans_b,
-                        cmp_ma, cmp_mb,
-                        fb_pref, fb_ra, fb_rb, fb_comment, cmp_state,
+                        cmp_query,
+                        cmp_ans_a,
+                        cmp_ans_b,
+                        cmp_ma,
+                        cmp_mb,
+                        fb_pref,
+                        fb_ra,
+                        fb_rb,
+                        fb_comment,
+                        cmp_state,
                     ],
                     outputs=[fb_status],
                 )
@@ -483,7 +494,7 @@ class LLMOpsGradioUI:
         host: str = "0.0.0.0",
         port: int = 7860,
         share: bool = False,
-        auth: Optional[Tuple[str, str]] = None,
+        auth: tuple[str, str] | None = None,
     ) -> None:
         app = self.build()
         logger.info("Launching Gradio UI at http://%s:%d", host, port)

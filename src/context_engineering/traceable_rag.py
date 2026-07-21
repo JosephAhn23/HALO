@@ -6,20 +6,27 @@ Delta-style pipelines can populate these on chunk metadata). Paragraphs in the
 final report get inline provenance tags; claims that cannot be tied to retrieved
 text are labeled **Model intuition** rather than **Grounded fact**.
 """
+
 from __future__ import annotations
 
 import os
 import re
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from datetime import UTC, datetime
+from typing import Any
 
 _PARA_SPLIT = re.compile(r"\n{2,}")
 
 
-def normalize_chunk_provenance(chunk: Dict[str, Any]) -> Dict[str, Any]:
+def normalize_chunk_provenance(chunk: dict[str, Any]) -> dict[str, Any]:
     """Ensure ``doc_id`` and ``ingested_at`` exist for traceability."""
     meta = chunk.get("metadata") if isinstance(chunk.get("metadata"), dict) else {}
-    doc_id = chunk.get("doc_id") or chunk.get("id") or meta.get("doc_id") or chunk.get("source", "unknown")
+    doc_id = (
+        chunk.get("doc_id")
+        or chunk.get("id")
+        or meta.get("doc_id")
+        or chunk.get("source", "unknown")
+    )
     ingested = (
         chunk.get("ingested_at")
         or chunk.get("timestamp")
@@ -28,12 +35,12 @@ def normalize_chunk_provenance(chunk: Dict[str, Any]) -> Dict[str, Any]:
         or ""
     )
     if not ingested:
-        ingested = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        ingested = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     out = {**chunk, "doc_id": str(doc_id), "ingested_at": str(ingested)}
     return out
 
 
-def enrich_chunks_provenance(chunks: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def enrich_chunks_provenance(chunks: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
     return [normalize_chunk_provenance(dict(c)) for c in chunks]
 
 
@@ -41,7 +48,7 @@ def _tokens(text: str) -> set[str]:
     return {w.lower() for w in re.findall(r"[a-zA-Z]{4,}", text)}
 
 
-def _best_chunk_for_paragraph(para: str, chunks: Sequence[Dict[str, Any]]) -> Tuple[int, float]:
+def _best_chunk_for_paragraph(para: str, chunks: Sequence[dict[str, Any]]) -> tuple[int, float]:
     pt = _tokens(para)
     if len(pt) < 2:
         return -1, 0.0
@@ -58,9 +65,9 @@ def _best_chunk_for_paragraph(para: str, chunks: Sequence[Dict[str, Any]]) -> Tu
     return best_i, best_score
 
 
-def format_chunks_for_prompt(chunks: Sequence[Dict[str, Any]]) -> str:
+def format_chunks_for_prompt(chunks: Sequence[dict[str, Any]]) -> str:
     """RAG context lines including doc_id and timestamp for the model."""
-    parts: List[str] = []
+    parts: list[str] = []
     for i, c in enumerate(chunks):
         did = c.get("doc_id", "?")
         ts = c.get("ingested_at", "?")
@@ -73,7 +80,7 @@ def format_chunks_for_prompt(chunks: Sequence[Dict[str, Any]]) -> str:
 
 def append_paragraph_provenance(
     answer: str,
-    chunks: Sequence[Dict[str, Any]],
+    chunks: Sequence[dict[str, Any]],
     *,
     overlap_threshold: float = 0.06,
 ) -> str:
@@ -87,7 +94,7 @@ def append_paragraph_provenance(
     if len(paras) <= 1 and "\n\n" not in answer:
         paras = [answer.strip()]
 
-    out_parts: List[str] = []
+    out_parts: list[str] = []
     for para in paras:
         idx, score = _best_chunk_for_paragraph(para, chunks)
         if idx < 0 or score < overlap_threshold:

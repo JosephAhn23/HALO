@@ -1,6 +1,7 @@
 """
 Celery-based batch ingestion processor.
 """
+
 from __future__ import annotations
 
 import os

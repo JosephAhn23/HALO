@@ -13,13 +13,13 @@ Implementations:
   - Pocock: equal alpha at each look (simpler)
   - SPRT: Wald's sequential probability ratio test
 """
+
 from __future__ import annotations
 
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +91,8 @@ class SequentialTest:
 
     def update(
         self,
-        control: List[float],
-        treatment: List[float],
+        control: list[float],
+        treatment: list[float],
     ) -> SequentialTestResult:
         self._look_count += 1
         n_c, n_t = len(control), len(treatment)
@@ -122,7 +122,10 @@ class SequentialTest:
 
         logger.debug(
             "Sequential test look %d: stat=%.3f boundary=%.3f decision=%s",
-            self._look_count, t_stat, boundary, decision,
+            self._look_count,
+            t_stat,
+            boundary,
+            decision,
         )
 
         return SequentialTestResult(
@@ -155,10 +158,12 @@ class SequentialTest:
     def _alpha_increment(self, n_current: int) -> float:
         t = min(n_current / self.max_n, 1.0)
         if self.spending_fn == AlphaSpending.OBRIEN_FLEMING:
-            return 2 * (1 - self._norm_cdf(self._norm_quantile(1 - self.alpha / 2) / math.sqrt(t + 1e-9)))
+            return 2 * (
+                1 - self._norm_cdf(self._norm_quantile(1 - self.alpha / 2) / math.sqrt(t + 1e-9))
+            )
         return self.alpha / self.n_looks
 
-    def _should_accept_null(self, control: List[float], treatment: List[float]) -> bool:
+    def _should_accept_null(self, control: list[float], treatment: list[float]) -> bool:
         n_c, n_t = len(control), len(treatment)
         if n_c + n_t < self.max_n * 0.8:
             return False
@@ -166,7 +171,9 @@ class SequentialTest:
         mu_t = sum(treatment) / n_t
         return abs(mu_t - mu_c) < self.mde / 2
 
-    def _continue_result(self, control: List[float], treatment: List[float]) -> SequentialTestResult:
+    def _continue_result(
+        self, control: list[float], treatment: list[float]
+    ) -> SequentialTestResult:
         return SequentialTestResult(
             decision="continue",
             statistic=0.0,
@@ -182,7 +189,7 @@ class SequentialTest:
         )
 
     @staticmethod
-    def _welch_t_test(a: List[float], b: List[float]) -> Tuple[float, float]:
+    def _welch_t_test(a: list[float], b: list[float]) -> tuple[float, float]:
         n_a, n_b = len(a), len(b)
         mu_a = sum(a) / n_a
         mu_b = sum(b) / n_b
@@ -190,14 +197,16 @@ class SequentialTest:
         var_b = sum((x - mu_b) ** 2 for x in b) / max(n_b - 1, 1)
         se = math.sqrt(var_a / n_a + var_b / n_b + 1e-12)
         t = (mu_b - mu_a) / se
-        df = max((var_a / n_a + var_b / n_b) ** 2 / (
-            (var_a / n_a) ** 2 / max(n_a - 1, 1) + (var_b / n_b) ** 2 / max(n_b - 1, 1)
-        ), 1.0)
+        df = max(
+            (var_a / n_a + var_b / n_b) ** 2
+            / ((var_a / n_a) ** 2 / max(n_a - 1, 1) + (var_b / n_b) ** 2 / max(n_b - 1, 1)),
+            1.0,
+        )
         p = 2 * (1 - SequentialTest._t_cdf(abs(t), df))
         return t, p
 
     @staticmethod
-    def _pooled_se(a: List[float], b: List[float]) -> float:
+    def _pooled_se(a: list[float], b: list[float]) -> float:
         n_a, n_b = len(a), len(b)
         mu_a = sum(a) / n_a
         mu_b = sum(b) / n_b
@@ -228,6 +237,7 @@ class SequentialTest:
         x = df / (df + t * t)
         try:
             from math import lgamma
+
             log_beta = lgamma(df / 2) + lgamma(0.5) - lgamma((df + 1) / 2)
             if x <= 0 or x >= 1:
                 return 0.5

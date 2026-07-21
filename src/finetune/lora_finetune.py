@@ -2,17 +2,17 @@
 LoRA fine-tuning on domain-specific data.
 Covers: Fine-tuning (core, not optional)
 """
+
 import argparse
 import json
 from pathlib import Path
 
+from accelerate import Accelerator
 from datasets import Dataset
-import torch
+from peft import LoraConfig, TaskType, get_peft_model
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from accelerate import Accelerator
-from peft import get_peft_model, LoraConfig, TaskType
-from transformers import AutoTokenizer, AutoModelForMaskedLM, DataCollatorForLanguageModeling
+from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorForLanguageModeling
 
 from src.mlops.compat import mlflow
 
@@ -48,7 +48,9 @@ def finetune(data_path: str, epochs: int = 3, lora_rank: int = 8, model_name: st
         return tokenizer(batch["text"], truncation=True, padding="max_length", max_length=256)
 
     tokenized = dataset.map(tokenize, batched=True)
-    tokenized = tokenized.remove_columns([c for c in tokenized.column_names if c not in {"input_ids", "attention_mask"}])
+    tokenized = tokenized.remove_columns(
+        [c for c in tokenized.column_names if c not in {"input_ids", "attention_mask"}]
+    )
     tokenized.set_format(type="torch")
     collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=True, mlm_probability=0.15)
     train_loader = DataLoader(tokenized, batch_size=16, shuffle=True, collate_fn=collator)
@@ -97,7 +99,9 @@ def parse_args() -> argparse.Namespace:
 
 def main():
     args = parse_args()
-    finetune(args.data_path, epochs=args.epochs, lora_rank=args.lora_rank, model_name=args.model_name)
+    finetune(
+        args.data_path, epochs=args.epochs, lora_rank=args.lora_rank, model_name=args.model_name
+    )
 
 
 if __name__ == "__main__":

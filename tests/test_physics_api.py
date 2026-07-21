@@ -1,6 +1,7 @@
 """Physics simulation API endpoint tests."""
 
 import pytest
+
 from src.api.main import PhysicsSimulationRequest, PhysicsSimulationResponse
 
 

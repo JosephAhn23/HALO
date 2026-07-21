@@ -16,10 +16,11 @@ import hashlib
 import json
 import logging
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import pandas as pd
 
@@ -31,9 +32,7 @@ class DatasetLineage:
     source_hash: str
     transform: str
     params: dict[str, Any]
-    created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     author: str = "pipeline"
 
 
@@ -71,7 +70,7 @@ class DatasetVersion:
         version: str = "v1.0",
         dataset_name: str | None = None,
         **read_kwargs,
-    ) -> "DatasetVersion":
+    ) -> DatasetVersion:
         path = Path(path)
         df = pd.read_csv(path, **read_kwargs)
         name = dataset_name or path.stem
@@ -84,7 +83,7 @@ class DatasetVersion:
         path: str | Path,
         version: str = "v1.0",
         dataset_name: str | None = None,
-    ) -> "DatasetVersion":
+    ) -> DatasetVersion:
         path = Path(path)
         records = []
         with path.open() as f:
@@ -104,7 +103,7 @@ class DatasetVersion:
         transform_name: str,
         params: dict[str, Any] | None = None,
         new_version: str | None = None,
-    ) -> "DatasetVersion":
+    ) -> DatasetVersion:
         """Apply a transformation and return a new versioned DatasetVersion."""
         new_df = fn(self.data.copy())
         lineage = DatasetLineage(
@@ -122,13 +121,17 @@ class DatasetVersion:
         )
         logger.info(
             "Transform '%s': %d -> %d rows (v%s -> v%s)",
-            transform_name, len(self.data), len(new_df), self.version, version,
+            transform_name,
+            len(self.data),
+            len(new_df),
+            self.version,
+            version,
         )
         return new_dv
 
     def train_val_test_split(
         self, train: float = 0.8, val: float = 0.1, seed: int = 42
-    ) -> tuple["DatasetVersion", "DatasetVersion", "DatasetVersion"]:
+    ) -> tuple[DatasetVersion, DatasetVersion, DatasetVersion]:
         """Reproducible stratified split returning three versioned datasets."""
         df = self.data.sample(frac=1, random_state=seed).reset_index(drop=True)
         n = len(df)
@@ -137,8 +140,8 @@ class DatasetVersion:
 
         splits = {
             "train": df.iloc[:n_train],
-            "val": df.iloc[n_train: n_train + n_val],
-            "test": df.iloc[n_train + n_val:],
+            "val": df.iloc[n_train : n_train + n_val],
+            "test": df.iloc[n_train + n_val :],
         }
         versions = {}
         for split_name, split_df in splits.items():
@@ -150,7 +153,9 @@ class DatasetVersion:
             )
         logger.info(
             "Split: train=%d  val=%d  test=%d",
-            len(splits["train"]), len(splits["val"]), len(splits["test"]),
+            len(splits["train"]),
+            len(splits["val"]),
+            len(splits["test"]),
         )
         return versions["train"], versions["val"], versions["test"]
 

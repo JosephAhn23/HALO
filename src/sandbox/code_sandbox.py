@@ -38,9 +38,9 @@ Usage:
     config = SandboxConfig(timeout_seconds=5, memory_mb=128)
     result = sandbox.run(code, language="python", config=config)
 """
+
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import os
@@ -50,9 +50,8 @@ import subprocess
 import tempfile
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +59,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Configuration
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class SandboxConfig:
@@ -69,29 +69,30 @@ class SandboxConfig:
     All limits are enforced at the Docker level — they cannot be bypassed
     by the executing code.
     """
-    timeout_seconds: float = 10.0
-    memory_mb: int = 256              # Docker --memory
-    cpu_quota: float = 0.5            # fraction of one CPU core
-    max_output_bytes: int = 65536     # 64 KB stdout + stderr cap
-    max_pids: int = 64                # --pids-limit
-    network_disabled: bool = True     # --network none
-    read_only_rootfs: bool = True     # --read-only
-    allow_write_tmp: bool = True      # mount /tmp as tmpfs
-    tmpfs_size_mb: int = 64           # /tmp size limit
-    user: str = "nobody"              # run as unprivileged user
 
-    def to_docker_flags(self) -> List[str]:
+    timeout_seconds: float = 10.0
+    memory_mb: int = 256  # Docker --memory
+    cpu_quota: float = 0.5  # fraction of one CPU core
+    max_output_bytes: int = 65536  # 64 KB stdout + stderr cap
+    max_pids: int = 64  # --pids-limit
+    network_disabled: bool = True  # --network none
+    read_only_rootfs: bool = True  # --read-only
+    allow_write_tmp: bool = True  # mount /tmp as tmpfs
+    tmpfs_size_mb: int = 64  # /tmp size limit
+    user: str = "nobody"  # run as unprivileged user
+
+    def to_docker_flags(self) -> list[str]:
         """Convert config to Docker run flags."""
-        cpu_period = 100_000          # 100ms
+        cpu_period = 100_000  # 100ms
         cpu_quota_val = int(self.cpu_quota * cpu_period)
 
         flags = [
             f"--memory={self.memory_mb}m",
-            f"--memory-swap={self.memory_mb}m",   # disable swap
+            f"--memory-swap={self.memory_mb}m",  # disable swap
             f"--cpu-period={cpu_period}",
             f"--cpu-quota={cpu_quota_val}",
             f"--pids-limit={self.max_pids}",
-            "--cap-drop=ALL",                      # drop all Linux capabilities
+            "--cap-drop=ALL",  # drop all Linux capabilities
             "--security-opt=no-new-privileges",
         ]
 
@@ -110,24 +111,27 @@ class SandboxConfig:
 # Default configs per risk level
 SAFE_CONFIG = SandboxConfig(timeout_seconds=10, memory_mb=256, cpu_quota=0.5)
 STRICT_CONFIG = SandboxConfig(timeout_seconds=5, memory_mb=128, cpu_quota=0.25, max_pids=32)
-PERMISSIVE_CONFIG = SandboxConfig(timeout_seconds=30, memory_mb=512, cpu_quota=1.0,
-                                   network_disabled=False)
+PERMISSIVE_CONFIG = SandboxConfig(
+    timeout_seconds=30, memory_mb=512, cpu_quota=1.0, network_disabled=False
+)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Execution result
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ExecutionResult:
     """Structured output from a sandboxed code execution."""
+
     exit_code: int
     stdout: str
     stderr: str
     timed_out: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     execution_time_ms: float = 0.0
-    memory_used_mb: Optional[float] = None
+    memory_used_mb: float | None = None
     language: str = ""
     truncated: bool = False
 
@@ -135,7 +139,7 @@ class ExecutionResult:
     def success(self) -> bool:
         return self.exit_code == 0 and not self.timed_out and self.error is None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         return {
             "exit_code": self.exit_code,
             "stdout": self.stdout,
@@ -150,7 +154,9 @@ class ExecutionResult:
         }
 
     def __str__(self) -> str:
-        status = "OK" if self.success else ("TIMEOUT" if self.timed_out else f"ERROR({self.exit_code})")
+        status = (
+            "OK" if self.success else ("TIMEOUT" if self.timed_out else f"ERROR({self.exit_code})")
+        )
         return (
             f"[{status}] {self.language} | {self.execution_time_ms:.0f}ms\n"
             f"stdout: {self.stdout[:200]}\n"
@@ -162,22 +168,24 @@ class ExecutionResult:
 # Language runners
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class LanguageRunner:
     """Execution strategy for a specific programming language."""
+
     language: str
     docker_image: str
     file_extension: str
-    run_command: str          # template: {file} = path to code file
-    compile_command: Optional[str] = None  # for compiled languages
+    run_command: str  # template: {file} = path to code file
+    compile_command: str | None = None  # for compiled languages
 
-    def build_exec_cmd(self, code_path: str) -> List[str]:
+    def build_exec_cmd(self, code_path: str) -> list[str]:
         """Build the command to execute the code file."""
         cmd = self.run_command.replace("{file}", code_path)
         return shlex.split(cmd)
 
 
-LANGUAGE_RUNNERS: Dict[str, LanguageRunner] = {
+LANGUAGE_RUNNERS: dict[str, LanguageRunner] = {
     "python": LanguageRunner(
         language="python",
         docker_image="python:3.11-slim",
@@ -228,7 +236,7 @@ _DANGEROUS_PYTHON_PATTERNS = [
     r"\beval\s*\(",
     r"\bexec\s*\(",
     r"\b__import__\s*\(",
-    r"\bopen\s*\(.+['\"]w['\"]",   # file write
+    r"\bopen\s*\(.+['\"]w['\"]",  # file write
     r"\bsocket\b",
     r"\burllib\b|\brequests\b",
     r"\bshutil\.rmtree\b",
@@ -245,13 +253,13 @@ _DANGEROUS_JS_PATTERNS = [
     r"\bFunction\s*\(",
 ]
 
-_STATIC_ANALYSIS_RULES: Dict[str, List[str]] = {
+_STATIC_ANALYSIS_RULES: dict[str, list[str]] = {
     "python": _DANGEROUS_PYTHON_PATTERNS,
     "javascript": _DANGEROUS_JS_PATTERNS,
 }
 
 
-def static_analysis(code: str, language: str) -> Dict:
+def static_analysis(code: str, language: str) -> dict:
     """
     Quick static analysis to detect obviously dangerous patterns.
     Returns a list of warnings (not a hard block — Docker provides the real isolation).
@@ -273,6 +281,7 @@ def static_analysis(code: str, language: str) -> Dict:
 # Core sandbox
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class CodeSandbox:
     """
     Docker-based code sandbox.
@@ -288,22 +297,21 @@ class CodeSandbox:
 
     def __init__(
         self,
-        default_config: Optional[SandboxConfig] = None,
+        default_config: SandboxConfig | None = None,
         run_static_analysis: bool = True,
         docker_binary: str = "docker",
     ):
         self.default_config = default_config or SAFE_CONFIG
         self.run_static_analysis = run_static_analysis
         self.docker_binary = docker_binary
-        self._docker_available: Optional[bool] = None
+        self._docker_available: bool | None = None
 
     def is_docker_available(self) -> bool:
         """Check if Docker daemon is running."""
         if self._docker_available is None:
             try:
                 result = subprocess.run(
-                    [self.docker_binary, "info"],
-                    capture_output=True, timeout=5
+                    [self.docker_binary, "info"], capture_output=True, timeout=5
                 )
                 self._docker_available = result.returncode == 0
             except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -314,9 +322,9 @@ class CodeSandbox:
         self,
         code: str,
         language: str = "python",
-        config: Optional[SandboxConfig] = None,
-        stdin: Optional[str] = None,
-        env: Optional[Dict[str, str]] = None,
+        config: SandboxConfig | None = None,
+        stdin: str | None = None,
+        env: dict[str, str] | None = None,
     ) -> ExecutionResult:
         """
         Execute code in a sandboxed Docker container.
@@ -336,9 +344,11 @@ class CodeSandbox:
 
         if runner is None:
             return ExecutionResult(
-                exit_code=-1, stdout="", stderr="",
+                exit_code=-1,
+                stdout="",
+                stderr="",
                 error=f"Unsupported language: {language}. "
-                      f"Supported: {list(LANGUAGE_RUNNERS.keys())}",
+                f"Supported: {list(LANGUAGE_RUNNERS.keys())}",
                 language=language,
             )
 
@@ -348,12 +358,15 @@ class CodeSandbox:
             if analysis["has_warnings"]:
                 logger.warning(
                     "Static analysis warnings for %s: %s",
-                    language, analysis["warnings"],
+                    language,
+                    analysis["warnings"],
                 )
 
         if not self.is_docker_available():
             return ExecutionResult(
-                exit_code=-1, stdout="", stderr="",
+                exit_code=-1,
+                stdout="",
+                stderr="",
                 error="Docker is not available. Run `docker info` to diagnose.",
                 language=language,
             )
@@ -367,8 +380,8 @@ class CodeSandbox:
         runner: LanguageRunner,
         cfg: SandboxConfig,
         tmpdir: str,
-        stdin: Optional[str],
-        env: Optional[Dict[str, str]],
+        stdin: str | None,
+        env: dict[str, str] | None,
     ) -> ExecutionResult:
         """Build and execute the Docker run command."""
         # Write code to temp file
@@ -381,11 +394,11 @@ class CodeSandbox:
         # Mount the code directory as read-only
         mount = f"{tmpdir}:/sandbox:ro"
 
-        env_flags: List[str] = []
+        env_flags: list[str] = []
         if env:
             for k, v in env.items():
                 # Sanitize key names
-                if re.match(r'^[A-Z_][A-Z0-9_]*$', k):
+                if re.match(r"^[A-Z_][A-Z0-9_]*$", k):
                     env_flags += ["--env", f"{k}={v}"]
 
         cmd = (
@@ -424,7 +437,9 @@ class CodeSandbox:
 
         except Exception as e:
             return ExecutionResult(
-                exit_code=-1, stdout="", stderr="",
+                exit_code=-1,
+                stdout="",
+                stderr="",
                 error=f"Docker execution failed: {e}",
                 language=runner.language,
                 execution_time_ms=(time.perf_counter() - t0) * 1000,
@@ -458,7 +473,7 @@ class CodeSandbox:
         code: str,
         test_code: str,
         language: str = "python",
-        config: Optional[SandboxConfig] = None,
+        config: SandboxConfig | None = None,
     ) -> ExecutionResult:
         """
         Run code + test suite together.
@@ -472,8 +487,8 @@ class CodeSandbox:
         code: str,
         language: str = "python",
         n_runs: int = 5,
-        config: Optional[SandboxConfig] = None,
-    ) -> Dict:
+        config: SandboxConfig | None = None,
+    ) -> dict:
         """
         Run code n_runs times and return timing statistics.
         """
@@ -499,6 +514,7 @@ class CodeSandbox:
 # Container pool (reuse containers for lower latency)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class SandboxPool:
     """
     Maintains a pool of warm Docker containers to reduce cold-start latency.
@@ -519,7 +535,7 @@ class SandboxPool:
         self,
         language: str = "python",
         pool_size: int = 2,
-        config: Optional[SandboxConfig] = None,
+        config: SandboxConfig | None = None,
         docker_binary: str = "docker",
     ):
         self.language = language
@@ -527,11 +543,11 @@ class SandboxPool:
         self.config = config or SAFE_CONFIG
         self.docker_binary = docker_binary
         self._runner = LANGUAGE_RUNNERS.get(language)
-        self._container_ids: List[str] = []
+        self._container_ids: list[str] = []
         self._lock = threading.Lock()
-        self._available: List[str] = []
+        self._available: list[str] = []
 
-    def start(self) -> "SandboxPool":
+    def start(self) -> SandboxPool:
         """Start pool containers."""
         if self._runner is None:
             raise ValueError(f"Unsupported language: {self.language}")
@@ -545,7 +561,7 @@ class SandboxPool:
 
         return self
 
-    def _start_container(self) -> Optional[str]:
+    def _start_container(self) -> str | None:
         """Start a long-running container and return its ID."""
         flags = self.config.to_docker_flags()
         cmd = (
@@ -572,16 +588,22 @@ class SandboxPool:
 
         try:
             with tempfile.NamedTemporaryFile(
-                suffix=self._runner.file_extension,
-                mode="w", delete=False, encoding="utf-8"
+                suffix=self._runner.file_extension, mode="w", delete=False, encoding="utf-8"
             ) as f:
                 f.write(code)
                 tmp_path = f.name
 
             # Copy code into container
             subprocess.run(
-                [self.docker_binary, "cp", tmp_path, f"{container_id}:/sandbox/code{self._runner.file_extension}"],
-                check=True, capture_output=True, timeout=5,
+                [
+                    self.docker_binary,
+                    "cp",
+                    tmp_path,
+                    f"{container_id}:/sandbox/code{self._runner.file_extension}",
+                ],
+                check=True,
+                capture_output=True,
+                timeout=5,
             )
             os.unlink(tmp_path)
 
@@ -590,7 +612,8 @@ class SandboxPool:
             t0 = time.perf_counter()
             proc = subprocess.run(
                 [self.docker_binary, "exec", container_id] + exec_cmd,
-                capture_output=True, timeout=self.config.timeout_seconds,
+                capture_output=True,
+                timeout=self.config.timeout_seconds,
             )
             elapsed_ms = (time.perf_counter() - t0) * 1000
 
@@ -602,11 +625,13 @@ class SandboxPool:
                 language=self.language,
             )
         except subprocess.TimeoutExpired:
-            return ExecutionResult(exit_code=-1, stdout="", stderr="", timed_out=True,
-                                   language=self.language)
+            return ExecutionResult(
+                exit_code=-1, stdout="", stderr="", timed_out=True, language=self.language
+            )
         except Exception as e:
-            return ExecutionResult(exit_code=-1, stdout="", stderr="",
-                                   error=str(e), language=self.language)
+            return ExecutionResult(
+                exit_code=-1, stdout="", stderr="", error=str(e), language=self.language
+            )
         finally:
             with self._lock:
                 if container_id in self._container_ids:
@@ -616,8 +641,7 @@ class SandboxPool:
         """Stop all pool containers."""
         for cid in self._container_ids:
             try:
-                subprocess.run([self.docker_binary, "kill", cid],
-                               capture_output=True, timeout=5)
+                subprocess.run([self.docker_binary, "kill", cid], capture_output=True, timeout=5)
             except Exception:
                 pass
         self._container_ids.clear()
@@ -702,8 +726,7 @@ if __name__ == "__main__":
     run_p = sub.add_parser("run", help="Execute code in sandbox")
     run_p.add_argument("--code", help="Code to execute")
     run_p.add_argument("--file", help="File containing code to execute")
-    run_p.add_argument("--language", default="python",
-                       choices=list(LANGUAGE_RUNNERS.keys()))
+    run_p.add_argument("--language", default="python", choices=list(LANGUAGE_RUNNERS.keys()))
     run_p.add_argument("--timeout", type=float, default=10.0)
     run_p.add_argument("--memory", type=int, default=256)
 

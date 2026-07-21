@@ -19,15 +19,15 @@ FastAPI endpoint:
     GET /governance/report
     Returns full governance dashboard for the current production model.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class CICheckResult:
     passed: bool
     message: str
     severity: str = "error"
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
     def is_blocking(self) -> bool:
         return not self.passed and self.severity in ("error", "critical")
@@ -49,12 +49,12 @@ class GovernanceReport:
     model_name: str
     version: int
     generated_at: str
-    checks: List[CICheckResult]
+    checks: list[CICheckResult]
     overall_passed: bool
-    model_card_url: Optional[str] = None
-    audit_log_head_hash: Optional[str] = None
+    model_card_url: str | None = None
+    audit_log_head_hash: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "model_name": self.model_name,
             "version": self.version,
@@ -94,8 +94,13 @@ class CIEnforcement:
     """
 
     REQUIRED_CARD_FIELDS = [
-        "model_name", "version", "intended_use", "training_data",
-        "evaluation", "limitations", "recommendations",
+        "model_name",
+        "version",
+        "intended_use",
+        "training_data",
+        "evaluation",
+        "limitations",
+        "recommendations",
     ]
 
     METRIC_THRESHOLDS = {
@@ -108,7 +113,7 @@ class CIEnforcement:
         self,
         fairness_threshold: float = 0.10,
         fairness_regression_threshold: float = 0.05,
-        metric_thresholds: Optional[Dict[str, float]] = None,
+        metric_thresholds: dict[str, float] | None = None,
     ):
         self.fairness_threshold = fairness_threshold
         self.fairness_regression_threshold = fairness_regression_threshold
@@ -118,11 +123,11 @@ class CIEnforcement:
         self,
         model_name: str,
         version: int,
-        model_card: Optional[Dict] = None,
-        current_metrics: Optional[Dict[str, float]] = None,
-        current_fairness: Optional[Dict] = None,
-        baseline_fairness: Optional[Dict] = None,
-        training_data_sample: Optional[List[Dict]] = None,
+        model_card: dict | None = None,
+        current_metrics: dict[str, float] | None = None,
+        current_fairness: dict | None = None,
+        baseline_fairness: dict | None = None,
+        training_data_sample: list[dict] | None = None,
         audit_log=None,
     ) -> GovernanceReport:
         checks = []
@@ -158,13 +163,13 @@ class CIEnforcement:
         return GovernanceReport(
             model_name=model_name,
             version=version,
-            generated_at=datetime.now(timezone.utc).isoformat(),
+            generated_at=datetime.now(UTC).isoformat(),
             checks=checks,
             overall_passed=overall_passed,
             audit_log_head_hash=audit_hash,
         )
 
-    def _check_model_card(self, card: Dict) -> CICheckResult:
+    def _check_model_card(self, card: dict) -> CICheckResult:
         missing = [f for f in self.REQUIRED_CARD_FIELDS if f not in card]
         if missing:
             return CICheckResult(
@@ -179,7 +184,7 @@ class CIEnforcement:
             message="All required model card fields present.",
         )
 
-    def _check_metric_thresholds(self, metrics: Dict[str, float]) -> CICheckResult:
+    def _check_metric_thresholds(self, metrics: dict[str, float]) -> CICheckResult:
         failures = []
         for metric, threshold in self.metric_thresholds.items():
             value = metrics.get(metric)
@@ -202,7 +207,7 @@ class CIEnforcement:
             message=f"All {len(self.metric_thresholds)} metric thresholds passed.",
         )
 
-    def _check_fairness_absolute(self, fairness: Dict) -> CICheckResult:
+    def _check_fairness_absolute(self, fairness: dict) -> CICheckResult:
         spd = fairness.get("statistical_parity_diff", 0.0)
         eod = fairness.get("equal_opportunity_diff", 0.0)
 
@@ -225,7 +230,7 @@ class CIEnforcement:
             message=f"Fairness within threshold (SPD={spd:.4f}, EOD={eod:.4f}).",
         )
 
-    def _check_fairness_regression(self, baseline: Dict, current: Dict) -> CICheckResult:
+    def _check_fairness_regression(self, baseline: dict, current: dict) -> CICheckResult:
         baseline_spd = baseline.get("statistical_parity_diff", 0.0)
         current_spd = current.get("statistical_parity_diff", 0.0)
         delta = current_spd - baseline_spd
@@ -246,8 +251,9 @@ class CIEnforcement:
             message=f"No fairness regression (SPD delta={delta:+.4f}).",
         )
 
-    def _check_pii(self, data_sample: List[Dict]) -> CICheckResult:
+    def _check_pii(self, data_sample: list[dict]) -> CICheckResult:
         from src.governance.pii_redaction import PIIRedactor
+
         redactor = PIIRedactor()
         text_fields = ["text", "query", "content", "prompt", "response"]
         audit = redactor.audit_batch(data_sample, text_fields)
@@ -296,7 +302,9 @@ def main():
     parser.add_argument("--baseline-fairness-file", help="JSON file with baseline fairness report")
     parser.add_argument("--current-fairness-file", help="JSON file with current fairness report")
     parser.add_argument("--model-card-file", help="JSON file with model card")
-    parser.add_argument("--exit-code", action="store_true", help="Exit with non-zero code on failure")
+    parser.add_argument(
+        "--exit-code", action="store_true", help="Exit with non-zero code on failure"
+    )
     args = parser.parse_args()
 
     enforcement = CIEnforcement()

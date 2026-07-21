@@ -6,11 +6,12 @@ sklearn — the whole point of this module is to report genuine held-out
 accuracy, so the test has to actually train and evaluate it. The MiniLM
 embedder is small enough that this stays fast.
 """
+
 from src.agents.multi_agent.cost_classifier import (
-    ComplexityClassifier,
     LABELS,
-    train_test_split,
+    ComplexityClassifier,
     train_default_classifier,
+    train_test_split,
 )
 from src.agents.multi_agent.cost_router_data import LABELED_QUERIES
 
@@ -39,9 +40,9 @@ def test_classifier_beats_random_baseline_on_held_out_set() -> None:
 def test_classifier_predicts_a_valid_label() -> None:
     clf, _ = train_default_classifier(seed=13)
     assert clf.predict("What is a vector database?") in LABELS
-    assert clf.predict(
-        "Compare QLoRA against full fine-tuning and analyze the tradeoffs."
-    ) in LABELS
+    assert (
+        clf.predict("Compare QLoRA against full fine-tuning and analyze the tradeoffs.") in LABELS
+    )
 
 
 def test_predict_proba_sums_to_one() -> None:

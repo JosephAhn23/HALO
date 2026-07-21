@@ -16,13 +16,14 @@ production-grade classifier: scikit-learn is available transitively (pulled
 in by ``umap-learn``, which is a core dependency) even though it isn't listed
 directly in ``pyproject.toml``.
 """
+
 from __future__ import annotations
 
 import logging
 import random
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -34,17 +35,17 @@ LABELS = ("low", "medium", "high")
 
 
 def train_test_split(
-    labeled_queries: List[LabeledQuery], test_size: float = 0.2, seed: int = 13
-) -> Tuple[List[LabeledQuery], List[LabeledQuery]]:
+    labeled_queries: list[LabeledQuery], test_size: float = 0.2, seed: int = 13
+) -> tuple[list[LabeledQuery], list[LabeledQuery]]:
     """Stratified split so each label is represented in both halves."""
-    by_label: Dict[str, List[LabeledQuery]] = {label: [] for label in LABELS}
+    by_label: dict[str, list[LabeledQuery]] = {label: [] for label in LABELS}
     for item in labeled_queries:
         by_label[item["label"]].append(item)
 
     rng = random.Random(seed)
-    train: List[LabeledQuery] = []
-    test: List[LabeledQuery] = []
-    for label, items in by_label.items():
+    train: list[LabeledQuery] = []
+    test: list[LabeledQuery] = []
+    for _label, items in by_label.items():
         shuffled = items[:]
         rng.shuffle(shuffled)
         n_test = max(1, round(len(shuffled) * test_size))
@@ -57,10 +58,10 @@ def train_test_split(
 class ClassifierEvalReport:
     accuracy: float
     n_test: int
-    per_label_accuracy: Dict[str, float] = field(default_factory=dict)
-    confusion: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    per_label_accuracy: dict[str, float] = field(default_factory=dict)
+    confusion: dict[str, dict[str, int]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "accuracy": self.accuracy,
             "n_test": self.n_test,
@@ -72,7 +73,7 @@ class ClassifierEvalReport:
 class ComplexityClassifier:
     """Embeds a query and predicts one of ``LABELS`` via logistic regression."""
 
-    def __init__(self, embedder: Optional[Any] = None) -> None:
+    def __init__(self, embedder: Any | None = None) -> None:
         self._embedder = embedder
         self._model = None
 
@@ -85,10 +86,10 @@ class ComplexityClassifier:
             self._embedder = EmbeddingModel()
         return self._embedder
 
-    def _embed(self, queries: List[str]) -> np.ndarray:
+    def _embed(self, queries: list[str]) -> np.ndarray:
         return np.asarray(self.get_embedder().embed(queries))
 
-    def fit(self, labeled_queries: List[LabeledQuery]) -> "ComplexityClassifier":
+    def fit(self, labeled_queries: list[LabeledQuery]) -> ComplexityClassifier:
         from sklearn.linear_model import LogisticRegression
 
         X = self._embed([item["query"] for item in labeled_queries])
@@ -103,22 +104,20 @@ class ComplexityClassifier:
         X = self._embed([query])
         return str(self._model.predict(X)[0])
 
-    def predict_proba(self, query: str) -> Dict[str, float]:
+    def predict_proba(self, query: str) -> dict[str, float]:
         if self._model is None:
             raise RuntimeError("ComplexityClassifier must be fit() before predict_proba()")
         X = self._embed([query])
         probs = self._model.predict_proba(X)[0]
         return {cls: float(p) for cls, p in zip(self._model.classes_, probs)}
 
-    def evaluate(self, held_out: List[LabeledQuery]) -> ClassifierEvalReport:
+    def evaluate(self, held_out: list[LabeledQuery]) -> ClassifierEvalReport:
         if self._model is None:
             raise RuntimeError("ComplexityClassifier must be fit() before evaluate()")
-        confusion: Dict[str, Dict[str, int]] = {
-            gold: {pred: 0 for pred in LABELS} for gold in LABELS
-        }
+        confusion: dict[str, dict[str, int]] = {gold: dict.fromkeys(LABELS, 0) for gold in LABELS}
         correct = 0
-        per_label_total: Dict[str, int] = {label: 0 for label in LABELS}
-        per_label_correct: Dict[str, int] = {label: 0 for label in LABELS}
+        per_label_total: dict[str, int] = dict.fromkeys(LABELS, 0)
+        per_label_correct: dict[str, int] = dict.fromkeys(LABELS, 0)
         for item in held_out:
             pred = self.predict(item["query"])
             gold = item["label"]
@@ -129,7 +128,11 @@ class ComplexityClassifier:
                 per_label_correct[gold] += 1
 
         per_label_accuracy = {
-            label: (per_label_correct[label] / per_label_total[label]) if per_label_total[label] else 0.0
+            label: (
+                (per_label_correct[label] / per_label_total[label])
+                if per_label_total[label]
+                else 0.0
+            )
             for label in LABELS
         }
         return ClassifierEvalReport(
@@ -140,14 +143,14 @@ class ComplexityClassifier:
         )
 
 
-_default_classifier: Optional[ComplexityClassifier] = None
-_default_eval_report: Optional[ClassifierEvalReport] = None
+_default_classifier: ComplexityClassifier | None = None
+_default_eval_report: ClassifierEvalReport | None = None
 _classifier_lock = threading.Lock()
 
 
 def train_default_classifier(
     seed: int = 13,
-) -> Tuple[ComplexityClassifier, ClassifierEvalReport]:
+) -> tuple[ComplexityClassifier, ClassifierEvalReport]:
     """Train on the hand-labeled seed set, report real held-out accuracy."""
     from src.agents.multi_agent.cost_router_data import LABELED_QUERIES
 
@@ -173,6 +176,6 @@ def get_default_classifier() -> ComplexityClassifier:
     return _default_classifier
 
 
-def get_default_eval_report() -> Optional[ClassifierEvalReport]:
+def get_default_eval_report() -> ClassifierEvalReport | None:
     """None until get_default_classifier() has been called at least once."""
     return _default_eval_report

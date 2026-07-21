@@ -19,13 +19,14 @@ Usage:
     results = engine.recommend(query="RAG architecture tradeoffs", user_id="u001")
     explanation = engine.explain(query, results[0])
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 
@@ -36,12 +37,13 @@ logger = logging.getLogger(__name__)
 # Data structures
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class Document:
     doc_id: str
     text: str
-    embedding: Optional[np.ndarray] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    embedding: np.ndarray | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -50,16 +52,16 @@ class RankedResult:
     text: str
     score: float
     rank: int
-    explanation: Optional[Dict[str, float]] = None
+    explanation: dict[str, float] | None = None
 
 
 @dataclass
 class EvalMetrics:
-    ndcg_at_k: Dict[int, float]
-    map_at_k: Dict[int, float]
+    ndcg_at_k: dict[int, float]
+    map_at_k: dict[int, float]
     mrr: float
-    precision_at_k: Dict[int, float]
-    recall_at_k: Dict[int, float]
+    precision_at_k: dict[int, float]
+    recall_at_k: dict[int, float]
     n_queries: int
 
     def summary(self) -> str:
@@ -78,6 +80,7 @@ class EvalMetrics:
 # ---------------------------------------------------------------------------
 # Feature extractor
 # ---------------------------------------------------------------------------
+
 
 class QueryDocumentFeatures:
     """
@@ -112,21 +115,26 @@ class QueryDocumentFeatures:
         title_match = float(any(t in doc.metadata.get("title", "").lower() for t in query_terms))
         emb_norm = float(np.linalg.norm(doc.embedding)) if doc.embedding is not None else 0.0
 
-        return np.array([
-            bm25,
-            embedding_score,
-            len(query.split()),
-            len(doc_terms),
-            coverage,
-            title_match,
-            recency,
-            authority,
-            keyword_density,
-            emb_norm,
-        ], dtype=float)
+        return np.array(
+            [
+                bm25,
+                embedding_score,
+                len(query.split()),
+                len(doc_terms),
+                coverage,
+                title_match,
+                recency,
+                authority,
+                keyword_density,
+                emb_norm,
+            ],
+            dtype=float,
+        )
 
     @staticmethod
-    def _bm25(query_terms: set, doc_terms: list, avg_doc_len: float, k1: float = 1.5, b: float = 0.75) -> float:
+    def _bm25(
+        query_terms: set, doc_terms: list, avg_doc_len: float, k1: float = 1.5, b: float = 0.75
+    ) -> float:
         doc_len = len(doc_terms)
         score = 0.0
         tf_map = {}
@@ -145,6 +153,7 @@ class QueryDocumentFeatures:
 # Learn-to-Rank (LambdaMART-style gradient boosting ranker)
 # ---------------------------------------------------------------------------
 
+
 class LearnToRankModel:
     """
     Pointwise learning-to-rank model.
@@ -159,15 +168,15 @@ class LearnToRankModel:
         self.learning_rate = learning_rate
         self.max_depth = max_depth
         self._model = None
-        self._feature_importances: Optional[np.ndarray] = None
+        self._feature_importances: np.ndarray | None = None
         self._use_lgbm = False
 
     def fit(
         self,
         X: np.ndarray,
         y: np.ndarray,
-        group: Optional[np.ndarray] = None,
-    ) -> "LearnToRankModel":
+        group: np.ndarray | None = None,
+    ) -> LearnToRankModel:
         """
         Train ranker.
         X: (n_samples, n_features)
@@ -176,6 +185,7 @@ class LearnToRankModel:
         """
         try:
             import lightgbm as lgb
+
             self._use_lgbm = True
             self._model = lgb.LGBMRanker(
                 objective="lambdarank",
@@ -189,7 +199,9 @@ class LearnToRankModel:
             group_sizes = group if group is not None else np.array([len(y)])
             self._model.fit(X, y, group=group_sizes)
             self._feature_importances = self._model.feature_importances_
-            logger.info("LightGBM LambdaMART fitted (n=%d, n_estimators=%d).", len(y), self.n_estimators)
+            logger.info(
+                "LightGBM LambdaMART fitted (n=%d, n_estimators=%d).", len(y), self.n_estimators
+            )
         except ImportError:
             logger.info("LightGBM not available. Using gradient boosting fallback.")
             self._fit_gbm(X, y)
@@ -214,7 +226,7 @@ class LearnToRankModel:
         best = None
         for feat in range(X.shape[1]):
             vals = np.unique(X[:, feat])
-            for thr in vals[::max(1, len(vals)//5)]:
+            for thr in vals[:: max(1, len(vals) // 5)]:
                 left = y[X[:, feat] <= thr]
                 right = y[X[:, feat] > thr]
                 if len(left) == 0 or len(right) == 0:
@@ -226,7 +238,8 @@ class LearnToRankModel:
             return {"leaf": float(y.mean())}
         mask = X[:, best["feat"]] <= best["thr"]
         return {
-            "feat": best["feat"], "thr": best["thr"],
+            "feat": best["feat"],
+            "thr": best["thr"],
             "left": self._fit_tree(X[mask], y[mask], depth - 1),
             "right": self._fit_tree(X[~mask], y[~mask], depth - 1),
         }
@@ -253,7 +266,7 @@ class LearnToRankModel:
         return base
 
     @property
-    def feature_importances(self) -> Optional[np.ndarray]:
+    def feature_importances(self) -> np.ndarray | None:
         return self._feature_importances
 
 
@@ -261,18 +274,19 @@ class LearnToRankModel:
 # SHAP Explainer (permutation-based)
 # ---------------------------------------------------------------------------
 
+
 class SHAPExplainer:
     """
     Permutation-based SHAP values for ranking model explanations.
     Answers: "why was this document ranked #1 for this query?"
     """
 
-    def __init__(self, model: LearnToRankModel, feature_names: List[str]):
+    def __init__(self, model: LearnToRankModel, feature_names: list[str]):
         self.model = model
         self.feature_names = feature_names
         self.n_permutations = 50
 
-    def explain(self, x: np.ndarray) -> Dict[str, float]:
+    def explain(self, x: np.ndarray) -> dict[str, float]:
         """
         Compute marginal SHAP values for a single instance.
         Returns feature_name -> contribution to score.
@@ -298,7 +312,9 @@ class SHAPExplainer:
         shap_values /= self.n_permutations
         return {name: round(float(v), 4) for name, v in zip(self.feature_names, shap_values)}
 
-    def explain_ranking(self, query: str, results: List[RankedResult], docs: List[Document]) -> List[RankedResult]:
+    def explain_ranking(
+        self, query: str, results: list[RankedResult], docs: list[Document]
+    ) -> list[RankedResult]:
         """Attach SHAP explanations to ranked results."""
         doc_map = {d.doc_id: d for d in docs}
         for result in results:
@@ -313,21 +329,22 @@ class SHAPExplainer:
 # Offline Evaluator
 # ---------------------------------------------------------------------------
 
+
 class RecSysEvaluator:
     """Offline evaluation: NDCG, MAP, MRR, Precision, Recall."""
 
     def evaluate(
         self,
-        queries: List[str],
-        predicted_rankings: List[List[str]],
-        ground_truth: List[List[str]],
-        k_values: List[int] = None,
+        queries: list[str],
+        predicted_rankings: list[list[str]],
+        ground_truth: list[list[str]],
+        k_values: list[int] = None,
     ) -> EvalMetrics:
         k_values = k_values or [1, 5, 10]
-        ndcg_sums = {k: 0.0 for k in k_values}
-        map_sums = {k: 0.0 for k in k_values}
-        prec_sums = {k: 0.0 for k in k_values}
-        rec_sums = {k: 0.0 for k in k_values}
+        ndcg_sums = dict.fromkeys(k_values, 0.0)
+        map_sums = dict.fromkeys(k_values, 0.0)
+        prec_sums = dict.fromkeys(k_values, 0.0)
+        rec_sums = dict.fromkeys(k_values, 0.0)
         mrr_sum = 0.0
         n = len(queries)
 
@@ -357,16 +374,12 @@ class RecSysEvaluator:
             n_queries=n,
         )
 
-    def _ndcg(self, ranked: List[str], relevant: set, k: int) -> float:
-        dcg = sum(
-            1.0 / math.log2(i + 2)
-            for i, doc in enumerate(ranked[:k])
-            if doc in relevant
-        )
+    def _ndcg(self, ranked: list[str], relevant: set, k: int) -> float:
+        dcg = sum(1.0 / math.log2(i + 2) for i, doc in enumerate(ranked[:k]) if doc in relevant)
         ideal = sum(1.0 / math.log2(i + 2) for i in range(min(len(relevant), k)))
         return dcg / max(ideal, 1e-9)
 
-    def _average_precision(self, ranked: List[str], relevant: set) -> float:
+    def _average_precision(self, ranked: list[str], relevant: set) -> float:
         hits, precision_sum = 0, 0.0
         for i, doc in enumerate(ranked):
             if doc in relevant:
@@ -378,6 +391,7 @@ class RecSysEvaluator:
 # ---------------------------------------------------------------------------
 # Hybrid Recommender (embedding retrieval + LTR reranking + MMR diversity)
 # ---------------------------------------------------------------------------
+
 
 class HybridRecommender:
     """
@@ -392,12 +406,12 @@ class HybridRecommender:
         self.n_candidates = n_candidates
         self.top_k = top_k
         self.diversity_lambda = diversity_lambda
-        self._documents: List[Document] = []
-        self._ranker: Optional[LearnToRankModel] = None
-        self._explainer: Optional[SHAPExplainer] = None
-        self._embeddings: Optional[np.ndarray] = None
+        self._documents: list[Document] = []
+        self._ranker: LearnToRankModel | None = None
+        self._explainer: SHAPExplainer | None = None
+        self._embeddings: np.ndarray | None = None
 
-    def index_documents(self, documents: List[Document]) -> "HybridRecommender":
+    def index_documents(self, documents: list[Document]) -> HybridRecommender:
         self._documents = documents
         if all(d.embedding is not None for d in documents):
             self._embeddings = np.vstack([d.embedding for d in documents])
@@ -406,7 +420,7 @@ class HybridRecommender:
         logger.info("Indexed %d documents.", len(documents))
         return self
 
-    def fit_ranker(self, training_queries: List[Dict]) -> "HybridRecommender":
+    def fit_ranker(self, training_queries: list[dict]) -> HybridRecommender:
         """
         Train LTR model on (query, doc, relevance_label) triples.
         training_queries: [{"query": str, "doc_id": str, "relevance": int, "embedding_score": float}]
@@ -444,10 +458,10 @@ class HybridRecommender:
     def recommend(
         self,
         query: str,
-        query_embedding: Optional[np.ndarray] = None,
-        user_id: Optional[str] = None,
+        query_embedding: np.ndarray | None = None,
+        user_id: str | None = None,
         apply_diversity: bool = True,
-    ) -> List[RankedResult]:
+    ) -> list[RankedResult]:
         candidates = self._retrieve_candidates(query, query_embedding)
         if self._ranker:
             candidates = self._rerank(query, candidates)
@@ -456,7 +470,7 @@ class HybridRecommender:
 
         results = [
             RankedResult(doc_id=d.doc_id, text=d.text[:200], score=s, rank=i + 1)
-            for i, (d, s) in enumerate(candidates[:self.top_k])
+            for i, (d, s) in enumerate(candidates[: self.top_k])
         ]
         if self._explainer:
             self._explainer.explain_ranking(query, results, self._documents)
@@ -465,12 +479,12 @@ class HybridRecommender:
     def _retrieve_candidates(
         self,
         query: str,
-        query_embedding: Optional[np.ndarray],
-    ) -> List[Tuple[Document, float]]:
+        query_embedding: np.ndarray | None,
+    ) -> list[tuple[Document, float]]:
         if self._embeddings is not None and query_embedding is not None:
             q_norm = query_embedding / (np.linalg.norm(query_embedding) + 1e-9)
             scores = self._embeddings @ q_norm
-            top_idx = np.argsort(scores)[::-1][:self.n_candidates]
+            top_idx = np.argsort(scores)[::-1][: self.n_candidates]
             return [(self._documents[i], float(scores[i])) for i in top_idx]
 
         query_terms = set(query.lower().split())
@@ -479,23 +493,24 @@ class HybridRecommender:
             doc_terms = doc.text.lower().split()
             score = QueryDocumentFeatures._bm25(query_terms, doc_terms, avg_doc_len=150)
             scored.append((doc, score))
-        return sorted(scored, key=lambda x: x[1], reverse=True)[:self.n_candidates]
+        return sorted(scored, key=lambda x: x[1], reverse=True)[: self.n_candidates]
 
-    def _rerank(self, query: str, candidates: List[Tuple[Document, float]]) -> List[Tuple[Document, float]]:
-        features = np.array([
-            QueryDocumentFeatures.extract(query, doc, emb_score)
-            for doc, emb_score in candidates
-        ])
+    def _rerank(
+        self, query: str, candidates: list[tuple[Document, float]]
+    ) -> list[tuple[Document, float]]:
+        features = np.array(
+            [QueryDocumentFeatures.extract(query, doc, emb_score) for doc, emb_score in candidates]
+        )
         scores = self._ranker.predict(features)
         reranked = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
         return [(doc, float(score)) for score, (doc, _) in reranked]
 
-    def _mmr_rerank(self, candidates: List[Tuple[Document, float]]) -> List[Tuple[Document, float]]:
+    def _mmr_rerank(self, candidates: list[tuple[Document, float]]) -> list[tuple[Document, float]]:
         """Maximal Marginal Relevance: balance relevance and diversity."""
         if not candidates or all(d.embedding is None for d, _ in candidates):
             return candidates
 
-        selected: List[Tuple[Document, float]] = []
+        selected: list[tuple[Document, float]] = []
         remaining = list(candidates)
 
         while remaining and len(selected) < self.top_k:
@@ -505,9 +520,7 @@ class HybridRecommender:
                 remaining.remove(best)
                 continue
 
-            selected_embs = np.array([
-                d.embedding for d, _ in selected if d.embedding is not None
-            ])
+            selected_embs = np.array([d.embedding for d, _ in selected if d.embedding is not None])
             best_score = -float("inf")
             best_item = None
 
@@ -515,9 +528,17 @@ class HybridRecommender:
                 if doc.embedding is None:
                     mmr = rel_score
                 else:
-                    max_sim = float(np.max(selected_embs @ doc.embedding / (
-                        np.linalg.norm(selected_embs, axis=1) * np.linalg.norm(doc.embedding) + 1e-9
-                    )))
+                    max_sim = float(
+                        np.max(
+                            selected_embs
+                            @ doc.embedding
+                            / (
+                                np.linalg.norm(selected_embs, axis=1)
+                                * np.linalg.norm(doc.embedding)
+                                + 1e-9
+                            )
+                        )
+                    )
                     mmr = self.diversity_lambda * rel_score - (1 - self.diversity_lambda) * max_sim
                 if mmr > best_score:
                     best_score = mmr
@@ -548,8 +569,12 @@ if __name__ == "__main__":
     engine.index_documents(docs)
 
     training_data = [
-        {"query": "RAG architecture", "doc_id": f"doc_{i:03d}",
-         "relevance": 3 if i % 3 == 0 else 1, "embedding_score": random.random()}
+        {
+            "query": "RAG architecture",
+            "doc_id": f"doc_{i:03d}",
+            "relevance": 3 if i % 3 == 0 else 1,
+            "embedding_score": random.random(),
+        }
         for i in range(30)
     ]
     engine.fit_ranker(training_data)

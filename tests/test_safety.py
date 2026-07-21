@@ -1,6 +1,7 @@
 """
 Tests for semantic safety detector.
 """
+
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -81,9 +82,11 @@ class TestSemanticDetector:
     def test_evaluation_metrics_computed(self):
         from src.safety.semantic_safety import SemanticSafetyDetector
 
-        with patch.object(SemanticSafetyDetector, "_build_or_load"), \
-             patch.object(SemanticSafetyDetector, "_ensure_initialized"), \
-             patch("safety.semantic_safety.mlflow"):
+        with (
+            patch.object(SemanticSafetyDetector, "_build_or_load"),
+            patch.object(SemanticSafetyDetector, "_ensure_initialized"),
+            patch("safety.semantic_safety.mlflow"),
+        ):
             detector = SemanticSafetyDetector.__new__(SemanticSafetyDetector)
 
             mock_results = [
@@ -115,7 +118,9 @@ class TestAttackLibrary:
 
         library = AttackEmbeddingLibrary.__new__(AttackEmbeddingLibrary)
         library.attack_embeddings = np.random.randn(25, 384).astype(np.float32)
-        library.attack_embeddings /= np.linalg.norm(library.attack_embeddings, axis=1, keepdims=True)
+        library.attack_embeddings /= np.linalg.norm(
+            library.attack_embeddings, axis=1, keepdims=True
+        )
         library.attack_texts = [f"attack {i}" for i in range(25)]
 
         query = np.random.randn(1, 384).astype(np.float32)
@@ -146,9 +151,10 @@ class TestHybridDetector:
     def test_rule_stage_fires_first(self):
         from src.safety.semantic_safety import HybridSafetyDetector
 
-        with patch("safety.semantic_safety.SemanticSafetyDetector") as mock_sem, patch(
-            "safety.adversarial_tests.PromptInjectionDetector"
-        ) as mock_rule:
+        with (
+            patch("safety.semantic_safety.SemanticSafetyDetector") as mock_sem,
+            patch("safety.adversarial_tests.PromptInjectionDetector") as mock_rule,
+        ):
             mock_rule_inst = MagicMock()
             mock_rule_inst.rule_based_detect.return_value = (True, ["pattern1"])
             mock_rule.return_value = mock_rule_inst
@@ -166,9 +172,10 @@ class TestHybridDetector:
     def test_semantic_stage_fires_for_subtle_attack(self):
         from src.safety.semantic_safety import HybridSafetyDetector
 
-        with patch("safety.semantic_safety.SemanticSafetyDetector") as mock_sem, patch(
-            "safety.adversarial_tests.PromptInjectionDetector"
-        ) as mock_rule:
+        with (
+            patch("safety.semantic_safety.SemanticSafetyDetector") as mock_sem,
+            patch("safety.adversarial_tests.PromptInjectionDetector") as mock_rule,
+        ):
             mock_rule_inst = MagicMock()
             mock_rule_inst.rule_based_detect.return_value = (False, [])
             mock_rule.return_value = mock_rule_inst

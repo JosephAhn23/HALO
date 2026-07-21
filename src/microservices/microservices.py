@@ -15,6 +15,7 @@ Components:
 Existing docker-compose.yml stays for local monolith mode.
 docker-compose.microservices.yml is the distributed version.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,9 +24,10 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -37,6 +39,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Event types
 # ---------------------------------------------------------------------------
+
 
 class EventType(str, Enum):
     QUERY_RECEIVED = "query.received"
@@ -54,24 +57,26 @@ class EventType(str, Enum):
 @dataclass
 class Event:
     type: EventType
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     correlation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     source_service: str = ""
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: float = field(default_factory=time.time)
 
     def to_json(self) -> str:
-        return json.dumps({
-            "event_id": self.event_id,
-            "type": self.type.value,
-            "payload": self.payload,
-            "correlation_id": self.correlation_id,
-            "source_service": self.source_service,
-            "timestamp": self.timestamp,
-        })
+        return json.dumps(
+            {
+                "event_id": self.event_id,
+                "type": self.type.value,
+                "payload": self.payload,
+                "correlation_id": self.correlation_id,
+                "source_service": self.source_service,
+                "timestamp": self.timestamp,
+            }
+        )
 
     @classmethod
-    def from_json(cls, data: str) -> "Event":
+    def from_json(cls, data: str) -> Event:
         d = json.loads(data)
         return cls(
             type=EventType(d["type"]),
@@ -87,17 +92,18 @@ class Event:
 # Service Registry
 # ---------------------------------------------------------------------------
 
+
 class ServiceRegistry:
     """
     Class-level URL registry — no instantiation required in the gateway.
     In production, swap for Consul service discovery or Kubernetes DNS.
     """
 
-    _registry: Dict[str, str] = {
-        "retrieval":  os.getenv("RETRIEVAL_SVC_URL",  "http://retrieval-svc:8001"),
-        "reranker":   os.getenv("RERANKER_SVC_URL",   "http://reranker-svc:8002"),
-        "synthesizer":os.getenv("SYNTHESIZER_SVC_URL","http://synthesizer-svc:8003"),
-        "safety":     os.getenv("SAFETY_SVC_URL",     "http://safety-svc:8004"),
+    _registry: dict[str, str] = {
+        "retrieval": os.getenv("RETRIEVAL_SVC_URL", "http://retrieval-svc:8001"),
+        "reranker": os.getenv("RERANKER_SVC_URL", "http://reranker-svc:8002"),
+        "synthesizer": os.getenv("SYNTHESIZER_SVC_URL", "http://synthesizer-svc:8003"),
+        "safety": os.getenv("SAFETY_SVC_URL", "http://safety-svc:8004"),
         "evaluation": os.getenv("EVALUATION_SVC_URL", "http://evaluation-svc:8005"),
         "multimodal": os.getenv("MULTIMODAL_SVC_URL", "http://multimodal-svc:8006"),
     }
@@ -114,11 +120,11 @@ class ServiceRegistry:
         logger.info("Registered service: %s → %s", service, url)
 
     @classmethod
-    def list_services(cls) -> Dict[str, str]:
+    def list_services(cls) -> dict[str, str]:
         return dict(cls._registry)
 
     @classmethod
-    async def health_check_all(cls) -> Dict[str, bool]:
+    async def health_check_all(cls) -> dict[str, bool]:
         results = {}
         async with httpx.AsyncClient(timeout=5.0) as client:
             for name, url in cls._registry.items():
@@ -134,6 +140,7 @@ class ServiceRegistry:
 # Event Bus
 # ---------------------------------------------------------------------------
 
+
 class EventBus:
     """
     Async pub/sub event bus.
@@ -147,8 +154,8 @@ class EventBus:
     consume() is an async generator for Redis Streams consumption.
     """
 
-    def __init__(self, backend: Optional[str] = None):
-        self._handlers: Dict[EventType, List[Callable]] = {}
+    def __init__(self, backend: str | None = None):
+        self._handlers: dict[EventType, list[Callable]] = {}
         self.backend = backend or self._detect_backend()
 
     def _detect_backend(self) -> str:
@@ -160,10 +167,12 @@ class EventBus:
 
     def subscribe(self, event_type: EventType) -> Callable:
         """Decorator to register an async or sync event handler."""
+
         def decorator(func: Callable) -> Callable:
             self._handlers.setdefault(event_type, []).append(func)
             logger.debug("Subscribed %s to %s", func.__name__, event_type.value)
             return func
+
         return decorator
 
     def subscribe_handler(self, event_type: EventType, handler: Callable) -> None:
@@ -189,6 +198,7 @@ class EventBus:
     async def _publish_kafka(self, event: Event) -> None:
         try:
             from aiokafka import AIOKafkaProducer
+
             brokers = os.environ.get("KAFKA_BROKERS") or os.environ.get(
                 "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
             )
@@ -207,9 +217,8 @@ class EventBus:
     async def _publish_redis(self, event: Event) -> None:
         try:
             import aioredis
-            redis = await aioredis.from_url(
-                os.environ.get("REDIS_URL", "redis://localhost:6379")
-            )
+
+            redis = await aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
             await redis.xadd(
                 f"llmops:events:{event.type.value}",
                 {"data": event.to_json()},
@@ -222,15 +231,14 @@ class EventBus:
     async def consume(self, event_type: EventType) -> AsyncIterator[Event]:
         """Async generator — consume events from a Redis Stream."""
         import aioredis
-        redis = await aioredis.from_url(
-            os.environ.get("REDIS_URL", "redis://localhost:6379")
-        )
+
+        redis = await aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
         stream = f"llmops:events:{event_type.value}"
         last_id = "0"
         try:
             while True:
                 messages = await redis.xread({stream: last_id}, block=1000, count=10)
-                for _, entries in (messages or []):
+                for _, entries in messages or []:
                     for entry_id, data in entries:
                         yield Event.from_json(data[b"data"].decode())
                         last_id = entry_id
@@ -245,9 +253,8 @@ class EventBus:
     ) -> None:
         """Consume from a Redis consumer group and dispatch to registered handlers."""
         import aioredis
-        redis = await aioredis.from_url(
-            os.environ.get("REDIS_URL", "redis://localhost:6379")
-        )
+
+        redis = await aioredis.from_url(os.environ.get("REDIS_URL", "redis://localhost:6379"))
         stream = f"llmops:events:{event_type.value}"
         try:
             await redis.xgroup_create(stream, group, id="0", mkstream=True)
@@ -258,7 +265,7 @@ class EventBus:
                 messages = await redis.xreadgroup(
                     group, consumer, {stream: ">"}, count=10, block=1000
                 )
-                for _, entries in (messages or []):
+                for _, entries in messages or []:
                     for msg_id, data in entries:
                         event = Event.from_json(data[b"data"].decode())
                         for handler in self._handlers.get(event_type, []):
@@ -278,6 +285,7 @@ class EventBus:
 # ---------------------------------------------------------------------------
 # Base Microservice
 # ---------------------------------------------------------------------------
+
 
 class BaseMicroservice:
     """
@@ -317,12 +325,14 @@ class BaseMicroservice:
 
     def run(self) -> None:
         import uvicorn
+
         uvicorn.run(self.app, host="0.0.0.0", port=self.port)
 
 
 # ---------------------------------------------------------------------------
 # Retrieval Service
 # ---------------------------------------------------------------------------
+
 
 class RetrievalService(BaseMicroservice):
     """
@@ -338,6 +348,7 @@ class RetrievalService(BaseMicroservice):
         if self._retriever is None:
             try:
                 from src.agents.retriever import Retriever
+
                 self._retriever = Retriever()
             except Exception as e:
                 logger.warning("Could not load Retriever: %s — using mock", e)
@@ -351,7 +362,7 @@ class RetrievalService(BaseMicroservice):
             correlation_id: str = ""
 
         class RetrieveResponse(BaseModel):
-            documents: List[Dict[str, Any]]
+            documents: list[dict[str, Any]]
             latency_ms: float
             correlation_id: str
 
@@ -363,12 +374,14 @@ class RetrievalService(BaseMicroservice):
                 retriever = self._get_retriever()
                 docs = retriever.retrieve(req.query, top_k=req.top_k)
                 latency = (time.time() - t0) * 1000
-                await self.bus.publish(Event(
-                    type=EventType.RETRIEVAL_COMPLETE,
-                    payload={"doc_count": len(docs), "latency_ms": latency},
-                    correlation_id=req.correlation_id,
-                    source_service=self.name,
-                ))
+                await self.bus.publish(
+                    Event(
+                        type=EventType.RETRIEVAL_COMPLETE,
+                        payload={"doc_count": len(docs), "latency_ms": latency},
+                        correlation_id=req.correlation_id,
+                        source_service=self.name,
+                    )
+                )
                 return RetrieveResponse(
                     documents=docs,
                     latency_ms=latency,
@@ -376,18 +389,21 @@ class RetrievalService(BaseMicroservice):
                 )
             except Exception as e:
                 self._error_count += 1
-                await self.bus.publish(Event(
-                    type=EventType.ERROR,
-                    payload={"service": self.name, "error": str(e)},
-                    correlation_id=req.correlation_id,
-                    source_service=self.name,
-                ))
+                await self.bus.publish(
+                    Event(
+                        type=EventType.ERROR,
+                        payload={"service": self.name, "error": str(e)},
+                        correlation_id=req.correlation_id,
+                        source_service=self.name,
+                    )
+                )
                 raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------------------------
 # Reranker Service
 # ---------------------------------------------------------------------------
+
 
 class RerankerService(BaseMicroservice):
     def __init__(self):
@@ -399,6 +415,7 @@ class RerankerService(BaseMicroservice):
         if self._reranker is None:
             try:
                 from src.agents.reranker import Reranker
+
                 self._reranker = Reranker()
             except Exception as e:
                 logger.warning("Could not load Reranker: %s — using mock", e)
@@ -408,7 +425,7 @@ class RerankerService(BaseMicroservice):
     def _setup_routes(self) -> None:
         class RerankRequest(BaseModel):
             query: str
-            documents: List[Dict[str, Any]]
+            documents: list[dict[str, Any]]
             top_k: int = 5
             correlation_id: str = ""
 
@@ -420,12 +437,14 @@ class RerankerService(BaseMicroservice):
                 reranker = self._get_reranker()
                 docs = reranker.rerank(req.query, req.documents, top_k=req.top_k)
                 latency = (time.time() - t0) * 1000
-                await self.bus.publish(Event(
-                    type=EventType.RERANK_COMPLETE,
-                    payload={"top_k": len(docs), "latency_ms": latency},
-                    correlation_id=req.correlation_id,
-                    source_service=self.name,
-                ))
+                await self.bus.publish(
+                    Event(
+                        type=EventType.RERANK_COMPLETE,
+                        payload={"top_k": len(docs), "latency_ms": latency},
+                        correlation_id=req.correlation_id,
+                        source_service=self.name,
+                    )
+                )
                 return {"documents": docs, "latency_ms": latency}
             except Exception as e:
                 self._error_count += 1
@@ -435,6 +454,7 @@ class RerankerService(BaseMicroservice):
 # ---------------------------------------------------------------------------
 # Safety Service
 # ---------------------------------------------------------------------------
+
 
 class SafetyService(BaseMicroservice):
     """
@@ -451,6 +471,7 @@ class SafetyService(BaseMicroservice):
         if self._checker is None:
             try:
                 from src.safety.semantic_safety import SemanticSafetyChecker
+
                 self._checker = SemanticSafetyChecker()
             except Exception as e:
                 logger.warning("Could not load SafetyChecker: %s — using mock", e)
@@ -472,13 +493,17 @@ class SafetyService(BaseMicroservice):
                     if result.get("safe", True)
                     else EventType.SAFETY_FLAGGED
                 )
-                await self.bus.publish(Event(
-                    type=event_type,
-                    payload={"safe": result.get("safe", True),
-                             "reason": result.get("reason", "")},
-                    correlation_id=req.correlation_id,
-                    source_service=self.name,
-                ))
+                await self.bus.publish(
+                    Event(
+                        type=event_type,
+                        payload={
+                            "safe": result.get("safe", True),
+                            "reason": result.get("reason", ""),
+                        },
+                        correlation_id=req.correlation_id,
+                        source_service=self.name,
+                    )
+                )
                 return result
             except Exception as e:
                 self._error_count += 1
@@ -488,6 +513,7 @@ class SafetyService(BaseMicroservice):
 # ---------------------------------------------------------------------------
 # API Gateway
 # ---------------------------------------------------------------------------
+
 
 class APIGateway(BaseMicroservice):
     """
@@ -510,12 +536,14 @@ class APIGateway(BaseMicroservice):
             self._request_count += 1
             correlation_id = str(uuid.uuid4())
 
-            await self.bus.publish(Event(
-                type=EventType.QUERY_RECEIVED,
-                payload={"query": req.query},
-                correlation_id=correlation_id,
-                source_service=self.name,
-            ))
+            await self.bus.publish(
+                Event(
+                    type=EventType.QUERY_RECEIVED,
+                    payload={"query": req.query},
+                    correlation_id=correlation_id,
+                    source_service=self.name,
+                )
+            )
 
             async with httpx.AsyncClient(timeout=30.0) as client:
                 # 1. Safety screen
@@ -560,10 +588,10 @@ class APIGateway(BaseMicroservice):
                                 "correlation_id": correlation_id,
                             },
                         )
-                        reranked = rerank_resp.json().get("documents", docs[:req.top_k])
+                        reranked = rerank_resp.json().get("documents", docs[: req.top_k])
                     except httpx.ConnectError:
                         logger.warning("Reranker service unavailable — using raw results")
-                        reranked = docs[:req.top_k]
+                        reranked = docs[: req.top_k]
                 else:
                     reranked = []
 
@@ -601,25 +629,28 @@ class APIGateway(BaseMicroservice):
 # Mock implementations
 # ---------------------------------------------------------------------------
 
+
 class _MockRetriever:
-    def retrieve(self, query: str, top_k: int = 10) -> List[Dict]:
-        return [{"text": f"Mock result {i} for: {query}", "score": 1.0 - i * 0.1}
-                for i in range(top_k)]
+    def retrieve(self, query: str, top_k: int = 10) -> list[dict]:
+        return [
+            {"text": f"Mock result {i} for: {query}", "score": 1.0 - i * 0.1} for i in range(top_k)
+        ]
 
 
 class _MockReranker:
-    def rerank(self, query: str, candidates: List[Dict], top_k: int = 5) -> List[Dict]:
+    def rerank(self, query: str, candidates: list[dict], top_k: int = 5) -> list[dict]:
         return sorted(candidates, key=lambda x: x.get("score", 0), reverse=True)[:top_k]
 
 
 class _MockSafetyChecker:
-    def check(self, text: str) -> Dict:
+    def check(self, text: str) -> dict:
         return {"safe": True, "score": 0.95, "flags": [], "reason": ""}
 
 
 # ---------------------------------------------------------------------------
 # Service factories
 # ---------------------------------------------------------------------------
+
 
 def create_retrieval_service() -> FastAPI:
     return RetrievalService().app
@@ -650,10 +681,10 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8000"))
 
     factories = {
-        "gateway":   create_gateway,
+        "gateway": create_gateway,
         "retrieval": create_retrieval_service,
-        "reranker":  create_reranker_service,
-        "safety":    create_safety_service,
+        "reranker": create_reranker_service,
+        "safety": create_safety_service,
     }
     app = factories.get(service, create_gateway)()
     uvicorn.run(app, host="0.0.0.0", port=port)

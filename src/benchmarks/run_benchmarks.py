@@ -2,11 +2,11 @@
 Latency + throughput benchmarks - generates real numbers for resume.
 Run this once to populate your README metrics.
 """
+
 import asyncio
 import json
 import statistics
 import time
-from typing import Dict
 
 import httpx
 
@@ -26,7 +26,7 @@ TEST_QUERIES = [
 ]
 
 
-def benchmark_realtime_latency(n_runs: int = 50) -> Dict:
+def benchmark_realtime_latency(n_runs: int = 50) -> dict:
     """Measure p50/p90/p99 latency for single queries."""
     latencies = []
 
@@ -58,7 +58,7 @@ def benchmark_realtime_latency(n_runs: int = 50) -> Dict:
 async def benchmark_concurrent_throughput(
     n_concurrent: int = 20,
     n_total: int = 200,
-) -> Dict:
+) -> dict:
     """Measure throughput under concurrent load."""
     semaphore = asyncio.Semaphore(n_concurrent)
     latencies = []
@@ -85,8 +85,7 @@ async def benchmark_concurrent_throughput(
     start_total = time.perf_counter()
     async with httpx.AsyncClient() as client:
         tasks = [
-            single_request(client, TEST_QUERIES[i % len(TEST_QUERIES)])
-            for i in range(n_total)
+            single_request(client, TEST_QUERIES[i % len(TEST_QUERIES)]) for i in range(n_total)
         ]
         await asyncio.gather(*tasks)
 
@@ -106,7 +105,7 @@ async def benchmark_concurrent_throughput(
     }
 
 
-def benchmark_batch_throughput(n_queries: int = 100) -> Dict:
+def benchmark_batch_throughput(n_queries: int = 100) -> dict:
     """Measure batch inference throughput."""
     queries = [TEST_QUERIES[i % len(TEST_QUERIES)] for i in range(n_queries)]
 

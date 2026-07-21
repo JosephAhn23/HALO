@@ -27,9 +27,7 @@ class CoTExample:
     def format(self, numbered: bool = False, step_prefix: str = "Step") -> str:
         steps = [s.strip() for s in self.reasoning.split("\n") if s.strip()]
         if numbered:
-            reasoning_str = "\n".join(
-                f"{step_prefix} {i + 1}: {s}" for i, s in enumerate(steps)
-            )
+            reasoning_str = "\n".join(f"{step_prefix} {i + 1}: {s}" for i, s in enumerate(steps))
         else:
             reasoning_str = "\n".join(steps)
         return f"Q: {self.question}\nReasoning:\n{reasoning_str}\nA: {self.answer}"
@@ -39,7 +37,7 @@ class CoTExample:
 class ChainOfThoughtConfig:
     strategy: Literal["zero_shot", "few_shot", "self_consistency", "tot", "scratchpad"] = "few_shot"
     examples: list[CoTExample] = field(default_factory=list)
-    n_paths: int = 3                 # for self_consistency / tot
+    n_paths: int = 3  # for self_consistency / tot
     numbered_steps: bool = True
     step_prefix: str = "Step"
     system_instruction: str = (
@@ -101,18 +99,18 @@ class ChainOfThoughtBuilder:
         parts = [self.config.system_instruction]
         if context:
             parts.append(f"\nContext:\n{context}")
-        parts.append(
-            f"\nQuestion: {query}\n\nLet's think through this step by step:"
-        )
+        parts.append(f"\nQuestion: {query}\n\nLet's think through this step by step:")
         return "\n".join(parts)
 
     def _few_shot(self, query: str, context: str) -> str:
         parts = [self.config.system_instruction, ""]
         for ex in self.config.examples:
-            parts.append(ex.format(
-                numbered=self.config.numbered_steps,
-                step_prefix=self.config.step_prefix,
-            ))
+            parts.append(
+                ex.format(
+                    numbered=self.config.numbered_steps,
+                    step_prefix=self.config.step_prefix,
+                )
+            )
             parts.append("")
 
         if context:
@@ -192,9 +190,7 @@ class ChainOfThoughtBuilder:
     @classmethod
     def rag_scratchpad(cls, query: str, chunks: list[str]) -> str:
         """Build a RAG-optimised scratchpad prompt from retrieved chunks."""
-        context = "\n\n---\n\n".join(
-            f"[Chunk {i + 1}]\n{chunk}" for i, chunk in enumerate(chunks)
-        )
+        context = "\n\n---\n\n".join(f"[Chunk {i + 1}]\n{chunk}" for i, chunk in enumerate(chunks))
         builder = cls(ChainOfThoughtConfig(strategy="scratchpad"))
         return builder.build(query, context=context)
 

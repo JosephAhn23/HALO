@@ -7,8 +7,8 @@ Usage:
     python run_ragas.py
 """
 
-import os
 import json
+import os
 import re
 from pathlib import Path
 
@@ -20,7 +20,7 @@ if not os.environ.get("OPENAI_API_KEY"):
 
 from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
+from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
 
 QA_PAIRS = [
     {
@@ -102,12 +102,14 @@ def run_ragas():
     print(f"\nRunning RAGAS evaluation on {len(QA_PAIRS)} QA pairs...")
     print("(This makes OpenAI API calls -- ~30-60 seconds)\n")
 
-    ds = Dataset.from_dict({
-        "question":     [p["question"]     for p in QA_PAIRS],
-        "answer":       [p["answer"]       for p in QA_PAIRS],
-        "contexts":     [p["contexts"]     for p in QA_PAIRS],
-        "ground_truth": [p["ground_truth"] for p in QA_PAIRS],
-    })
+    ds = Dataset.from_dict(
+        {
+            "question": [p["question"] for p in QA_PAIRS],
+            "answer": [p["answer"] for p in QA_PAIRS],
+            "contexts": [p["contexts"] for p in QA_PAIRS],
+            "ground_truth": [p["ground_truth"] for p in QA_PAIRS],
+        }
+    )
 
     result = evaluate(
         ds,
@@ -135,14 +137,14 @@ def run_ragas():
     if readme.exists():
         content = readme.read_text(encoding="utf-8")
         replacements = {
-            "RAGAS faithfulness":      scores["faithfulness"],
-            "RAGAS answer relevancy":  scores["answer_relevancy"],
+            "RAGAS faithfulness": scores["faithfulness"],
+            "RAGAS answer relevancy": scores["answer_relevancy"],
             "RAGAS context precision": scores["context_precision"],
-            "RAGAS context recall":    scores["context_recall"],
+            "RAGAS context recall": scores["context_recall"],
         }
         for metric, value in replacements.items():
-            pattern = rf'(\|\s*{re.escape(metric)}\s*\|\s*)`?TBD[^|`]*`?(\s*\|)'
-            content = re.sub(pattern, rf'\1`{value}`\2', content, flags=re.IGNORECASE)
+            pattern = rf"(\|\s*{re.escape(metric)}\s*\|\s*)`?TBD[^|`]*`?(\s*\|)"
+            content = re.sub(pattern, rf"\1`{value}`\2", content, flags=re.IGNORECASE)
         readme.write_text(content, encoding="utf-8")
         print("\n  README.md updated with RAGAS scores")
     else:
@@ -150,11 +152,16 @@ def run_ragas():
 
     Path("mlops").mkdir(exist_ok=True)
     out = Path("mlops/ragas_baseline.json")
-    out.write_text(json.dumps({
-        "scores": scores,
-        "n_examples": len(QA_PAIRS),
-        "note": "standalone eval -- hand-written contexts from LLMOps domain",
-    }, indent=2))
+    out.write_text(
+        json.dumps(
+            {
+                "scores": scores,
+                "n_examples": len(QA_PAIRS),
+                "note": "standalone eval -- hand-written contexts from LLMOps domain",
+            },
+            indent=2,
+        )
+    )
     print(f"  Baseline saved: {out}")
 
     return scores

@@ -3,29 +3,29 @@ Ray distributed training with fault tolerance, elastic scaling,
 failure recovery, and checkpoint resumption.
 Covers: Ray fault tolerance - the remaining weakness
 """
+
 import json
 import os
 from pathlib import Path
-from typing import Dict, Optional
 
-from src.mlops.compat import mlflow
 import ray
 import torch
 from datasets import Dataset
 from peft import LoraConfig, TaskType, get_peft_model
 from ray import train
-from ray.train import Checkpoint
-from ray.train import CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
+from ray.train import Checkpoint, CheckpointConfig, FailureConfig, RunConfig, ScalingConfig
 from ray.train.torch import TorchTrainer, prepare_data_loader, prepare_model
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from transformers import AutoModel, AutoTokenizer, get_cosine_schedule_with_warmup
 
+from src.mlops.compat import mlflow
+
 BASE_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 OUTPUT_DIR = "models/ray-fault-tolerant"
 
 
-def load_checkpoint(checkpoint: Optional[Checkpoint]) -> Dict:
+def load_checkpoint(checkpoint: Checkpoint | None) -> dict:
     """Restore training state from Ray checkpoint."""
     if checkpoint is None:
         return {"epoch": 0, "global_step": 0, "best_loss": float("inf")}
@@ -69,7 +69,7 @@ def save_checkpoint(
     )
 
 
-def training_loop_per_worker(config: Dict):
+def training_loop_per_worker(config: dict):
     """
     Full training loop running on each Ray worker.
     Handles: checkpoint resumption, gradient clipping,

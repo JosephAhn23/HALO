@@ -8,14 +8,16 @@ Every agent in the system inherits from BaseAgent and implements:
 Typed state prevents the "dict soup" problem common in multi-agent systems.
 Structured logging ensures every agent action is traceable in production.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +42,11 @@ class TaskPriority(str, Enum):
 class AgentTask:
     task_id: str = field(default_factory=lambda: str(uuid.uuid4())[:12])
     query: str = ""
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
     priority: TaskPriority = TaskPriority.NORMAL
-    parent_task_id: Optional[str] = None
+    parent_task_id: str | None = None
     timeout_seconds: float = 30.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
 
 
@@ -56,16 +58,16 @@ class AgentResult:
     output: str = ""
     confidence: float = 0.0
     reasoning: str = ""
-    sources: List[str] = field(default_factory=list)
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
     latency_ms: float = 0.0
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def is_success(self) -> bool:
         return self.status == AgentStatus.SUCCEEDED
 
-    def to_log_dict(self) -> Dict[str, Any]:
+    def to_log_dict(self) -> dict[str, Any]:
         return {
             "task_id": self.task_id,
             "agent": self.agent_name,
@@ -85,17 +87,17 @@ class AgentHealth:
     success_rate: float = 1.0
     avg_latency_ms: float = 0.0
     circuit_open: bool = False
-    last_error: Optional[str] = None
+    last_error: str | None = None
 
 
 class ToolRegistry:
     """Registry of callable tools available to agents."""
 
     def __init__(self):
-        self._tools: Dict[str, Callable] = {}
-        self._schemas: Dict[str, Dict] = {}
+        self._tools: dict[str, Callable] = {}
+        self._schemas: dict[str, dict] = {}
 
-    def register(self, name: str, fn: Callable, schema: Optional[Dict] = None) -> None:
+    def register(self, name: str, fn: Callable, schema: dict | None = None) -> None:
         self._tools[name] = fn
         self._schemas[name] = schema or {"name": name, "description": fn.__doc__ or ""}
         logger.debug("Registered tool: %s", name)
@@ -105,7 +107,7 @@ class ToolRegistry:
             raise KeyError(f"Tool '{name}' not registered.")
         return self._tools[name](**kwargs)
 
-    def list_tools(self) -> List[Dict]:
+    def list_tools(self) -> list[dict]:
         return list(self._schemas.values())
 
 
@@ -123,7 +125,7 @@ class BaseAgent:
     def __init__(
         self,
         name: str,
-        tools: Optional[ToolRegistry] = None,
+        tools: ToolRegistry | None = None,
         timeout_seconds: float = 30.0,
     ):
         self.name = name
@@ -131,8 +133,8 @@ class BaseAgent:
         self.timeout_seconds = timeout_seconds
         self._total_tasks = 0
         self._successes = 0
-        self._latencies: List[float] = []
-        self._last_error: Optional[str] = None
+        self._latencies: list[float] = []
+        self._last_error: str | None = None
         self.logger = logging.getLogger(f"agent.{name}")
 
     def process(self, task: AgentTask) -> AgentResult:

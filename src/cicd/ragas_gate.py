@@ -27,6 +27,7 @@ GitHub Actions output variables written to $GITHUB_OUTPUT (when set):
     context_recall=0.8100
     (one output per metric in the scores file)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,7 +36,6 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Default thresholds — absolute minimums that must always be met
 # ---------------------------------------------------------------------------
-DEFAULT_THRESHOLDS: Dict[str, float] = {
+DEFAULT_THRESHOLDS: dict[str, float] = {
     "faithfulness": 0.80,
     "answer_relevancy": 0.78,
     "context_precision": 0.75,
@@ -58,6 +58,7 @@ DEFAULT_REGRESSION_TOLERANCE: float = 0.03
 # Gate logic
 # ---------------------------------------------------------------------------
 
+
 class RAGASGate:
     """
     Evaluates RAGAS scores against absolute thresholds and a saved baseline.
@@ -69,15 +70,13 @@ class RAGASGate:
 
     def __init__(
         self,
-        thresholds: Optional[Dict[str, float]] = None,
+        thresholds: dict[str, float] | None = None,
         tolerance: float = DEFAULT_REGRESSION_TOLERANCE,
     ):
         self.thresholds = thresholds or DEFAULT_THRESHOLDS
         self.tolerance = tolerance
 
-    def check_thresholds(
-        self, scores: Dict[str, float]
-    ) -> Tuple[bool, Dict[str, dict]]:
+    def check_thresholds(self, scores: dict[str, float]) -> tuple[bool, dict[str, dict]]:
         """Return (passed, failures) where failures maps metric → {score, threshold}."""
         failures = {}
         for metric, threshold in self.thresholds.items():
@@ -93,8 +92,8 @@ class RAGASGate:
         return len(failures) == 0, failures
 
     def check_regression(
-        self, scores: Dict[str, float], baseline: Dict[str, float]
-    ) -> Tuple[bool, Dict[str, dict]]:
+        self, scores: dict[str, float], baseline: dict[str, float]
+    ) -> tuple[bool, dict[str, dict]]:
         """
         Return (passed, regressions) where regressions maps metric →
         {baseline, current, drop}.
@@ -108,7 +107,11 @@ class RAGASGate:
             if drop > self.tolerance:
                 logger.error(
                     "REGRESSION | %s: dropped %.4f (%0.4f → %.4f), tolerance=%.2f",
-                    metric, drop, base, current, self.tolerance,
+                    metric,
+                    drop,
+                    base,
+                    current,
+                    self.tolerance,
                 )
                 regressions[metric] = {
                     "baseline": round(base, 4),
@@ -119,8 +122,8 @@ class RAGASGate:
 
     def evaluate(
         self,
-        scores: Dict[str, float],
-        baseline: Optional[Dict[str, float]] = None,
+        scores: dict[str, float],
+        baseline: dict[str, float] | None = None,
     ) -> dict:
         """
         Run all gate checks and return a structured result dict.
@@ -160,6 +163,7 @@ class RAGASGate:
 # Reporting
 # ---------------------------------------------------------------------------
 
+
 def print_report(result: dict) -> None:
     scores = result["scores"]
     print("\n" + "=" * 60)
@@ -184,7 +188,9 @@ def print_report(result: dict) -> None:
     if result["regressions"]:
         print("\n[REGRESSIONS vs BASELINE]")
         for m, info in result["regressions"].items():
-            print(f"  {m}: {info['baseline']:.4f} → {info['current']:.4f} (drop={info['drop']:.4f})")
+            print(
+                f"  {m}: {info['baseline']:.4f} → {info['current']:.4f} (drop={info['drop']:.4f})"
+            )
 
     status = "PASSED ✓" if result["passed"] else "FAILED ✗"
     print(f"\nGate status: {status}")
@@ -213,7 +219,8 @@ def write_github_outputs(result: dict) -> None:
 # JSON helpers
 # ---------------------------------------------------------------------------
 
-def load_scores(path: str) -> Dict[str, float]:
+
+def load_scores(path: str) -> dict[str, float]:
     p = Path(path)
     if not p.exists():
         logger.error("Scores file not found: %s", path)
@@ -223,7 +230,7 @@ def load_scores(path: str) -> Dict[str, float]:
     return data.get("scores", data)
 
 
-def load_baseline(path: str) -> Optional[Dict[str, float]]:
+def load_baseline(path: str) -> dict[str, float] | None:
     p = Path(path)
     if not p.exists():
         logger.warning("Baseline file not found: %s — skipping regression check", path)
@@ -235,6 +242,7 @@ def load_baseline(path: str) -> Optional[Dict[str, float]]:
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(

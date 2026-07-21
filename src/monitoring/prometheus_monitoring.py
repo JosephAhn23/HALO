@@ -49,16 +49,15 @@ Usage:
     with metrics.measure("generate", model="gpt-4o-mini"):
         answer = pipeline.run(query)
 """
+
 from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +65,7 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Metric registry
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class LLMOpsMetrics:
     """
@@ -77,13 +77,13 @@ class LLMOpsMetrics:
 
     def __init__(self):
         self._initialised = False
-        self._metrics: Dict = {}
+        self._metrics: dict = {}
 
     def _init(self):
         if self._initialised:
             return
         try:
-            from prometheus_client import Counter, Gauge, Histogram, REGISTRY
+            from prometheus_client import REGISTRY, Counter, Gauge, Histogram
 
             self._registry = REGISTRY
 
@@ -216,7 +216,7 @@ class LLMOpsMetrics:
         completion_tokens: int,
         model: str,
         endpoint: str = "generate",
-        ttft_ms: Optional[float] = None,
+        ttft_ms: float | None = None,
     ) -> None:
         """Record a complete inference call — latency, tokens, and TTFT."""
         self.record_request(endpoint, model, latency_ms)
@@ -233,7 +233,7 @@ class LLMOpsMetrics:
         self,
         method: str,
         latency_ms: float,
-        scores: Optional[List[float]] = None,
+        scores: list[float] | None = None,
     ) -> None:
         """Record retrieval latency and per-document relevance scores."""
         h = self._get("retrieval_latency")
@@ -270,14 +270,14 @@ class LLMOpsMetrics:
         if g:
             g.labels(model=model).set(1 if loaded else 0)
 
-    def set_ragas_scores(self, scores: Dict[str, float]) -> None:
+    def set_ragas_scores(self, scores: dict[str, float]) -> None:
         """Push latest RAGAS scores into Prometheus gauges."""
         g = self._get("ragas_score")
         if g:
             for metric, value in scores.items():
                 g.labels(metric=metric).set(value)
 
-    def set_deepeval_scores(self, scores: Dict[str, float]) -> None:
+    def set_deepeval_scores(self, scores: dict[str, float]) -> None:
         g = self._get("deepeval_score")
         if g:
             for metric, value in scores.items():
@@ -295,6 +295,7 @@ class LLMOpsMetrics:
             return
         try:
             import torch
+
             for i in range(torch.cuda.device_count()):
                 used = torch.cuda.memory_allocated(i)
                 g.labels(device=f"cuda:{i}").set(used)
@@ -331,6 +332,7 @@ class LLMOpsMetrics:
         async def query_endpoint(req: QueryRequest):
             ...
         """
+
         def decorator(fn):
             @wraps(fn)
             async def wrapper(*args, **kwargs):
@@ -342,7 +344,9 @@ class LLMOpsMetrics:
                 finally:
                     if g:
                         g.labels(endpoint=endpoint).dec()
+
             return wrapper
+
         return decorator
 
 
@@ -353,6 +357,7 @@ metrics = LLMOpsMetrics()
 # ──────────────────────────────────────────────────────────────────────────────
 # FastAPI instrumentation
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def instrument_app(app):
     """
@@ -503,7 +508,8 @@ groups:
 # Grafana dashboard builder
 # ──────────────────────────────────────────────────────────────────────────────
 
-def build_grafana_dashboard() -> Dict:
+
+def build_grafana_dashboard() -> dict:
     """
     Build a complete Grafana dashboard JSON for LLMOps monitoring.
     Import via Grafana UI: Dashboards → Import → paste JSON.
@@ -554,13 +560,18 @@ def build_grafana_dashboard() -> Dict:
             "datasource": {"type": "prometheus", "uid": "prometheus"},
             "fieldConfig": {
                 "defaults": {
-                    "unit": unit, "min": min_val, "max": max_val,
+                    "unit": unit,
+                    "min": min_val,
+                    "max": max_val,
                     "color": {"mode": "thresholds"},
-                    "thresholds": {"mode": "absolute", "steps": [
-                        {"color": "red", "value": None},
-                        {"color": "yellow", "value": 0.65},
-                        {"color": "green", "value": 0.75},
-                    ]},
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {"color": "red", "value": None},
+                            {"color": "yellow", "value": 0.65},
+                            {"color": "green", "value": 0.75},
+                        ],
+                    },
                 },
                 "overrides": [],
             },
@@ -569,53 +580,204 @@ def build_grafana_dashboard() -> Dict:
         }
 
     def row(title, panel_id, y):
-        return {"id": panel_id, "title": title, "type": "row",
-                "gridPos": {"x": 0, "y": y, "w": 24, "h": 1}, "collapsed": False}
+        return {
+            "id": panel_id,
+            "title": title,
+            "type": "row",
+            "gridPos": {"x": 0, "y": y, "w": 24, "h": 1},
+            "collapsed": False,
+        }
 
     panels = [
         row("HTTP Gateway", 100, 0),
-        stat("Request Rate (QPS)", 'sum(rate(llmops_requests_total[1m]))', "reqps",
-             1, 0, 1, 6, 4,
-             [{"color": "green", "value": None}, {"color": "yellow", "value": 50}, {"color": "red", "value": 200}]),
-        stat("Active Requests", 'sum(llmops_active_requests)', "short",
-             2, 6, 1, 6, 4,
-             [{"color": "green", "value": None}, {"color": "yellow", "value": 20}, {"color": "red", "value": 50}]),
-        stat("Error Rate (/s)", 'sum(rate(llmops_errors_total[5m]))', "reqps",
-             3, 12, 1, 6, 4,
-             [{"color": "green", "value": None}, {"color": "red", "value": 0.05}]),
-        stat("Cache Hit Rate", 'sum(rate(llmops_cache_hit_total[5m])) / sum(rate(llmops_requests_total[5m]))',
-             "percentunit", 4, 18, 1, 6, 4),
-        timeseries("P50 / P95 / P99 Latency", """histogram_quantile(0.50, sum(rate(llmops_request_latency_seconds_bucket[5m])) by (le))
+        stat(
+            "Request Rate (QPS)",
+            "sum(rate(llmops_requests_total[1m]))",
+            "reqps",
+            1,
+            0,
+            1,
+            6,
+            4,
+            [
+                {"color": "green", "value": None},
+                {"color": "yellow", "value": 50},
+                {"color": "red", "value": 200},
+            ],
+        ),
+        stat(
+            "Active Requests",
+            "sum(llmops_active_requests)",
+            "short",
+            2,
+            6,
+            1,
+            6,
+            4,
+            [
+                {"color": "green", "value": None},
+                {"color": "yellow", "value": 20},
+                {"color": "red", "value": 50},
+            ],
+        ),
+        stat(
+            "Error Rate (/s)",
+            "sum(rate(llmops_errors_total[5m]))",
+            "reqps",
+            3,
+            12,
+            1,
+            6,
+            4,
+            [{"color": "green", "value": None}, {"color": "red", "value": 0.05}],
+        ),
+        stat(
+            "Cache Hit Rate",
+            "sum(rate(llmops_cache_hit_total[5m])) / sum(rate(llmops_requests_total[5m]))",
+            "percentunit",
+            4,
+            18,
+            1,
+            6,
+            4,
+        ),
+        timeseries(
+            "P50 / P95 / P99 Latency",
+            """histogram_quantile(0.50, sum(rate(llmops_request_latency_seconds_bucket[5m])) by (le))
 or histogram_quantile(0.95, sum(rate(llmops_request_latency_seconds_bucket[5m])) by (le))
 or histogram_quantile(0.99, sum(rate(llmops_request_latency_seconds_bucket[5m])) by (le))""",
-             "s", 5, 0, 5, 24, 8, "p{{quantile}}"),
-
+            "s",
+            5,
+            0,
+            5,
+            24,
+            8,
+            "p{{quantile}}",
+        ),
         row("Inference & Tokens", 101, 13),
-        timeseries("Token Throughput (tok/s)", 'sum(rate(llmops_token_count_total[1m])) by (token_type, model)',
-                   "short", 6, 0, 14, 12, 8, "{{token_type}} {{model}}"),
-        timeseries("Time to First Token (p95)", 'histogram_quantile(0.95, sum(rate(llmops_time_to_first_token_seconds_bucket[5m])) by (le, model))',
-                   "s", 7, 12, 14, 12, 8, "{{model}}"),
-
+        timeseries(
+            "Token Throughput (tok/s)",
+            "sum(rate(llmops_token_count_total[1m])) by (token_type, model)",
+            "short",
+            6,
+            0,
+            14,
+            12,
+            8,
+            "{{token_type}} {{model}}",
+        ),
+        timeseries(
+            "Time to First Token (p95)",
+            "histogram_quantile(0.95, sum(rate(llmops_time_to_first_token_seconds_bucket[5m])) by (le, model))",
+            "s",
+            7,
+            12,
+            14,
+            12,
+            8,
+            "{{model}}",
+        ),
         row("Retrieval", 102, 22),
-        timeseries("Retrieval Latency p95 by Method", 'histogram_quantile(0.95, sum(rate(llmops_retrieval_latency_seconds_bucket[5m])) by (le, method))',
-                   "s", 8, 0, 23, 12, 8, "{{method}}"),
-        timeseries("Retrieval Score Distribution (median)", 'histogram_quantile(0.50, sum(rate(llmops_retrieval_score_bucket[5m])) by (le, method))',
-                   "percentunit", 9, 12, 23, 12, 8, "{{method}}"),
-
+        timeseries(
+            "Retrieval Latency p95 by Method",
+            "histogram_quantile(0.95, sum(rate(llmops_retrieval_latency_seconds_bucket[5m])) by (le, method))",
+            "s",
+            8,
+            0,
+            23,
+            12,
+            8,
+            "{{method}}",
+        ),
+        timeseries(
+            "Retrieval Score Distribution (median)",
+            "histogram_quantile(0.50, sum(rate(llmops_retrieval_score_bucket[5m])) by (le, method))",
+            "percentunit",
+            9,
+            12,
+            23,
+            12,
+            8,
+            "{{method}}",
+        ),
         row("RAG Quality (RAGAS / DeepEval / NDCG)", 103, 31),
-        gauge("Faithfulness", 'llmops_ragas_score{metric="faithfulness"}', "percentunit", 10, 0, 32),
-        gauge("Answer Relevancy", 'llmops_ragas_score{metric="answer_relevancy"}', "percentunit", 11, 6, 32),
-        gauge("Context Precision", 'llmops_ragas_score{metric="context_precision"}', "percentunit", 12, 12, 32),
-        gauge("Context Recall", 'llmops_ragas_score{metric="context_recall"}', "percentunit", 13, 18, 32),
-        timeseries("RAGAS Score Trends", 'llmops_ragas_score', "percentunit", 14, 0, 38, 16, 8, "{{metric}}"),
-        stat("NDCG@10", 'llmops_ndcg{k="10"}', "percentunit", 15, 16, 38, 8, 8,
-             [{"color": "red", "value": None}, {"color": "yellow", "value": 0.6}, {"color": "green", "value": 0.75}]),
-
+        gauge(
+            "Faithfulness", 'llmops_ragas_score{metric="faithfulness"}', "percentunit", 10, 0, 32
+        ),
+        gauge(
+            "Answer Relevancy",
+            'llmops_ragas_score{metric="answer_relevancy"}',
+            "percentunit",
+            11,
+            6,
+            32,
+        ),
+        gauge(
+            "Context Precision",
+            'llmops_ragas_score{metric="context_precision"}',
+            "percentunit",
+            12,
+            12,
+            32,
+        ),
+        gauge(
+            "Context Recall",
+            'llmops_ragas_score{metric="context_recall"}',
+            "percentunit",
+            13,
+            18,
+            32,
+        ),
+        timeseries(
+            "RAGAS Score Trends",
+            "llmops_ragas_score",
+            "percentunit",
+            14,
+            0,
+            38,
+            16,
+            8,
+            "{{metric}}",
+        ),
+        stat(
+            "NDCG@10",
+            'llmops_ndcg{k="10"}',
+            "percentunit",
+            15,
+            16,
+            38,
+            8,
+            8,
+            [
+                {"color": "red", "value": None},
+                {"color": "yellow", "value": 0.6},
+                {"color": "green", "value": 0.75},
+            ],
+        ),
         row("Queue & GPU", 104, 46),
-        timeseries("Queue Depth", 'llmops_queue_depth', "short", 16, 0, 47, 12, 8, "{{queue}}"),
-        timeseries("GPU Memory Used (GB)", 'llmops_gpu_memory_used_bytes / (1024*1024*1024)', "decgbytes",
-                   17, 12, 47, 12, 8, "{{device}}"),
-        timeseries("DLQ Events (/s)", 'rate(llmops_dlq_events_total[5m])', "reqps", 18, 0, 55, 12, 8, "{{topic}}"),
+        timeseries("Queue Depth", "llmops_queue_depth", "short", 16, 0, 47, 12, 8, "{{queue}}"),
+        timeseries(
+            "GPU Memory Used (GB)",
+            "llmops_gpu_memory_used_bytes / (1024*1024*1024)",
+            "decgbytes",
+            17,
+            12,
+            47,
+            12,
+            8,
+            "{{device}}",
+        ),
+        timeseries(
+            "DLQ Events (/s)",
+            "rate(llmops_dlq_events_total[5m])",
+            "reqps",
+            18,
+            0,
+            55,
+            12,
+            8,
+            "{{topic}}",
+        ),
     ]
 
     return {
@@ -634,7 +796,8 @@ or histogram_quantile(0.99, sum(rate(llmops_request_latency_seconds_bucket[5m]))
 # File generator
 # ──────────────────────────────────────────────────────────────────────────────
 
-def generate_monitoring_files(output_dir: str = "monitoring") -> List[str]:
+
+def generate_monitoring_files(output_dir: str = "monitoring") -> list[str]:
     """
     Write all monitoring config files to disk.
     Safe to re-run — overwrites existing files.
@@ -690,11 +853,11 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="LLMOps monitoring utilities")
-    parser.add_argument("--generate", action="store_true",
-                        help="Write monitoring config files to disk")
+    parser.add_argument(
+        "--generate", action="store_true", help="Write monitoring config files to disk"
+    )
     parser.add_argument("--output-dir", default="monitoring")
-    parser.add_argument("--demo", action="store_true",
-                        help="Print sample metric recording calls")
+    parser.add_argument("--demo", action="store_true", help="Print sample metric recording calls")
     args = parser.parse_args()
 
     if args.generate:

@@ -22,6 +22,7 @@ Run locally with databricks-connect:
     databricks-connect configure   # point to your Databricks workspace
     python spark_ml/databricks_notebook.py
 """
+
 from __future__ import annotations
 
 import logging
@@ -39,7 +40,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 CATALOG = os.getenv("DATABRICKS_CATALOG", "llmops")
 SCHEMA = os.getenv("DATABRICKS_SCHEMA", "research_assistant")
 VOLUME_PATH = os.getenv("DATABRICKS_VOLUME_PATH", f"/Volumes/{CATALOG}/{SCHEMA}/raw_data")
-MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT_NAME", f"/Users/llmops/spark-ml-pipeline")
+MLFLOW_EXPERIMENT = os.getenv("MLFLOW_EXPERIMENT_NAME", "/Users/llmops/spark-ml-pipeline")
 
 # Unity Catalog three-level namespace: catalog.schema.table
 RAW_TABLE = f"{CATALOG}.{SCHEMA}.raw_documents"
@@ -51,6 +52,7 @@ MODEL_NAME = f"{CATALOG}.{SCHEMA}.query_intent_classifier"
 # ---------------------------------------------------------------------------
 # CELL 2 — Spark session (uses existing cluster on Databricks; local fallback)
 # ---------------------------------------------------------------------------
+
 
 def get_spark():
     """
@@ -64,9 +66,9 @@ def get_spark():
         pass
 
     from pyspark.sql import SparkSession
+
     return (
-        SparkSession.builder
-        .appName("LLMOps-Databricks")
+        SparkSession.builder.appName("LLMOps-Databricks")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config(
             "spark.sql.catalog.spark_catalog",
@@ -84,6 +86,7 @@ logger.info("Spark version: %s", spark.version)
 # ---------------------------------------------------------------------------
 # CELL 3 — Unity Catalog setup
 # ---------------------------------------------------------------------------
+
 
 def setup_unity_catalog(spark, catalog: str, schema: str) -> None:
     """
@@ -112,6 +115,7 @@ setup_unity_catalog(spark, CATALOG, SCHEMA)
 # ---------------------------------------------------------------------------
 # CELL 4 — Load or generate raw data
 # ---------------------------------------------------------------------------
+
 
 def load_or_create_raw_data(spark, table: str, volume_path: str):
     """
@@ -145,8 +149,7 @@ def load_or_create_raw_data(spark, table: str, volume_path: str):
 
     # Write as a managed Delta table in Unity Catalog
     (
-        df.write
-        .format("delta")
+        df.write.format("delta")
         .mode("overwrite")
         .option("overwriteSchema", "true")
         .saveAsTable(table)
@@ -163,8 +166,9 @@ df_raw.show(5, truncate=True)
 # CELL 5 — Feature engineering (reuses SparkFeatureEngineer)
 # ---------------------------------------------------------------------------
 
-import sys
 import os
+import sys
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from src.spark_ml.spark_ml_pipeline import SparkFeatureEngineer, SparkMLConfig
@@ -199,6 +203,7 @@ logger.info("Feature schema: %s", df_features.schema.fieldNames())
 # CELL 6 — Write feature table to Unity Catalog (Delta)
 # ---------------------------------------------------------------------------
 
+
 def write_feature_table(df, table: str) -> None:
     """
     Persist the feature DataFrame as a managed Delta table in Unity Catalog.
@@ -209,8 +214,7 @@ def write_feature_table(df, table: str) -> None:
     cols_to_save = [c for c in df.columns if c not in ("tf", "tfidf")]
     (
         df.select(cols_to_save)
-        .write
-        .format("delta")
+        .write.format("delta")
         .mode("overwrite")
         .option("overwriteSchema", "true")
         .saveAsTable(table)
@@ -225,8 +229,9 @@ write_feature_table(df_features, FEATURE_TABLE)
 # CELL 7 — Train GBT query intent classifier (reuses SparkMLClassifier)
 # ---------------------------------------------------------------------------
 
-from src.spark_ml.spark_ml_pipeline import SparkMLClassifier
 import mlflow
+
+from src.spark_ml.spark_ml_pipeline import SparkMLClassifier
 
 # On Databricks, set the experiment path (workspace path, not a URI)
 mlflow.set_experiment(MLFLOW_EXPERIMENT)
@@ -239,6 +244,7 @@ logger.info("GBT F1 score: %.4f", f1)
 # ---------------------------------------------------------------------------
 # CELL 8 — Register model in Unity Catalog Model Registry
 # ---------------------------------------------------------------------------
+
 
 def register_model_unity_catalog(
     model_uri: str,
@@ -269,7 +275,9 @@ def register_model_unity_catalog(
     )
     logger.info(
         "Registered model version %s: %s (run_id=%s)",
-        mv.version, registered_name, mv.run_id,
+        mv.version,
+        registered_name,
+        mv.run_id,
     )
     return mv.version
 
@@ -312,8 +320,7 @@ logger.info("Optimal k=%d, silhouette=%.4f", optimal_k, silhouette)
 (
     df_clustered.select("text", "intent", "label", "prediction")
     .withColumnRenamed("prediction", "cluster_id")
-    .write
-    .format("delta")
+    .write.format("delta")
     .mode("overwrite")
     .option("overwriteSchema", "true")
     .saveAsTable(CLUSTER_TABLE)

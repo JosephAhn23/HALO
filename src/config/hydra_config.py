@@ -45,6 +45,7 @@ Usage:
     # Environment scoping
     LLMOPS_ENV=prod python train.py
 """
+
 from __future__ import annotations
 
 import json
@@ -52,7 +53,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -62,22 +63,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Structured config dataclasses
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class ModelConfig:
     name: str = "meta-llama/Llama-3.2-1B-Instruct"
-    backend: str = "vllm"               # vllm | llamacpp | openai | azure_openai
+    backend: str = "vllm"  # vllm | llamacpp | openai | azure_openai
     max_tokens: int = 512
     temperature: float = 0.0
     top_p: float = 0.9
-    quantization: Optional[str] = None  # None | qlora | awq | gptq
-    n_gpu_layers: int = 0               # llamacpp only
-    dtype: str = "auto"                 # auto | float16 | bfloat16 | float32
+    quantization: str | None = None  # None | qlora | awq | gptq
+    n_gpu_layers: int = 0  # llamacpp only
+    dtype: str = "auto"  # auto | float16 | bfloat16 | float32
     trust_remote_code: bool = False
 
 
 @dataclass
 class RetrievalConfig:
-    backend: str = "hybrid"             # faiss | hybrid | azure_search
+    backend: str = "hybrid"  # faiss | hybrid | azure_search
     top_k: int = 10
     bm25_candidates: int = 100
     faiss_candidates: int = 100
@@ -93,16 +95,14 @@ class RetrievalConfig:
 
 @dataclass
 class TrainingConfig:
-    method: str = "qlora"               # qlora | rlhf_ppo | sft | dpo
+    method: str = "qlora"  # qlora | rlhf_ppo | sft | dpo
     base_model: str = "meta-llama/Llama-3.1-8B-Instruct"
     output_dir: str = "models/finetuned"
     # LoRA
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
-    lora_target_modules: List[str] = field(
-        default_factory=lambda: ["q_proj", "v_proj"]
-    )
+    lora_target_modules: list[str] = field(default_factory=lambda: ["q_proj", "v_proj"])
     # Quantization
     load_in_4bit: bool = True
     bnb_4bit_quant_type: str = "nf4"
@@ -123,29 +123,25 @@ class TrainingConfig:
 
 @dataclass
 class EvalConfig:
-    frameworks: List[str] = field(
-        default_factory=lambda: ["ragas", "deepeval"]
+    frameworks: list[str] = field(default_factory=lambda: ["ragas", "deepeval"])
+    ragas_metrics: list[str] = field(
+        default_factory=lambda: ["faithfulness", "answer_relevancy", "context_precision"]
     )
-    ragas_metrics: List[str] = field(
-        default_factory=lambda: [
-            "faithfulness", "answer_relevancy", "context_precision"
-        ]
-    )
-    deepeval_metrics: List[str] = field(
+    deepeval_metrics: list[str] = field(
         default_factory=lambda: ["relevancy", "faithfulness", "hallucination"]
     )
     faithfulness_min: float = 0.70
     relevancy_min: float = 0.70
     hallucination_min: float = 0.80
-    k_values: List[int] = field(default_factory=lambda: [5, 10, 20])
+    k_values: list[int] = field(default_factory=lambda: [5, 10, 20])
     regression_threshold: float = 0.05
     baseline_path: str = "mlops/baselines/"
 
 
 @dataclass
 class InfraConfig:
-    environment: str = "local"          # local | dev | staging | prod
-    cloud: str = "aws"                  # aws | azure | gcp | local
+    environment: str = "local"  # local | dev | staging | prod
+    cloud: str = "aws"  # aws | azure | gcp | local
     # AWS
     aws_region: str = "us-east-1"
     s3_bucket: str = "llmops-artifacts"
@@ -168,9 +164,10 @@ class InfraConfig:
 @dataclass
 class ExperimentConfig:
     """Experiment-level overrides — compose on top of the base config."""
+
     name: str = "baseline"
     description: str = ""
-    tags: Dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
     ablate_reranking: bool = False
     ablate_bm25: bool = False
     ablate_faiss: bool = False
@@ -182,6 +179,7 @@ class ExperimentConfig:
 @dataclass
 class LLMOpsConfig:
     """Root config — assembles all config groups."""
+
     model: ModelConfig = field(default_factory=ModelConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     training: TrainingConfig = field(default_factory=TrainingConfig)
@@ -195,8 +193,8 @@ class LLMOpsConfig:
     def load(
         cls,
         config_path: str = "src/conf/config.yaml",
-        overrides: Optional[List[str]] = None,
-    ) -> "LLMOpsConfig":
+        overrides: list[str] | None = None,
+    ) -> LLMOpsConfig:
         """
         Load config from YAML, then apply dot-notation overrides.
         Override syntax: "model.temperature=0.5" or "retrieval=hybrid"
@@ -218,7 +216,7 @@ class LLMOpsConfig:
         return cfg
 
     @classmethod
-    def _from_dict(cls, d: Dict[str, Any]) -> "LLMOpsConfig":
+    def _from_dict(cls, d: dict[str, Any]) -> LLMOpsConfig:
         def _safe(klass, data):
             if not isinstance(data, dict):
                 return klass()
@@ -234,7 +232,7 @@ class LLMOpsConfig:
             experiment=_safe(ExperimentConfig, d.get("experiment", {})),
         )
 
-    def _apply_overrides(self, overrides: List[str]) -> "LLMOpsConfig":
+    def _apply_overrides(self, overrides: list[str]) -> LLMOpsConfig:
         """Apply dot-notation overrides in place on a deep copy."""
         import copy
 
@@ -270,7 +268,7 @@ class LLMOpsConfig:
 
     # ── Serialisation ────────────────────────────────────────────────────────
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         import dataclasses
 
         def _convert(obj: Any) -> Any:
@@ -299,8 +297,8 @@ class LLMOpsConfig:
         except Exception as e:
             logger.warning("MLflow param logging failed: %s", e)
 
-    def _flatten(self, d: Dict, prefix: str = "") -> Dict[str, Any]:
-        result: Dict[str, Any] = {}
+    def _flatten(self, d: dict, prefix: str = "") -> dict[str, Any]:
+        result: dict[str, Any] = {}
         for k, v in d.items():
             key = f"{prefix}.{k}" if prefix else k
             if isinstance(v, dict):
@@ -316,6 +314,7 @@ class LLMOpsConfig:
 # Hydra decorator
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def hydra_main(cfg_path: str = "conf"):
     """
     Decorator factory for Hydra-powered entry points.
@@ -328,6 +327,7 @@ def hydra_main(cfg_path: str = "conf"):
 
         main()
     """
+
     def decorator(fn):
         try:
             import hydra
@@ -360,14 +360,15 @@ def hydra_main(cfg_path: str = "conf"):
 # Config file generator
 # ──────────────────────────────────────────────────────────────────────────────
 
-def generate_config_files(output_dir: str = "conf") -> List[str]:
+
+def generate_config_files(output_dir: str = "conf") -> list[str]:
     """
     Write the full Hydra conf/ directory structure to disk.
     Safe to re-run — overwrites existing files.
     """
     import yaml
 
-    files: Dict[str, Any] = {
+    files: dict[str, Any] = {
         "config.yaml": {
             "defaults": [
                 {"model": "gpt4o_mini"},
@@ -508,21 +509,23 @@ def generate_config_files(output_dir: str = "conf") -> List[str]:
 # Environment-scoped loader
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class EnvironmentConfig:
     """
     Load the config appropriate for the current deployment environment.
     Reads LLMOPS_ENV=local|dev|staging|prod (defaults to local).
     """
 
-    ENV_OVERRIDES: Dict[str, List[str]] = {
-        "local":   ["infra=local"],
-        "dev":     ["infra=local", "model=gpt4o_mini",
-                    "+experiment.tags.env=dev"],
-        "staging": ["infra=aws", "model=llama3_8b",
-                    "+experiment.tags.env=staging"],
-        "prod":    ["infra=aws", "model=llama3_8b",
-                    "+experiment.tags.env=prod",
-                    "eval.faithfulness_min=0.75"],
+    ENV_OVERRIDES: dict[str, list[str]] = {
+        "local": ["infra=local"],
+        "dev": ["infra=local", "model=gpt4o_mini", "+experiment.tags.env=dev"],
+        "staging": ["infra=aws", "model=llama3_8b", "+experiment.tags.env=staging"],
+        "prod": [
+            "infra=aws",
+            "model=llama3_8b",
+            "+experiment.tags.env=prod",
+            "eval.faithfulness_min=0.75",
+        ],
     }
 
     @classmethod
@@ -541,11 +544,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Hydra config utilities")
-    parser.add_argument("--generate", action="store_true",
-                        help="Write conf/ directory to disk")
+    parser.add_argument("--generate", action="store_true", help="Write conf/ directory to disk")
     parser.add_argument("--conf-dir", default="conf")
-    parser.add_argument("--show", action="store_true",
-                        help="Print resolved config as YAML")
+    parser.add_argument("--show", action="store_true", help="Print resolved config as YAML")
     parser.add_argument("--overrides", nargs="*", default=[])
     args = parser.parse_args()
 
@@ -559,4 +560,5 @@ if __name__ == "__main__":
             overrides=args.overrides,
         )
         import yaml
+
         print(yaml.dump(cfg.to_dict(), default_flow_style=False, sort_keys=False))

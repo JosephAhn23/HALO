@@ -16,13 +16,13 @@ The report is designed to be:
   2. Posted to Slack/Teams as a decision artifact
   3. Reviewed in code review before shipping
 """
+
 from __future__ import annotations
 
 import logging
 import math
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ def _ascii_bar(value: float, max_value: float, width: int = 30) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
-def _sparkline(values: List[float], width: int = 20) -> str:
+def _sparkline(values: list[float], width: int = 20) -> str:
     if not values:
         return ""
     blocks = " ▁▂▃▄▅▆▇█"
@@ -65,38 +65,38 @@ class ExperimentReport:
     n_control: int
     n_treatment: int
     primary_metric: MetricSummary
-    secondary_metrics: List[MetricSummary]
+    secondary_metrics: list[MetricSummary]
     guardrail_passed: bool
-    guardrail_violations: List[str]
+    guardrail_violations: list[str]
     recommendation: str
     business_impact: str
     sequential_decision: str
-    cuped_variance_reduction: Optional[float]
-    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    cuped_variance_reduction: float | None
+    generated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def to_markdown(self) -> str:
         lines = [
             f"# Experiment Report: {self.experiment_id}",
-            f"",
+            "",
             f"> Generated: {self.generated_at[:19]} UTC",
-            f"",
-            f"## Overview",
-            f"",
+            "",
+            "## Overview",
+            "",
             f"**{self.description}**",
-            f"",
+            "",
             f"| | Control (`{self.control_name}`) | Treatment (`{self.treatment_name}`) |",
-            f"|:---|:---:|:---:|",
+            "|:---|:---:|:---:|",
             f"| **N** | {self.n_control:,} | {self.n_treatment:,} |",
-            f"",
+            "",
             f"## Primary Metric: `{self.primary_metric.metric}`",
-            f"",
+            "",
         ]
 
         pm = self.primary_metric
         sig_icon = "✅" if pm.significant else "❌"
         lines += [
-            f"| Metric | Value |",
-            f"|:---|:---|",
+            "| Metric | Value |",
+            "|:---|:---|",
             f"| Control mean | `{pm.control_mean:.4f}` |",
             f"| Treatment mean | `{pm.treatment_mean:.4f}` |",
             f"| Delta | `{pm.delta:+.4f}` ({pm.delta_pct:+.1f}%) |",
@@ -111,15 +111,20 @@ class ExperimentReport:
         lines += ["", "### Visual", ""]
         max_val = max(pm.control_mean, pm.treatment_mean, 0.001)
         lines += [
-            f"```",
+            "```",
             f"Control   {_ascii_bar(pm.control_mean, max_val)} {pm.control_mean:.4f}",
             f"Treatment {_ascii_bar(pm.treatment_mean, max_val)} {pm.treatment_mean:.4f}",
-            f"```",
-            f"",
+            "```",
+            "",
         ]
 
         if self.secondary_metrics:
-            lines += ["## Secondary Metrics", "", "| Metric | Control | Treatment | Delta | p | Sig |", "|:---|:---:|:---:|:---:|:---:|:---:|"]
+            lines += [
+                "## Secondary Metrics",
+                "",
+                "| Metric | Control | Treatment | Delta | p | Sig |",
+                "|:---|:---:|:---:|:---:|:---:|:---:|",
+            ]
             for m in self.secondary_metrics:
                 sig = "✅" if m.significant else "❌"
                 lines.append(
@@ -173,16 +178,16 @@ class ExperimentReporter:
     def generate(
         self,
         experiment_id: str,
-        control_obs: List[Dict[str, float]],
-        treatment_obs: List[Dict[str, float]],
+        control_obs: list[dict[str, float]],
+        treatment_obs: list[dict[str, float]],
         primary_metric: str,
-        secondary_metrics: Optional[List[str]] = None,
+        secondary_metrics: list[str] | None = None,
         control_name: str = "control",
         treatment_name: str = "treatment",
         description: str = "",
-        guardrail_violations: Optional[List[str]] = None,
+        guardrail_violations: list[str] | None = None,
         sequential_decision: str = "continue",
-        cuped_variance_reduction: Optional[float] = None,
+        cuped_variance_reduction: float | None = None,
     ) -> ExperimentReport:
         secondary_metrics = secondary_metrics or []
         guardrail_violations = guardrail_violations or []
@@ -219,17 +224,23 @@ class ExperimentReporter:
     def _compute_metric_summary(
         self,
         metric: str,
-        control_obs: List[Dict],
-        treatment_obs: List[Dict],
+        control_obs: list[dict],
+        treatment_obs: list[dict],
     ) -> MetricSummary:
         c_vals = [o[metric] for o in control_obs if metric in o]
         t_vals = [o[metric] for o in treatment_obs if metric in o]
 
         if not c_vals or not t_vals:
             return MetricSummary(
-                metric=metric, control_mean=0.0, treatment_mean=0.0,
-                delta=0.0, delta_pct=0.0, ci_lower=0.0, ci_upper=0.0,
-                p_value=1.0, significant=False,
+                metric=metric,
+                control_mean=0.0,
+                treatment_mean=0.0,
+                delta=0.0,
+                delta_pct=0.0,
+                ci_lower=0.0,
+                ci_upper=0.0,
+                p_value=1.0,
+                significant=False,
             )
 
         c_mean = sum(c_vals) / len(c_vals)
@@ -260,13 +271,13 @@ class ExperimentReporter:
     def _build_recommendation(
         self,
         primary: MetricSummary,
-        violations: List[str],
+        violations: list[str],
         sequential_decision: str,
     ) -> str:
         if violations:
-            return f"DO NOT SHIP: Guardrail violations detected. Fix issues before proceeding."
+            return "DO NOT SHIP: Guardrail violations detected. Fix issues before proceeding."
         if sequential_decision == "accept_h0":
-            return f"ABANDON: No significant effect detected. Treatment is not better than control."
+            return "ABANDON: No significant effect detected. Treatment is not better than control."
         if primary.significant and primary.delta > 0:
             return (
                 f"SHIP: Treatment improves `{primary.metric}` by {primary.delta_pct:+.1f}% "
@@ -274,7 +285,7 @@ class ExperimentReporter:
             )
         if primary.significant and primary.delta < 0:
             return f"ROLLBACK: Treatment significantly degrades `{primary.metric}`. Do not ship."
-        return f"CONTINUE: Not yet significant. Collect more data."
+        return "CONTINUE: Not yet significant. Collect more data."
 
     def _build_business_impact(self, primary: MetricSummary, metric: str) -> str:
         if not primary.significant or primary.delta <= 0:

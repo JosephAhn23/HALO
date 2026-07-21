@@ -5,17 +5,18 @@ The agent supplies a bundle of files (implementation + tests), we mount them in 
 temporary directory, run ``python -m pytest`` in ``python:3.11-slim``, and feed
 stdout/stderr back to a ``revise`` callable until green or ``max_rounds``.
 """
+
 from __future__ import annotations
 
 import logging
 import subprocess
 import tempfile
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Dict, List, Optional
 
-from src.sandbox.code_sandbox import ExecutionResult, SandboxConfig, SAFE_CONFIG
+from src.sandbox.code_sandbox import SAFE_CONFIG, ExecutionResult, SandboxConfig
 
 logger = logging.getLogger(__name__)
 
@@ -25,10 +26,10 @@ _DEFAULT_IMAGE = "python:3.11-slim"
 @dataclass
 class SelfHealingLoopResult:
     success: bool
-    files: Dict[str, str]
+    files: dict[str, str]
     rounds: int
     execution_log: str
-    last_result: Optional[ExecutionResult] = None
+    last_result: ExecutionResult | None = None
 
 
 class SelfHealingLoop:
@@ -41,7 +42,7 @@ class SelfHealingLoop:
         *,
         docker_binary: str = "docker",
         image: str = _DEFAULT_IMAGE,
-        config: Optional[SandboxConfig] = None,
+        config: SandboxConfig | None = None,
         pip_install: str = "pytest",
     ) -> None:
         self.docker_binary = docker_binary
@@ -51,12 +52,12 @@ class SelfHealingLoop:
 
     def run_until_pytest_green(
         self,
-        files: Dict[str, str],
-        revise: Callable[[Dict[str, str], str], Dict[str, str]],
+        files: dict[str, str],
+        revise: Callable[[dict[str, str], str], dict[str, str]],
         *,
         pytest_target: str = ".",
         max_rounds: int = 8,
-        extra_pip: Optional[str] = None,
+        extra_pip: str | None = None,
     ) -> SelfHealingLoopResult:
         """
         Args:
@@ -64,9 +65,9 @@ class SelfHealingLoop:
             revise: ``(files, feedback) -> updated_files``; feedback is stdout+stderr from pytest.
             pytest_target: path relative to workspace root passed to pytest.
         """
-        log_lines: List[str] = ["=== SELF-HEALING PYTEST LOG (Docker) ==="]
-        current = {k: v for k, v in files.items()}
-        last: Optional[ExecutionResult] = None
+        log_lines: list[str] = ["=== SELF-HEALING PYTEST LOG (Docker) ==="]
+        current = dict(files)
+        last: ExecutionResult | None = None
 
         for rnd in range(1, max_rounds + 1):
             with tempfile.TemporaryDirectory(prefix="selfheal_") as tmp:
@@ -117,7 +118,7 @@ class SelfHealingLoop:
         workspace: Path,
         pytest_target: str,
         *,
-        extra_pip: Optional[str] = None,
+        extra_pip: str | None = None,
     ) -> ExecutionResult:
         cfg = self.config
         flags = cfg.to_docker_flags()
@@ -125,10 +126,7 @@ class SelfHealingLoop:
         pip_pkgs = self.pip_install
         if extra_pip:
             pip_pkgs = f"{pip_pkgs} {extra_pip}"
-        inner = (
-            f"pip install -q {pip_pkgs} && "
-            f"python -m pytest {pytest_target} -q --tb=short"
-        )
+        inner = f"pip install -q {pip_pkgs} && " f"python -m pytest {pytest_target} -q --tb=short"
         cmd = (
             [self.docker_binary, "run", "--rm"]
             + flags

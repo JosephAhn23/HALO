@@ -23,14 +23,15 @@ number, multiplied by the pricing snapshot in cost_router.py. This is a cost
 *model*, not a live-traffic measurement — see the eval-mode tradeoff this was
 scoped against.
 """
+
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
-from src.agents.multi_agent.cost_classifier import train_test_split, train_default_classifier
+from src.agents.multi_agent.cost_classifier import train_default_classifier, train_test_split
 from src.agents.multi_agent.cost_router import (
     DEFAULT_ABSTAIN_THRESHOLD,
     CostAwareRouter,
@@ -84,7 +85,9 @@ REFERENCE_CORPUS = [
 ]
 
 
-def _cosine_top_scores(queries: List[str], reference_embeddings: np.ndarray, embedder) -> List[float]:
+def _cosine_top_scores(
+    queries: list[str], reference_embeddings: np.ndarray, embedder
+) -> list[float]:
     query_embeddings = np.asarray(embedder.embed(queries))
     # Both sides are already L2-normalized by EmbeddingModel, so dot product
     # is cosine similarity -- same convention as retriever.py's FAISS index.
@@ -92,7 +95,7 @@ def _cosine_top_scores(queries: List[str], reference_embeddings: np.ndarray, emb
     return sims.max(axis=1).tolist()
 
 
-def run_eval(seed: int = 13) -> Dict[str, Any]:
+def run_eval(seed: int = 13) -> dict[str, Any]:
     print("=== Cost-Aware Router Eval ===\n")
 
     print("1. Training complexity classifier on hand-labeled seed set...")
@@ -110,16 +113,20 @@ def run_eval(seed: int = 13) -> Dict[str, Any]:
     answerable_scores = _cosine_top_scores(answerable_queries, reference_embeddings, embedder)
     unanswerable_scores = _cosine_top_scores(UNANSWERABLE_QUERIES, reference_embeddings, embedder)
 
-    print(f"   answerable held-out top-score:   min={min(answerable_scores):.3f} "
-          f"max={max(answerable_scores):.3f} mean={np.mean(answerable_scores):.3f}")
-    print(f"   unanswerable top-score:          min={min(unanswerable_scores):.3f} "
-          f"max={max(unanswerable_scores):.3f} mean={np.mean(unanswerable_scores):.3f}")
+    print(
+        f"   answerable held-out top-score:   min={min(answerable_scores):.3f} "
+        f"max={max(answerable_scores):.3f} mean={np.mean(answerable_scores):.3f}"
+    )
+    print(
+        f"   unanswerable top-score:          min={min(unanswerable_scores):.3f} "
+        f"max={max(unanswerable_scores):.3f} mean={np.mean(unanswerable_scores):.3f}"
+    )
     print(f"   abstain threshold: {DEFAULT_ABSTAIN_THRESHOLD}\n")
 
     router = CostAwareRouter(classifier=classifier)
 
     # --- Route every query in the eval set, tally cost + abstention ---
-    per_query: List[Dict[str, Any]] = []
+    per_query: list[dict[str, Any]] = []
     naive_cost_total = 0.0
     router_cost_total = 0.0
     false_abstains = 0  # answerable query incorrectly abstained
@@ -128,71 +135,97 @@ def run_eval(seed: int = 13) -> Dict[str, Any]:
     for item, score in zip(held_out, answerable_scores):
         chunks = [{"text": "ref", "retrieval_score": score}]
         decision = router.route(item["query"], chunks)
-        naive_cost = estimate_cost_usd(NAIVE_MODEL, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS)
-        router_cost = 0.0 if decision.abstain else estimate_cost_usd(
-            decision.model, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS
+        naive_cost = estimate_cost_usd(
+            NAIVE_MODEL, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS
+        )
+        router_cost = (
+            0.0
+            if decision.abstain
+            else estimate_cost_usd(
+                decision.model, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS
+            )
         )
         naive_cost_total += naive_cost
         router_cost_total += router_cost
         if decision.abstain:
             false_abstains += 1
-        per_query.append({
-            "query": item["query"],
-            "gold_label": item["label"],
-            "kind": "answerable",
-            "similarity_score": round(score, 4),
-            "decision": decision.to_dict(),
-            "naive_cost_usd": naive_cost,
-            "router_cost_usd": router_cost,
-        })
+        per_query.append(
+            {
+                "query": item["query"],
+                "gold_label": item["label"],
+                "kind": "answerable",
+                "similarity_score": round(score, 4),
+                "decision": decision.to_dict(),
+                "naive_cost_usd": naive_cost,
+                "router_cost_usd": router_cost,
+            }
+        )
 
     for query, score in zip(UNANSWERABLE_QUERIES, unanswerable_scores):
         chunks = [{"text": "ref", "retrieval_score": score}]
         decision = router.route(query, chunks)
-        naive_cost = estimate_cost_usd(NAIVE_MODEL, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS)
-        router_cost = 0.0 if decision.abstain else estimate_cost_usd(
-            decision.model, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS
+        naive_cost = estimate_cost_usd(
+            NAIVE_MODEL, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS
+        )
+        router_cost = (
+            0.0
+            if decision.abstain
+            else estimate_cost_usd(
+                decision.model, BASELINE_PROMPT_TOKENS, BASELINE_COMPLETION_TOKENS
+            )
         )
         naive_cost_total += naive_cost
         router_cost_total += router_cost
         if decision.abstain:
             caught_unanswerable += 1
-        per_query.append({
-            "query": query,
-            "gold_label": None,
-            "kind": "unanswerable",
-            "similarity_score": round(score, 4),
-            "decision": decision.to_dict(),
-            "naive_cost_usd": naive_cost,
-            "router_cost_usd": router_cost,
-        })
+        per_query.append(
+            {
+                "query": query,
+                "gold_label": None,
+                "kind": "unanswerable",
+                "similarity_score": round(score, 4),
+                "decision": decision.to_dict(),
+                "naive_cost_usd": naive_cost,
+                "router_cost_usd": router_cost,
+            }
+        )
 
     n_eval = len(held_out) + len(UNANSWERABLE_QUERIES)
     savings_pct = (1 - router_cost_total / naive_cost_total) * 100 if naive_cost_total else 0.0
-    abstain_recall = caught_unanswerable / len(UNANSWERABLE_QUERIES) if UNANSWERABLE_QUERIES else 0.0
+    abstain_recall = (
+        caught_unanswerable / len(UNANSWERABLE_QUERIES) if UNANSWERABLE_QUERIES else 0.0
+    )
     false_abstain_rate = false_abstains / len(held_out) if held_out else 0.0
 
     print("3. Results\n")
-    print(f"   n eval queries:            {n_eval} ({len(held_out)} answerable, "
-          f"{len(UNANSWERABLE_QUERIES)} unanswerable)")
+    print(
+        f"   n eval queries:            {n_eval} ({len(held_out)} answerable, "
+        f"{len(UNANSWERABLE_QUERIES)} unanswerable)"
+    )
     print(f"   naive baseline cost (always {NAIVE_MODEL}, no abstention): ${naive_cost_total:.4f}")
     print(f"   router-enabled cost:       ${router_cost_total:.4f}")
     print(f"   cost reduction:            {savings_pct:.1f}%")
-    print(f"   abstention recall (caught unanswerable / total unanswerable): "
-          f"{caught_unanswerable}/{len(UNANSWERABLE_QUERIES)} ({abstain_recall:.1%})")
-    print(f"   false-abstain rate (answerable incorrectly declined): "
-          f"{false_abstains}/{len(held_out)} ({false_abstain_rate:.1%})")
+    print(
+        f"   abstention recall (caught unanswerable / total unanswerable): "
+        f"{caught_unanswerable}/{len(UNANSWERABLE_QUERIES)} ({abstain_recall:.1%})"
+    )
+    print(
+        f"   false-abstain rate (answerable incorrectly declined): "
+        f"{false_abstains}/{len(held_out)} ({false_abstain_rate:.1%})"
+    )
 
     results = {
         "classifier_held_out_accuracy": class_report.to_dict(),
         "abstain_threshold": DEFAULT_ABSTAIN_THRESHOLD,
         "similarity_scores": {
             "answerable": {
-                "min": min(answerable_scores), "max": max(answerable_scores),
+                "min": min(answerable_scores),
+                "max": max(answerable_scores),
                 "mean": float(np.mean(answerable_scores)),
             },
             "unanswerable": {
-                "min": min(unanswerable_scores), "max": max(unanswerable_scores),
+                "min": min(unanswerable_scores),
+                "max": max(unanswerable_scores),
                 "mean": float(np.mean(unanswerable_scores)),
             },
         },

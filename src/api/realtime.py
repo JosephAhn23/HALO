@@ -1,6 +1,7 @@
 """
 Lightweight realtime API -- delegates to the shared Pipeline.
 """
+
 from __future__ import annotations
 
 from fastapi import FastAPI

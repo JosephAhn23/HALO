@@ -2,10 +2,10 @@
 Data quality assessment + deduplication pipeline.
 Covers: Data quality assessment, Pandas, data filtering
 """
+
 import hashlib
 import re
 from dataclasses import dataclass
-from typing import Dict, Tuple
 
 import pandas as pd
 
@@ -68,7 +68,9 @@ class DataQualityFilter:
             and dup_ratio <= self.max_duplicate_line_ratio
         )
 
-        return QualityMetrics(avg_word_len, punct_ratio, digit_ratio, upper_ratio, dup_ratio, passed)
+        return QualityMetrics(
+            avg_word_len, punct_ratio, digit_ratio, upper_ratio, dup_ratio, passed
+        )
 
     def is_quality(self, text: str) -> bool:
         return self.assess(text).passed
@@ -108,14 +110,19 @@ class Deduplicator:
         incorrectly flagged as near-duplicates.
         """
         words = text.lower().split()
-        ngrams = [" ".join(words[i : i + self.ngram_size]) for i in range(len(words) - self.ngram_size + 1)]
+        ngrams = [
+            " ".join(words[i : i + self.ngram_size])
+            for i in range(len(words) - self.ngram_size + 1)
+        ]
         # Uniform stride sampling — covers the whole document, not just the prefix.
         step = max(1, len(ngrams) // 200)
         sampled = ngrams[::step][:200]
         fingerprint = "|".join(sorted(set(sampled)))
         return hashlib.sha256(fingerprint.encode()).hexdigest()
 
-    def deduplicate_dataframe(self, df: pd.DataFrame, text_col: str = "text") -> Tuple[pd.DataFrame, Dict]:
+    def deduplicate_dataframe(
+        self, df: pd.DataFrame, text_col: str = "text"
+    ) -> tuple[pd.DataFrame, dict]:
         """Remove exact + near-duplicates from DataFrame."""
         original_len = len(df)
 

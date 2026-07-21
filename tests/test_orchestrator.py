@@ -6,8 +6,8 @@ from src.agents.multi_agent.cross_provider_consensus import (
 )
 from src.agents.orchestrator import Pipeline, after_behavioral, after_cost_route, should_continue
 
-
 # ─── Existing tests ────────────────────────────────────────────
+
 
 def test_should_continue_routes_on_error() -> None:
     state = {"error": "failed"}
@@ -30,6 +30,7 @@ def test_after_cost_route_skips_synthesis_when_flagged() -> None:
 
 
 # ─── Pipeline.run() ────────────────────────────────────────────
+
 
 def _make_pipeline(
     retrieve_return=None,
@@ -229,6 +230,7 @@ def test_pipeline_run_nested_mlflow_when_active_run_exists() -> None:
 
 
 # ─── Cost router gate ──────────────────────────────────────────
+
 
 def _make_router(abstain: bool, complexity_tier=None, model=None, reasoning="mock"):
     from src.agents.multi_agent.cost_router import RouterDecision

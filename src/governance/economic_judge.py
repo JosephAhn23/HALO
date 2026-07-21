@@ -4,11 +4,11 @@ Economic guardrails: token/time estimates vs budget → HITL when ROI is unclear
 Pauses high-burn work when estimated iterations or API spend exceed configurable
 thresholds (default: 5 iterations, $2.00).
 """
+
 from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 
 def _f(name: str, default: float) -> float:
@@ -34,7 +34,7 @@ class EconomicVerdict:
     estimated_iterations: int
     rationale: str
     roi_prompt: str
-    flags: List[str] = field(default_factory=list)
+    flags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -58,10 +58,10 @@ class EconomicJudge:
     def __init__(
         self,
         *,
-        max_iterations: Optional[int] = None,
-        max_usd_per_task: Optional[float] = None,
-        price_per_1k_input: Optional[float] = None,
-        price_per_1k_output: Optional[float] = None,
+        max_iterations: int | None = None,
+        max_usd_per_task: float | None = None,
+        price_per_1k_input: float | None = None,
+        price_per_1k_output: float | None = None,
     ) -> None:
         self.max_iterations = (
             max_iterations if max_iterations is not None else _i("ECONOMIC_JUDGE_MAX_ITERATIONS", 5)
@@ -81,10 +81,9 @@ class EconomicJudge:
         )
 
     def estimate_usd(self, input_tokens: int, output_tokens: int) -> float:
-        return (
-            (max(0, input_tokens) / 1000.0) * self.price_per_1k_input
-            + (max(0, output_tokens) / 1000.0) * self.price_per_1k_output
-        )
+        return (max(0, input_tokens) / 1000.0) * self.price_per_1k_input + (
+            max(0, output_tokens) / 1000.0
+        ) * self.price_per_1k_output
 
     def evaluate(
         self,
@@ -95,7 +94,7 @@ class EconomicJudge:
         task_label: str = "",
         value_note: str = "",
     ) -> EconomicVerdict:
-        flags: List[str] = []
+        flags: list[str] = []
         usd = self.estimate_usd(estimated_input_tokens, estimated_output_tokens) * max(
             1, estimated_iterations
         )
@@ -125,9 +124,7 @@ class EconomicJudge:
             f"{value_note}".strip()
         )
         if requires_hitl:
-            roi += (
-                " Approve to proceed, or narrow scope (smaller prompt, cheaper model, or split work)."
-            )
+            roi += " Approve to proceed, or narrow scope (smaller prompt, cheaper model, or split work)."
 
         return EconomicVerdict(
             requires_hitl=requires_hitl,

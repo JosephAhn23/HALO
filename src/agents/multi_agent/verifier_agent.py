@@ -10,12 +10,13 @@ Each claim is classified as:
 Returns a structured verification report with per-claim status,
 supporting evidence, and an overall veracity score.
 """
+
 from __future__ import annotations
 
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.agents.multi_agent.base_agent import (
     AgentResult,
@@ -40,23 +41,24 @@ _HAND_WAVING = re.compile(
 _REWARD_HACK_HINTS = [
     (re.compile(r"random\.seed\s*\(\s*0\s*\)"), "deterministic_seed_synthetic_data"),
     (re.compile(r"np\.random\.seed\s*\(\s*0\s*\)"), "numpy_seed_synthetic_data"),
-    (re.compile(r"plt\.(plot|bar|scatter)\s*\(\s*\[\s*[\d\.,\s]+\s*\]"), "hardcoded_plot_coordinates"),
+    (
+        re.compile(r"plt\.(plot|bar|scatter)\s*\(\s*\[\s*[\d\.,\s]+\s*\]"),
+        "hardcoded_plot_coordinates",
+    ),
     (re.compile(r"data\s*=\s*\[\s*[\d\.,\s]+\s*\]\s*\n\s*plt\."), "inline_array_then_plot"),
 ]
 
 
-def scan_scientific_integrity(answer: str) -> Dict[str, Any]:
+def scan_scientific_integrity(answer: str) -> dict[str, Any]:
     """
     Heuristic checks for 'reward hacking' / hand-waving in math-science outputs.
 
     Does not prove misconduct; flags patterns that warrant a stricter re-derivation pass.
     """
     text = answer or ""
-    flags: List[str] = []
+    flags: list[str] = []
     if _SCIENTIFIC_HINT.search(text):
-        if _HAND_WAVING.search(text) and not re.search(
-            r"\$|\\\(|\\\[|\\begin\{equation\}", text
-        ):
+        if _HAND_WAVING.search(text) and not re.search(r"\$|\\\(|\\\[|\\begin\{equation\}", text):
             flags.append("hand_waving_without_equation")
     for rx, label in _REWARD_HACK_HINTS:
         if rx.search(text):
@@ -74,10 +76,10 @@ class ClaimVerification:
     claim: str
     status: str
     confidence: float
-    supporting_evidence: List[str]
-    contradicting_evidence: List[str]
+    supporting_evidence: list[str]
+    contradicting_evidence: list[str]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "claim": self.claim[:120],
             "status": self.status,
@@ -103,14 +105,19 @@ class VerifierAgent(BaseAgent):
     PARTIAL_THRESHOLD = 0.15
 
     NEGATION_PATTERNS = [
-        r"\bnot\b", r"\bno\b", r"\bnever\b", r"\bfalse\b",
-        r"\bincorrect\b", r"\bwrong\b", r"\bcontrary\b",
+        r"\bnot\b",
+        r"\bno\b",
+        r"\bnever\b",
+        r"\bfalse\b",
+        r"\bincorrect\b",
+        r"\bwrong\b",
+        r"\bcontrary\b",
     ]
 
     def __init__(
         self,
         name: str = "verifier",
-        tools: Optional[ToolRegistry] = None,
+        tools: ToolRegistry | None = None,
         timeout_seconds: float = 15.0,
     ):
         super().__init__(name, tools, timeout_seconds)
@@ -136,9 +143,9 @@ class VerifierAgent(BaseAgent):
         n_unsupported = sum(1 for v in verifications if v.status == "UNSUPPORTED")
         n_contradicted = sum(1 for v in verifications if v.status == "CONTRADICTED")
 
-        veracity_score = (
-            n_verified * 1.0 + n_partial * 0.5 - n_contradicted * 0.5
-        ) / max(len(verifications), 1)
+        veracity_score = (n_verified * 1.0 + n_partial * 0.5 - n_contradicted * 0.5) / max(
+            len(verifications), 1
+        )
         veracity_score = max(0.0, min(1.0, veracity_score))
 
         summary = (
@@ -153,11 +160,9 @@ class VerifierAgent(BaseAgent):
         integrity = scan_scientific_integrity(answer)
         force = task.context.get("scientific_or_math") or integrity["scientific_context"]
         if force and integrity["integrity_flags"]:
-            self.logger.warning(
-                "Scientific integrity flags: %s", integrity["integrity_flags"]
-            )
+            self.logger.warning("Scientific integrity flags: %s", integrity["integrity_flags"])
 
-        meta: Dict[str, Any] = {
+        meta: dict[str, Any] = {
             "verifications": [v.to_dict() for v in verifications],
             "veracity_score": round(veracity_score, 3),
             "n_verified": n_verified,
@@ -181,18 +186,18 @@ class VerifierAgent(BaseAgent):
             metadata=meta,
         )
 
-    def _extract_claims(self, text: str) -> List[str]:
+    def _extract_claims(self, text: str) -> list[str]:
         sentences = re.split(r"(?<=[.!?])\s+", text.strip())
         return [s.strip() for s in sentences if len(s.strip().split()) >= 5][:8]
 
-    def _verify_claim(self, claim: str, context: List[Dict]) -> ClaimVerification:
-        claim_words = set(w.lower() for w in claim.split() if len(w) > 3)
+    def _verify_claim(self, claim: str, context: list[dict]) -> ClaimVerification:
+        claim_words = {w.lower() for w in claim.split() if len(w) > 3}
         supporting = []
         contradicting = []
 
         for chunk in context:
             chunk_text = chunk.get("text", "")
-            chunk_words = set(w.lower() for w in chunk_text.split() if len(w) > 3)
+            chunk_words = {w.lower() for w in chunk_text.split() if len(w) > 3}
             if not chunk_words:
                 continue
 

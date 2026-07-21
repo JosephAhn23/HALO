@@ -7,11 +7,12 @@ artifact contract is satisfied (stdout heuristic or explicit marker).
 
 Requires Docker for :class:`sandbox.code_sandbox.CodeSandbox` by default.
 """
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
 
 from src.sandbox.code_sandbox import CodeSandbox, ExecutionResult, SandboxConfig
 
@@ -74,7 +75,7 @@ class DebugLoopResult:
     final_code: str
     last_execution: ExecutionResult
     iterations: int
-    feedback_trace: List[str] = field(default_factory=list)
+    feedback_trace: list[str] = field(default_factory=list)
 
 
 class AutonomousDebugLoop:
@@ -88,11 +89,11 @@ class AutonomousDebugLoop:
 
     def __init__(
         self,
-        sandbox: Optional[CodeSandbox] = None,
+        sandbox: CodeSandbox | None = None,
         *,
         max_iterations: int = 5,
         language: str = "python",
-        config: Optional[SandboxConfig] = None,
+        config: SandboxConfig | None = None,
     ) -> None:
         self.sandbox = sandbox or CodeSandbox()
         self.max_iterations = max_iterations
@@ -106,7 +107,7 @@ class AutonomousDebugLoop:
         artifact_ok: Callable[[ExecutionResult], bool] = default_artifact_ok,
     ) -> DebugLoopResult:
         code = initial_code.strip()
-        trace: List[str] = []
+        trace: list[str] = []
         last = ExecutionResult(
             exit_code=-1,
             stdout="",

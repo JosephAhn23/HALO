@@ -2,9 +2,10 @@
 Large-scale web dataset ingestion - CommonCrawl, Wikipedia, multilingual.
 Covers: Large-scale datasets, HuggingFace Datasets, multilingual corpora
 """
+
 import hashlib
+from collections.abc import Iterator
 from urllib.request import urlopen
-from typing import Dict, Iterator
 
 import pandas as pd
 from datasets import interleave_datasets, load_dataset
@@ -19,7 +20,7 @@ class LargeScaleIngestionPipeline:
     Covers: CommonCrawl, Wikipedia multilingual, data quality filtering.
     """
 
-    def stream_wikipedia(self, language: str = "en") -> Iterator[Dict]:
+    def stream_wikipedia(self, language: str = "en") -> Iterator[dict]:
         """Stream Wikipedia articles for a given language."""
         dataset = load_dataset(
             "wikimedia/wikipedia",
@@ -31,7 +32,7 @@ class LargeScaleIngestionPipeline:
         for article in dataset:
             yield {"id": article["id"], "text": article["text"], "source": f"wikipedia-{language}"}
 
-    def stream_common_crawl(self) -> Iterator[Dict]:
+    def stream_common_crawl(self) -> Iterator[dict]:
         """Stream CC-News (CommonCrawl subset) - no full download needed."""
         dataset = load_dataset("cc_news", split="train", streaming=True)
         for article in dataset:
@@ -47,17 +48,19 @@ class LargeScaleIngestionPipeline:
         warc_url: str,
         target_languages: list[str] | None = None,
         min_length: int = 500,
-    ) -> Iterator[Dict]:
+    ) -> Iterator[dict]:
         """
         Parse raw WARC files directly from CommonCrawl storage.
         Adds language detection + content filtering for practical depth.
         """
         target_languages = target_languages or LANGUAGES
         try:
-            from warcio.archiveiterator import ArchiveIterator
             import langdetect
+            from warcio.archiveiterator import ArchiveIterator
         except Exception as exc:  # pragma: no cover - optional runtime deps
-            raise RuntimeError("Install `warcio` and `langdetect` to use direct WARC ingestion.") from exc
+            raise RuntimeError(
+                "Install `warcio` and `langdetect` to use direct WARC ingestion."
+            ) from exc
 
         with urlopen(warc_url) as stream:
             for record in ArchiveIterator(stream):
@@ -84,7 +87,7 @@ class LargeScaleIngestionPipeline:
                     "lang": lang,
                 }
 
-    def stream_multilingual(self) -> Iterator[Dict]:
+    def stream_multilingual(self) -> Iterator[dict]:
         """Interleave multilingual Wikipedia streams."""
         streams = [
             load_dataset(
@@ -102,7 +105,7 @@ class LargeScaleIngestionPipeline:
 
     def buffer_and_process(
         self,
-        stream: Iterator[Dict],
+        stream: Iterator[dict],
         quality_filter,
         deduplicator,
         limit: int = 10000,

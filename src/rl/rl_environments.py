@@ -30,12 +30,13 @@ Usage:
     model = PPO("MlpPolicy", env, verbose=1)
     model.learn(total_timesteps=10_000)
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import random
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
 
 import numpy as np
 
@@ -48,14 +49,17 @@ logger = logging.getLogger(__name__)
 try:
     import gymnasium as gym
     from gymnasium import spaces
+
     GYM_AVAILABLE = True
 except ImportError:
     try:
         import gym
         from gym import spaces
+
         GYM_AVAILABLE = True
     except ImportError:
         GYM_AVAILABLE = False
+
         # Minimal stubs so the module is importable without gymnasium
         class _FakeSpaces:
             class Box:
@@ -64,18 +68,23 @@ except ImportError:
                     self.high = np.array(high)
                     self.shape = shape or (len(self.low),)
                     self.dtype = dtype or np.float32
+
                 def sample(self):
                     return np.random.uniform(self.low, self.high).astype(self.dtype)
+
             class Discrete:
                 def __init__(self, n):
                     self.n = n
+
                 def sample(self):
                     return random.randint(0, self.n - 1)
+
         spaces = _FakeSpaces()
 
         class gym:
             class Env:
                 metadata = {}
+
                 def reset(self, **kw): ...
                 def step(self, action): ...
                 def render(self): ...
@@ -88,13 +97,14 @@ except ImportError:
 # Simulated reward functions (replace with real RAGAS calls in production)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _simulated_ragas_score(
     k: int,
     rerank: bool,
     chunk_size: int,
     query_complexity: float,
     noise: float = 0.05,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     Simulate RAGAS metrics as a function of retrieval parameters.
 
@@ -116,7 +126,7 @@ def _simulated_ragas_score(
     answer_relevancy += 0.1 * rerank
 
     context_precision = 0.7 - 0.02 * k + 0.15 * rerank
-    context_recall = 0.4 + 0.04 * k - 0.001 * k ** 2  # peaks around k=20
+    context_recall = 0.4 + 0.04 * k - 0.001 * k**2  # peaks around k=20
 
     # Chunk size effect: smaller chunks → better precision, worse recall
     chunk_effect = math.exp(-0.5 * ((chunk_size - 256) / 200) ** 2)
@@ -140,7 +150,7 @@ def _simulated_ragas_score(
     }
 
 
-def _ragas_composite(scores: Dict[str, float], weights: Optional[Dict[str, float]] = None) -> float:
+def _ragas_composite(scores: dict[str, float], weights: dict[str, float] | None = None) -> float:
     """Weighted average of RAGAS metrics."""
     w = weights or {
         "faithfulness": 0.35,
@@ -154,6 +164,7 @@ def _ragas_composite(scores: Dict[str, float], weights: Optional[Dict[str, float
 # ──────────────────────────────────────────────────────────────────────────────
 # 1. RAG Quality Environment
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class RAGQualityEnv(gym.Env):
     """
@@ -189,7 +200,7 @@ class RAGQualityEnv(gym.Env):
     def __init__(
         self,
         max_steps: int = 50,
-        reward_fn: Optional[Callable] = None,
+        reward_fn: Callable | None = None,
         latency_penalty: float = 0.01,
     ):
         super().__init__()
@@ -207,11 +218,11 @@ class RAGQualityEnv(gym.Env):
         self.action_space = spaces.Discrete(self.N_ACTIONS)
 
         self._step = 0
-        self._recent_scores: List[float] = []
+        self._recent_scores: list[float] = []
         self._query_complexity = 0.5
-        self._history: List[Dict] = []
+        self._history: list[dict] = []
 
-    def _decode_action(self, action: int) -> Tuple[int, bool, int]:
+    def _decode_action(self, action: int) -> tuple[int, bool, int]:
         """Decode flat action index → (k, rerank, chunk_size)."""
         n_chunks = len(self.CHUNK_OPTIONS)
         n_rerank = 2
@@ -223,16 +234,27 @@ class RAGQualityEnv(gym.Env):
         return self.K_OPTIONS[k_idx], rerank, self.CHUNK_OPTIONS[chunk_idx]
 
     def _get_obs(self) -> np.ndarray:
-        recent_faith = np.mean([s.get("faithfulness", 0.5) for s in self._history[-5:]]) if self._history else 0.5
-        recent_rel = np.mean([s.get("answer_relevancy", 0.5) for s in self._history[-5:]]) if self._history else 0.5
-        return np.array([
-            self._query_complexity,
-            recent_faith,
-            recent_rel,
-            self._step / self.max_steps,
-        ], dtype=np.float32)
+        recent_faith = (
+            np.mean([s.get("faithfulness", 0.5) for s in self._history[-5:]])
+            if self._history
+            else 0.5
+        )
+        recent_rel = (
+            np.mean([s.get("answer_relevancy", 0.5) for s in self._history[-5:]])
+            if self._history
+            else 0.5
+        )
+        return np.array(
+            [
+                self._query_complexity,
+                recent_faith,
+                recent_rel,
+                self._step / self.max_steps,
+            ],
+            dtype=np.float32,
+        )
 
-    def reset(self, seed: Optional[int] = None, **kwargs) -> Tuple[np.ndarray, Dict]:
+    def reset(self, seed: int | None = None, **kwargs) -> tuple[np.ndarray, dict]:
         if seed is not None:
             np.random.seed(seed)
         self._step = 0
@@ -241,7 +263,7 @@ class RAGQualityEnv(gym.Env):
         self._query_complexity = float(np.random.uniform(0.1, 0.9))
         return self._get_obs(), {}
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         k, rerank, chunk_size = self._decode_action(int(action))
 
         # Evaluate retrieval quality
@@ -265,13 +287,16 @@ class RAGQualityEnv(gym.Env):
             terminated = True
 
         info = {
-            "k": k, "rerank": rerank, "chunk_size": chunk_size,
-            "ragas_scores": scores, "composite": composite,
+            "k": k,
+            "rerank": rerank,
+            "chunk_size": chunk_size,
+            "ragas_scores": scores,
+            "composite": composite,
             "latency_cost": latency_cost,
         }
         return self._get_obs(), reward, terminated, False, info
 
-    def render(self) -> Optional[str]:
+    def render(self) -> str | None:
         if not self._history:
             return "No steps taken yet."
         last = self._history[-1]
@@ -287,6 +312,7 @@ class RAGQualityEnv(gym.Env):
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. Retrieval Strategy Bandit
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class RetrievalBandit:
     """
@@ -320,9 +346,9 @@ class RetrievalBandit:
     def __init__(
         self,
         n_arms: int = 5,
-        algorithm: str = "ucb1",   # ucb1 | thompson | epsilon_greedy
+        algorithm: str = "ucb1",  # ucb1 | thompson | epsilon_greedy
         epsilon: float = 0.1,
-        reward_fn: Optional[Callable[[int, Dict], float]] = None,
+        reward_fn: Callable[[int, dict], float] | None = None,
     ):
         self.n_arms = n_arms
         self.algorithm = algorithm
@@ -331,12 +357,12 @@ class RetrievalBandit:
 
         self._counts = np.zeros(n_arms)
         self._values = np.zeros(n_arms)
-        self._alpha = np.ones(n_arms)   # Thompson: Beta distribution alpha
-        self._beta = np.ones(n_arms)    # Thompson: Beta distribution beta
+        self._alpha = np.ones(n_arms)  # Thompson: Beta distribution alpha
+        self._beta = np.ones(n_arms)  # Thompson: Beta distribution beta
         self._total_steps = 0
-        self._history: List[Dict] = []
+        self._history: list[dict] = []
 
-    def _simulated_reward(self, arm: int, context: Dict) -> float:
+    def _simulated_reward(self, arm: int, context: dict) -> float:
         """Simulate a noisy reward for an arm."""
         true_mean = self._TRUE_MEANS[arm % len(self._TRUE_MEANS)]
         # Context-dependent: complex queries benefit more from reranking
@@ -345,7 +371,7 @@ class RetrievalBandit:
             true_mean += 0.05 * complexity
         return float(np.clip(np.random.normal(true_mean, 0.05), 0.0, 1.0))
 
-    def select_arm(self, context: Optional[Dict] = None) -> int:
+    def select_arm(self, context: dict | None = None) -> int:
         """Select an arm using the configured algorithm."""
         context = context or {}
 
@@ -363,9 +389,7 @@ class RetrievalBandit:
         if self._total_steps < self.n_arms:
             return self._total_steps  # pull each arm once first
 
-        ucb_scores = self._values + np.sqrt(
-            2 * np.log(self._total_steps) / (self._counts + 1e-8)
-        )
+        ucb_scores = self._values + np.sqrt(2 * np.log(self._total_steps) / (self._counts + 1e-8))
         return int(np.argmax(ucb_scores))
 
     def _thompson_select(self) -> int:
@@ -388,21 +412,23 @@ class RetrievalBandit:
         else:
             self._beta[arm] += 1
 
-        self._history.append({
-            "step": self._total_steps,
-            "arm": arm,
-            "strategy": self.STRATEGIES[arm] if arm < len(self.STRATEGIES) else f"arm_{arm}",
-            "reward": round(reward, 4),
-        })
+        self._history.append(
+            {
+                "step": self._total_steps,
+                "arm": arm,
+                "strategy": self.STRATEGIES[arm] if arm < len(self.STRATEGIES) else f"arm_{arm}",
+                "reward": round(reward, 4),
+            }
+        )
 
-    def pull(self, context: Optional[Dict] = None) -> Tuple[int, float]:
+    def pull(self, context: dict | None = None) -> tuple[int, float]:
         """Select arm, observe reward, update. Returns (arm, reward)."""
         arm = self.select_arm(context)
         reward = self.reward_fn(arm, context or {})
         self.update(arm, reward)
         return arm, reward
 
-    def run(self, n_steps: int = 1000, context_fn: Optional[Callable] = None) -> Dict:
+    def run(self, n_steps: int = 1000, context_fn: Callable | None = None) -> dict:
         """Run the bandit for n_steps and return statistics."""
         total_reward = 0.0
         for step in range(n_steps):
@@ -412,24 +438,28 @@ class RetrievalBandit:
 
         return self.stats()
 
-    def stats(self) -> Dict:
+    def stats(self) -> dict:
         """Return current bandit statistics."""
         best_arm = int(np.argmax(self._values))
         return {
             "total_steps": self._total_steps,
             "best_arm": best_arm,
-            "best_strategy": self.STRATEGIES[best_arm] if best_arm < len(self.STRATEGIES) else f"arm_{best_arm}",
+            "best_strategy": (
+                self.STRATEGIES[best_arm] if best_arm < len(self.STRATEGIES) else f"arm_{best_arm}"
+            ),
             "arm_counts": self._counts.tolist(),
             "arm_values": [round(v, 4) for v in self._values.tolist()],
             "cumulative_reward": round(sum(h["reward"] for h in self._history), 3),
-            "mean_reward": round(np.mean([h["reward"] for h in self._history]) if self._history else 0.0, 4),
+            "mean_reward": round(
+                np.mean([h["reward"] for h in self._history]) if self._history else 0.0, 4
+            ),
         }
 
     def ascii_summary(self) -> str:
         """Print arm statistics as ASCII bar chart."""
         lines = [f"Retrieval Bandit ({self.algorithm.upper()}) — {self._total_steps} steps"]
         lines.append("")
-        for i, strategy in enumerate(self.STRATEGIES[:self.n_arms]):
+        for i, strategy in enumerate(self.STRATEGIES[: self.n_arms]):
             val = self._values[i]
             count = int(self._counts[i])
             bar_len = int(val * 30)
@@ -442,6 +472,7 @@ class RetrievalBandit:
 # ──────────────────────────────────────────────────────────────────────────────
 # 3. Chunking Optimization Environment
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class ChunkingEnv(gym.Env):
     """
@@ -482,11 +513,11 @@ class ChunkingEnv(gym.Env):
             dtype=np.float32,
         )
         self._step = 0
-        self._history: List[Dict] = []
+        self._history: list[dict] = []
         self._doc_length = 0.5
         self._query_length = 0.3
 
-    def _decode_action(self, action: int) -> Tuple[int, float, str]:
+    def _decode_action(self, action: int) -> tuple[int, float, str]:
         n_strat = len(self.STRATEGIES)
         n_overlap = len(self.OVERLAPS)
         strat_idx = action % n_strat
@@ -499,7 +530,7 @@ class ChunkingEnv(gym.Env):
             self.STRATEGIES[strat_idx],
         )
 
-    def _simulate_reward(self, chunk_size: int, overlap: float, strategy: str) -> Dict:
+    def _simulate_reward(self, chunk_size: int, overlap: float, strategy: str) -> dict:
         rng = np.random.default_rng()
 
         # Precision: smaller chunks → better (less noise per chunk)
@@ -519,11 +550,13 @@ class ChunkingEnv(gym.Env):
         f1 = 2 * precision * recall / max(precision + recall, 1e-8)
 
         return {
-            "precision": precision, "recall": recall,
-            "f1": f1, "storage_cost": storage_cost,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "storage_cost": storage_cost,
         }
 
-    def reset(self, seed: Optional[int] = None, **kwargs) -> Tuple[np.ndarray, Dict]:
+    def reset(self, seed: int | None = None, **kwargs) -> tuple[np.ndarray, dict]:
         if seed is not None:
             np.random.seed(seed)
         self._step = 0
@@ -537,7 +570,7 @@ class ChunkingEnv(gym.Env):
         rec = np.mean([h["recall"] for h in self._history[-5:]]) if self._history else 0.5
         return np.array([self._doc_length, self._query_length, prec, rec], dtype=np.float32)
 
-    def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
+    def step(self, action: int) -> tuple[np.ndarray, float, bool, bool, dict]:
         chunk_size, overlap, strategy = self._decode_action(int(action))
         metrics = self._simulate_reward(chunk_size, overlap, strategy)
         reward = metrics["f1"] - metrics["storage_cost"]
@@ -555,6 +588,7 @@ class ChunkingEnv(gym.Env):
 # 4. Prompt Selection Bandit
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class PromptSelectionBandit(RetrievalBandit):
     """
     Multi-armed bandit for selecting the best prompt template.
@@ -565,9 +599,9 @@ class PromptSelectionBandit(RetrievalBandit):
 
     def __init__(
         self,
-        prompt_templates: List[str],
+        prompt_templates: list[str],
         algorithm: str = "thompson",
-        reward_fn: Optional[Callable] = None,
+        reward_fn: Callable | None = None,
     ):
         super().__init__(
             n_arms=len(prompt_templates),
@@ -582,7 +616,7 @@ class PromptSelectionBandit(RetrievalBandit):
             for i in range(len(prompt_templates))
         ]
 
-    def _prompt_reward(self, arm: int, context: Dict) -> float:
+    def _prompt_reward(self, arm: int, context: dict) -> float:
         true_mean = self._TRUE_MEANS[arm % len(self._TRUE_MEANS)]
         return float(np.clip(np.random.normal(true_mean, 0.08), 0.0, 1.0))
 
@@ -595,7 +629,8 @@ class PromptSelectionBandit(RetrievalBandit):
 # Training loop utilities
 # ──────────────────────────────────────────────────────────────────────────────
 
-def random_agent_baseline(env: gym.Env, n_episodes: int = 10) -> Dict:
+
+def random_agent_baseline(env: gym.Env, n_episodes: int = 10) -> dict:
     """Evaluate a random agent as a baseline."""
     total_rewards = []
     for _ in range(n_episodes):
@@ -618,7 +653,7 @@ def random_agent_baseline(env: gym.Env, n_episodes: int = 10) -> Dict:
     }
 
 
-def greedy_agent_baseline(env: RAGQualityEnv, n_episodes: int = 10) -> Dict:
+def greedy_agent_baseline(env: RAGQualityEnv, n_episodes: int = 10) -> dict:
     """
     Greedy agent: always selects k=5, rerank=True, chunk_size=256
     (a reasonable hand-tuned default).
@@ -655,7 +690,8 @@ def greedy_agent_baseline(env: RAGQualityEnv, n_episodes: int = 10) -> Dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import argparse, json
+    import argparse
+    import json
 
     parser = argparse.ArgumentParser(description="RL environments for LLMOps")
     sub = parser.add_subparsers(dest="cmd")
@@ -682,10 +718,14 @@ if __name__ == "__main__":
         random_stats = random_agent_baseline(env, n_episodes=args.episodes)
         greedy_stats = greedy_agent_baseline(env, n_episodes=args.episodes)
 
-        print(f"\nRandom agent:  mean_reward={random_stats['mean_episode_reward']:.3f} "
-              f"± {random_stats['std_episode_reward']:.3f}")
-        print(f"Greedy agent:  mean_reward={greedy_stats['mean_episode_reward']:.3f} "
-              f"± {greedy_stats['std_episode_reward']:.3f}")
+        print(
+            f"\nRandom agent:  mean_reward={random_stats['mean_episode_reward']:.3f} "
+            f"± {random_stats['std_episode_reward']:.3f}"
+        )
+        print(
+            f"Greedy agent:  mean_reward={greedy_stats['mean_episode_reward']:.3f} "
+            f"± {greedy_stats['std_episode_reward']:.3f}"
+        )
         print("\nTip: train with PPO/DQN from stable-baselines3:")
         print("  from stable_baselines3 import PPO")
         print("  model = PPO('MlpPolicy', RAGQualityEnv(), verbose=1)")
@@ -696,7 +736,9 @@ if __name__ == "__main__":
         bandit = RetrievalBandit(algorithm=args.algo)
         stats = bandit.run(n_steps=args.steps)
         print(bandit.ascii_summary())
-        print(f"\nFinal stats: {json.dumps({k: v for k, v in stats.items() if k != 'arm_counts'}, indent=2)}")
+        print(
+            f"\nFinal stats: {json.dumps({k: v for k, v in stats.items() if k != 'arm_counts'}, indent=2)}"
+        )
 
     elif args.cmd == "chunking":
         print("ChunkingEnv — random baseline")

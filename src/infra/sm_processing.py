@@ -1,4 +1,5 @@
 """SageMaker processing step helper script."""
+
 import json
 from pathlib import Path
 
@@ -12,7 +13,11 @@ def main() -> None:
     in_file = input_dir / "train.jsonl"
     out_file = output_dir / "train.jsonl"
     if in_file.exists():
-        rows = [json.loads(line) for line in in_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+        rows = [
+            json.loads(line)
+            for line in in_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         out_file.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
     else:
         out_file.write_text("", encoding="utf-8")

@@ -10,14 +10,13 @@ Provides parity with the existing AWS/SageMaker deployment layer:
 
 Covers gaps: Azure, multi-cloud deployment, Azure ML, ACA microservices.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ class AzureConfig:
     # Azure ML
     aml_workspace: str = "llmops-aml"
     aml_compute_cluster: str = "gpu-cluster"
-    aml_vm_size: str = "Standard_NC6s_v3"   # 1x V100
+    aml_vm_size: str = "Standard_NC6s_v3"  # 1x V100
     aml_min_nodes: int = 0
     aml_max_nodes: int = 4
 
@@ -92,25 +91,24 @@ class AzureContainerAppsDeployer:
         if self._credential is None:
             try:
                 from azure.identity import DefaultAzureCredential
+
                 self._credential = DefaultAzureCredential()
             except ImportError:
-                raise ImportError(
-                    "Install azure-identity: pip install azure-identity"
-                )
+                raise ImportError("Install azure-identity: pip install azure-identity")
         return self._credential
 
     def _get_aca_client(self):
         if self._aca_client is None:
             try:
                 from azure.mgmt.appcontainers import ContainerAppsAPIClient
+
                 self._aca_client = ContainerAppsAPIClient(
                     credential=self._get_credential(),
                     subscription_id=self.config.subscription_id,
                 )
             except ImportError:
                 raise ImportError(
-                    "Install azure-mgmt-appcontainers: "
-                    "pip install azure-mgmt-appcontainers"
+                    "Install azure-mgmt-appcontainers: " "pip install azure-mgmt-appcontainers"
                 )
         return self._aca_client
 
@@ -151,8 +149,8 @@ class AzureContainerAppsDeployer:
             "location": cfg.location,
             "properties": {
                 "managedEnvironmentId": f"/subscriptions/{cfg.subscription_id}"
-                    f"/resourceGroups/{cfg.resource_group}"
-                    f"/providers/Microsoft.App/managedEnvironments/{cfg.aca_environment}",
+                f"/resourceGroups/{cfg.resource_group}"
+                f"/providers/Microsoft.App/managedEnvironments/{cfg.aca_environment}",
                 "configuration": {
                     "ingress": {
                         "external": True,
@@ -160,13 +158,17 @@ class AzureContainerAppsDeployer:
                         "transport": "http",
                         "allowInsecure": False,
                     },
-                    "secrets": [
-                        {
-                            "name": "openai-api-key",
-                            "keyVaultUrl": openai_api_key_secret_uri,
-                            "identity": "system",
-                        }
-                    ] if openai_api_key_secret_uri else [],
+                    "secrets": (
+                        [
+                            {
+                                "name": "openai-api-key",
+                                "keyVaultUrl": openai_api_key_secret_uri,
+                                "identity": "system",
+                            }
+                        ]
+                        if openai_api_key_secret_uri
+                        else []
+                    ),
                     "registries": [
                         {
                             "server": f"{cfg.acr_name}.azurecr.io",
@@ -184,9 +186,11 @@ class AzureContainerAppsDeployer:
                                 "memory": cfg.api_memory,
                             },
                             "env": [
-                                {"name": "OPENAI_API_KEY", "secretRef": "openai-api-key"}
-                                if openai_api_key_secret_uri
-                                else {"name": "OPENAI_API_KEY", "value": ""},
+                                (
+                                    {"name": "OPENAI_API_KEY", "secretRef": "openai-api-key"}
+                                    if openai_api_key_secret_uri
+                                    else {"name": "OPENAI_API_KEY", "value": ""}
+                                ),
                                 {"name": "REDIS_URL", "value": "redis://redis:6379/0"},
                             ],
                             "probes": [
@@ -233,13 +237,15 @@ class AzureContainerAppsDeployer:
             "location": cfg.location,
             "properties": {
                 "managedEnvironmentId": f"/subscriptions/{cfg.subscription_id}"
-                    f"/resourceGroups/{cfg.resource_group}"
-                    f"/providers/Microsoft.App/managedEnvironments/{cfg.aca_environment}",
+                f"/resourceGroups/{cfg.resource_group}"
+                f"/providers/Microsoft.App/managedEnvironments/{cfg.aca_environment}",
                 "configuration": {
-                    "ingress": None,   # no public ingress for workers
-                    "secrets": [
-                        {"name": "redis-conn", "value": redis_connection_string}
-                    ] if redis_connection_string else [],
+                    "ingress": None,  # no public ingress for workers
+                    "secrets": (
+                        [{"name": "redis-conn", "value": redis_connection_string}]
+                        if redis_connection_string
+                        else []
+                    ),
                 },
                 "template": {
                     "containers": [
@@ -251,18 +257,23 @@ class AzureContainerAppsDeployer:
                                 "memory": cfg.worker_memory,
                             },
                             "command": [
-                                "celery", "-A", "ingestion.batch_processor",
-                                "worker", "--loglevel=info",
+                                "celery",
+                                "-A",
+                                "ingestion.batch_processor",
+                                "worker",
+                                "--loglevel=info",
                             ],
                             "env": [
-                                {"name": "REDIS_URL", "secretRef": "redis-conn"}
-                                if redis_connection_string
-                                else {"name": "REDIS_URL", "value": "redis://localhost:6379/0"},
+                                (
+                                    {"name": "REDIS_URL", "secretRef": "redis-conn"}
+                                    if redis_connection_string
+                                    else {"name": "REDIS_URL", "value": "redis://localhost:6379/0"}
+                                ),
                             ],
                         }
                     ],
                     "scale": {
-                        "minReplicas": 0,   # scale-to-zero when idle
+                        "minReplicas": 0,  # scale-to-zero when idle
                         "maxReplicas": cfg.max_replicas,
                         "rules": [
                             {
@@ -307,7 +318,8 @@ class AzureContainerAppsDeployer:
             try:
                 app = client.container_apps.get(cfg.resource_group, app_name)
                 replicas = client.container_apps_revisions.list_replicas(
-                    cfg.resource_group, app_name,
+                    cfg.resource_group,
+                    app_name,
                     app.properties.latest_revision_name or "",
                 )
                 status[app_name] = {
@@ -347,6 +359,7 @@ class AzureMLDeployer:
             try:
                 from azure.ai.ml import MLClient
                 from azure.identity import DefaultAzureCredential
+
                 self._ml_client = MLClient(
                     credential=DefaultAzureCredential(),
                     subscription_id=self.config.subscription_id,
@@ -354,9 +367,7 @@ class AzureMLDeployer:
                     workspace_name=self.config.aml_workspace,
                 )
             except ImportError:
-                raise ImportError(
-                    "Install azure-ai-ml: pip install azure-ai-ml azure-identity"
-                )
+                raise ImportError("Install azure-ai-ml: pip install azure-ai-ml azure-identity")
         return self._ml_client
 
     def create_compute_cluster(self) -> dict:
@@ -378,7 +389,9 @@ class AzureMLDeployer:
         result = client.compute.begin_create_or_update(cluster).result()
         logger.info(
             "Compute cluster ready: %s (%s, max=%d)",
-            result.name, cfg.aml_vm_size, cfg.aml_max_nodes,
+            result.name,
+            cfg.aml_vm_size,
+            cfg.aml_max_nodes,
         )
         return {"name": result.name, "vm_size": cfg.aml_vm_size}
 
@@ -404,14 +417,16 @@ class AzureMLDeployer:
                 "channels": ["conda-forge"],
                 "dependencies": [
                     "python=3.11",
-                    {"pip": [
-                        "transformers==4.39.0",
-                        "peft==0.10.0",
-                        "accelerate==0.27.2",
-                        "bitsandbytes==0.43.0",
-                        "datasets==2.18.0",
-                        "mlflow==2.11.1",
-                    ]},
+                    {
+                        "pip": [
+                            "transformers==4.39.0",
+                            "peft==0.10.0",
+                            "accelerate==0.27.2",
+                            "bitsandbytes==0.43.0",
+                            "datasets==2.18.0",
+                            "mlflow==2.11.1",
+                        ]
+                    },
                 ],
             },
         )
@@ -419,9 +434,7 @@ class AzureMLDeployer:
         job = command(
             code=".",
             command=(
-                f"python {script_path} "
-                f"--base-model {base_model} "
-                f"--num-epochs {num_epochs}"
+                f"python {script_path} " f"--base-model {base_model} " f"--num-epochs {num_epochs}"
             ),
             environment=env,
             compute=cfg.aml_compute_cluster,
@@ -442,11 +455,11 @@ class AzureMLDeployer:
         model_path: str,
         model_name: str = "llmops-rag-model",
         description: str = "QLoRA fine-tuned RAG model",
-        tags: Optional[dict] = None,
+        tags: dict | None = None,
     ) -> dict:
         """Register a model in the Azure ML model registry."""
-        from azure.ai.ml.entities import Model
         from azure.ai.ml.constants import AssetTypes
+        from azure.ai.ml.entities import Model
 
         client = self._get_ml_client()
         model = Model(
@@ -457,9 +470,7 @@ class AzureMLDeployer:
             tags=tags or {},
         )
         registered = client.models.create_or_update(model)
-        logger.info(
-            "Model registered: %s v%s", registered.name, registered.version
-        )
+        logger.info("Model registered: %s v%s", registered.name, registered.version)
         return {
             "name": registered.name,
             "version": registered.version,
@@ -538,9 +549,7 @@ class AzureMonitorObservability:
                 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
                 provider = TracerProvider()
-                exporter = AzureMonitorTraceExporter(
-                    connection_string=self.connection_string
-                )
+                exporter = AzureMonitorTraceExporter(connection_string=self.connection_string)
                 provider.add_span_processor(BatchSpanProcessor(exporter))
                 trace.set_tracer_provider(provider)
                 self._client = trace.get_tracer(__name__)
@@ -763,6 +772,7 @@ output amlWorkspaceId string = amlWorkspace.id
 def save_bicep_template(config: AzureConfig, output_path: str = "infra/azure/main.bicep"):
     """Write the Bicep template to disk."""
     import os
+
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(generate_bicep_template(config))

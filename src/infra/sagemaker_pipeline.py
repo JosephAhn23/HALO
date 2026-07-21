@@ -2,13 +2,14 @@
 SageMaker Pipeline for automated retraining - not just deployment.
 Covers: SageMaker (real usage, not just deploy script)
 """
+
 import boto3
 import sagemaker
+from sagemaker.huggingface import HuggingFace
+from sagemaker.sklearn.processing import SKLearnProcessor
+from sagemaker.workflow.parameters import ParameterString
 from sagemaker.workflow.pipeline import Pipeline
 from sagemaker.workflow.steps import ProcessingStep, TrainingStep
-from sagemaker.sklearn.processing import SKLearnProcessor
-from sagemaker.huggingface import HuggingFace
-from sagemaker.workflow.parameters import ParameterString
 
 role = sagemaker.get_execution_role()
 session = sagemaker.Session()
@@ -29,8 +30,16 @@ def build_pipeline() -> Pipeline:
         name="PrepareData",
         processor=processor,
         code="infra/sm_processing.py",
-        inputs=[sagemaker.processing.ProcessingInput(source=input_data, destination="/opt/ml/processing/input")],
-        outputs=[sagemaker.processing.ProcessingOutput(output_name="train", source="/opt/ml/processing/output")],
+        inputs=[
+            sagemaker.processing.ProcessingInput(
+                source=input_data, destination="/opt/ml/processing/input"
+            )
+        ],
+        outputs=[
+            sagemaker.processing.ProcessingOutput(
+                output_name="train", source="/opt/ml/processing/output"
+            )
+        ],
     )
 
     huggingface_estimator = HuggingFace(

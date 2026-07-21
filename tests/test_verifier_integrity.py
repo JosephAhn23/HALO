@@ -1,4 +1,5 @@
 """Scientific integrity / reward-hacking heuristics on VerifierAgent."""
+
 from src.agents.multi_agent.base_agent import AgentTask
 from src.agents.multi_agent.verifier_agent import VerifierAgent, scan_scientific_integrity
 
@@ -31,7 +32,10 @@ def test_verifier_metadata_includes_integrity():
                 "Obviously no further proof is required."
             ),
             "retrieved_context": [
-                {"text": "matplotlib figure 1 illustrates model fit for the dataset.", "score": 0.9},
+                {
+                    "text": "matplotlib figure 1 illustrates model fit for the dataset.",
+                    "score": 0.9,
+                },
             ],
         },
     )

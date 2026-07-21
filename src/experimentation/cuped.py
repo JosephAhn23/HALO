@@ -21,12 +21,12 @@ Variance reduction:
   where rho = Pearson correlation between Y and X_pre.
   If rho = 0.5, VR = 75% (need 4x fewer observations for same power).
 """
+
 from __future__ import annotations
 
 import logging
 import math
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -74,10 +74,10 @@ class CUPED:
 
     def apply(
         self,
-        treatment_y: List[float],
-        control_y: List[float],
-        treatment_x_pre: List[float],
-        control_x_pre: List[float],
+        treatment_y: list[float],
+        control_y: list[float],
+        treatment_x_pre: list[float],
+        control_x_pre: list[float],
     ) -> CUPEDResult:
         """
         Apply CUPED adjustment and estimate ATE.
@@ -129,7 +129,7 @@ class CUPED:
             n_control=n_c,
         )
 
-    def _compute_theta(self, y: List[float], x: List[float]) -> float:
+    def _compute_theta(self, y: list[float], x: list[float]) -> float:
         n = len(y)
         if n < 2:
             return 0.0
@@ -139,7 +139,7 @@ class CUPED:
         var_x = sum((xi - mu_x) ** 2 for xi in x) / max(n - 1, 1)
         return cov / max(var_x, 1e-12)
 
-    def _pearson_correlation(self, y: List[float], x: List[float]) -> float:
+    def _pearson_correlation(self, y: list[float], x: list[float]) -> float:
         n = len(y)
         if n < 2:
             return 0.0

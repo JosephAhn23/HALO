@@ -19,17 +19,17 @@ Used before:
 
 Performance: regex-based, O(n) per text, suitable for real-time use.
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import re
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-PII_PATTERNS: Dict[str, re.Pattern] = {
+PII_PATTERNS: dict[str, re.Pattern] = {
     "email": re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"),
     "phone_us": re.compile(r"\b(?:\+1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
     "phone_intl": re.compile(r"\+\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{1,4}[-.\s]?\d{1,9}\b"),
@@ -38,7 +38,9 @@ PII_PATTERNS: Dict[str, re.Pattern] = {
     "ip_address": re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b"),
     "api_key_openai": re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
     "api_key_aws": re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
-    "api_key_generic": re.compile(r"\b(?:api[-_]?key|token|secret)[-_=:\s]+[A-Za-z0-9_\-]{16,}\b", re.IGNORECASE),
+    "api_key_generic": re.compile(
+        r"\b(?:api[-_]?key|token|secret)[-_=:\s]+[A-Za-z0-9_\-]{16,}\b", re.IGNORECASE
+    ),
     "date_of_birth": re.compile(
         r"\b(?:dob|date\s+of\s+birth|born\s+on)[:\s]+\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}\b",
         re.IGNORECASE,
@@ -59,9 +61,9 @@ class PIIDetection:
 class PIIResult:
     original_text: str
     redacted_text: str
-    detections: List[PIIDetection]
+    detections: list[PIIDetection]
     has_pii: bool
-    pii_types: List[str]
+    pii_types: list[str]
     redaction_count: int
 
     def risk_level(self) -> str:
@@ -87,25 +89,27 @@ class PIIRedactor:
 
     def __init__(
         self,
-        custom_patterns: Optional[Dict[str, re.Pattern]] = None,
+        custom_patterns: dict[str, re.Pattern] | None = None,
         replacement_style: str = "type_tag",
     ):
         self.patterns = {**PII_PATTERNS, **(custom_patterns or {})}
         self.replacement_style = replacement_style
 
-    def detect(self, text: str) -> List[PIIDetection]:
+    def detect(self, text: str) -> list[PIIDetection]:
         detections = []
         for pii_type, pattern in self.patterns.items():
             for match in pattern.finditer(text):
                 value_hash = hashlib.sha256(match.group().encode()).hexdigest()[:12]
                 replacement = self._make_replacement(pii_type, match.group())
-                detections.append(PIIDetection(
-                    pii_type=pii_type,
-                    start=match.start(),
-                    end=match.end(),
-                    value_hash=value_hash,
-                    replacement=replacement,
-                ))
+                detections.append(
+                    PIIDetection(
+                        pii_type=pii_type,
+                        start=match.start(),
+                        end=match.end(),
+                        value_hash=value_hash,
+                        replacement=replacement,
+                    )
+                )
         return sorted(detections, key=lambda d: d.start)
 
     def redact(self, text: str) -> PIIResult:
@@ -130,7 +134,7 @@ class PIIRedactor:
             redaction_count=len(detections),
         )
 
-    def redact_safe(self, text: str) -> Tuple[str, bool]:
+    def redact_safe(self, text: str) -> tuple[str, bool]:
         """Returns (redacted_text, had_pii). Never raises."""
         try:
             result = self.redact(text)
@@ -139,11 +143,11 @@ class PIIRedactor:
             logger.error("PII redaction failed: %s", e)
             return "[REDACTION_ERROR]", True
 
-    def audit_batch(self, records: List[Dict], text_fields: List[str]) -> Dict:
+    def audit_batch(self, records: list[dict], text_fields: list[str]) -> dict:
         """Scan a dataset for PII without exposing values."""
         total = len(records)
         pii_count = 0
-        type_counts: Dict[str, int] = {}
+        type_counts: dict[str, int] = {}
 
         for rec in records:
             record_pii = False

@@ -5,13 +5,14 @@ Runs synchronously (regex / optional tiny LLM) so it can short-circuit the RAG
 pipeline before expensive retrieval. Designed to complement
 :class:`safety.semantic_safety.SemanticSafetyDetector`.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ STANDARD_REFUSAL = (
     "or harmful content. Please rephrase your question in a neutral, specific way."
 )
 
-_INJECTION_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
+_INJECTION_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"ignore (all )?(previous|prior) instructions", re.I), "ignore_instructions"),
     (re.compile(r"disregard (your|the) (system )?prompt", re.I), "disregard_prompt"),
     (re.compile(r"you are now (DAN|unrestricted)", re.I), "jailbreak_dan"),
@@ -29,7 +30,7 @@ _INJECTION_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
     (re.compile(r"jailbreak", re.I), "jailbreak_keyword"),
 ]
 
-_TOXIC_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
+_TOXIC_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(kill yourself|kys)\b", re.I), "self_harm"),
     (re.compile(r"\b(bomb|terrorist)\b.*\b(make|how to)\b", re.I), "violence_howto"),
 ]
@@ -41,10 +42,10 @@ class BehavioralClassification:
 
     safety_score: float
     blocked: bool
-    reasons: List[str]
+    reasons: list[str]
     refusal_message: str = STANDARD_REFUSAL
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "safety_score": self.safety_score,
             "blocked": self.blocked,
@@ -55,12 +56,12 @@ class BehavioralClassification:
 def classify_prompt_heuristic(
     text: str,
     *,
-    block_threshold: Optional[float] = None,
+    block_threshold: float | None = None,
 ) -> BehavioralClassification:
     if not (text or "").strip():
         return BehavioralClassification(1.0, False, [])
 
-    reasons: List[str] = []
+    reasons: list[str] = []
     penalty = 0.0
     for rx, label in _INJECTION_PATTERNS:
         if rx.search(text):
@@ -85,7 +86,7 @@ def classify_prompt_heuristic(
     )
 
 
-def classify_prompt_llm(text: str, *, model: Optional[str] = None) -> Optional[BehavioralClassification]:
+def classify_prompt_llm(text: str, *, model: str | None = None) -> BehavioralClassification | None:
     """
     Optional OpenAI classifier. Returns None on failure (caller should fall back to heuristics).
     """
@@ -133,7 +134,7 @@ class BehavioralClassifier:
     :func:`classify_user_prompt`.
     """
 
-    def __init__(self, *, use_llm: Optional[bool] = None) -> None:
+    def __init__(self, *, use_llm: bool | None = None) -> None:
         self._use_llm = use_llm
 
     def classify(self, text: str) -> BehavioralClassification:
@@ -143,8 +144,8 @@ class BehavioralClassifier:
 def classify_user_prompt(
     text: str,
     *,
-    use_llm: Optional[bool] = None,
-    block_threshold: Optional[float] = None,
+    use_llm: bool | None = None,
+    block_threshold: float | None = None,
 ) -> BehavioralClassification:
     """
     Parallel-friendly entry: heuristics first; optional LLM merge when

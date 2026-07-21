@@ -1,9 +1,7 @@
 """Delta Lake ingestion for physics simulation results."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
-import json
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +41,9 @@ class PhysicsDeltaStore:
         if self.spark is None:
             try:
                 from pyspark.sql import SparkSession
+
                 self.spark = (
-                    SparkSession.builder
-                    .appName("PhysicsSimulationStore")
+                    SparkSession.builder.appName("PhysicsSimulationStore")
                     .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
                     .config(
                         "spark.sql.catalog.spark_catalog",
@@ -58,7 +56,7 @@ class PhysicsDeltaStore:
                 self.spark = None
         return self.spark
 
-    def ingest(self, run_id: str, results: Dict, hardware_info: Dict, wall_clock_time: float):
+    def ingest(self, run_id: str, results: dict, hardware_info: dict, wall_clock_time: float):
         """
         Ingest a simulation result into Delta Lake.
 
@@ -73,7 +71,7 @@ class PhysicsDeltaStore:
             logger.warning("Spark unavailable, skipping Delta ingestion")
             return
 
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         diagnostics = results.get("diagnostics", {})
         estimated_cost = (wall_clock_time / 3600.0) * 2.0  # $2/hr A100
 
@@ -95,16 +93,17 @@ class PhysicsDeltaStore:
 
         try:
             df = spark.createDataFrame([record])
-            (df.write
-             .format("delta")
-             .mode("append")
-             .option("mergeSchema", "true")
-             .save(self.table_path))
+            (
+                df.write.format("delta")
+                .mode("append")
+                .option("mergeSchema", "true")
+                .save(self.table_path)
+            )
             logger.info(f"Ingested simulation {run_id} to {self.table_path}")
         except Exception as e:
             logger.error(f"Delta ingestion failed: {e}")
 
-    def query_recent(self, limit: int = 100) -> List[Dict]:
+    def query_recent(self, limit: int = 100) -> list[dict]:
         """
         Query recent physics simulations.
 
@@ -124,7 +123,7 @@ class PhysicsDeltaStore:
             logger.error(f"Delta query failed: {e}")
             return []
 
-    def statistics(self) -> Dict:
+    def statistics(self) -> dict:
         """
         Get summary statistics from physics simulations.
 
@@ -137,8 +136,13 @@ class PhysicsDeltaStore:
 
         try:
             df = spark.read.format("delta").load(self.table_path)
-            stats = df.describe(["quality_score", "wall_clock_time_sec", "estimated_cost_usd"]).collect()
-            return {row[0]: {s[0]: float(s[i]) if i > 0 else s[i] for i, s in enumerate(row)} for row in stats}
+            stats = df.describe(
+                ["quality_score", "wall_clock_time_sec", "estimated_cost_usd"]
+            ).collect()
+            return {
+                row[0]: {s[0]: float(s[i]) if i > 0 else s[i] for i, s in enumerate(row)}
+                for row in stats
+            }
         except Exception as e:
             logger.error(f"Statistics query failed: {e}")
             return {}

@@ -34,6 +34,7 @@ Usage:
     # CLI
     python streaming/streaming_pipeline.py --backend kafka --mode produce --n-events 10
 """
+
 from __future__ import annotations
 
 import json
@@ -41,9 +42,9 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -53,6 +54,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Message schema
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class MLEvent:
     """
@@ -60,29 +62,32 @@ class MLEvent:
     All producers and consumers use this schema — version-pinned for
     backward compatibility across rolling deployments.
     """
+
     event_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    event_type: str = "inference_request"   # inference_request | ingest | eval | monitor
-    payload: Dict = field(default_factory=dict)
+    event_type: str = "inference_request"  # inference_request | ingest | eval | monitor
+    payload: dict = field(default_factory=dict)
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
     source: str = "llmops-api"
     schema_version: str = "1.0"
     retry_count: int = 0
-    trace_id: Optional[str] = None
+    trace_id: str | None = None
 
     def to_json(self) -> str:
-        return json.dumps({
-            "event_id": self.event_id,
-            "event_type": self.event_type,
-            "payload": self.payload,
-            "timestamp": self.timestamp,
-            "source": self.source,
-            "schema_version": self.schema_version,
-            "retry_count": self.retry_count,
-            "trace_id": self.trace_id,
-        })
+        return json.dumps(
+            {
+                "event_id": self.event_id,
+                "event_type": self.event_type,
+                "payload": self.payload,
+                "timestamp": self.timestamp,
+                "source": self.source,
+                "schema_version": self.schema_version,
+                "retry_count": self.retry_count,
+                "trace_id": self.trace_id,
+            }
+        )
 
     @classmethod
-    def from_json(cls, data: str | bytes) -> "MLEvent":
+    def from_json(cls, data: str | bytes) -> MLEvent:
         if isinstance(data, bytes):
             data = data.decode("utf-8")
         d = json.loads(data)
@@ -97,7 +102,7 @@ class InferenceResult:
     latency_ms: float
     model: str
     timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    error: Optional[str] = None
+    error: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(self.__dict__)
@@ -107,22 +112,23 @@ class InferenceResult:
 # Config
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class KafkaConfig:
     bootstrap_servers: str = "localhost:9092"
     group_id: str = "llmops-inference-workers"
     auto_offset_reset: str = "earliest"
-    enable_auto_commit: bool = False        # manual commit for at-least-once
+    enable_auto_commit: bool = False  # manual commit for at-least-once
     max_poll_records: int = 10
     session_timeout_ms: int = 30_000
     request_timeout_ms: int = 40_000
     retries: int = 3
     dlq_topic_suffix: str = "-dlq"
     results_topic_suffix: str = "-results"
-    security_protocol: str = "PLAINTEXT"   # PLAINTEXT | SASL_SSL
-    sasl_mechanism: Optional[str] = None
-    sasl_username: Optional[str] = None
-    sasl_password: Optional[str] = None
+    security_protocol: str = "PLAINTEXT"  # PLAINTEXT | SASL_SSL
+    sasl_mechanism: str | None = None
+    sasl_username: str | None = None
+    sasl_password: str | None = None
 
 
 @dataclass
@@ -132,7 +138,7 @@ class KinesisConfig:
     shard_count: int = 2
     results_stream: str = "llmops-results"
     dlq_stream: str = "llmops-dlq"
-    checkpoint_table: str = "llmops-kinesis-checkpoints"   # DynamoDB table
+    checkpoint_table: str = "llmops-kinesis-checkpoints"  # DynamoDB table
     read_interval_seconds: float = 1.0
     max_records_per_shard: int = 100
     max_retries: int = 3
@@ -141,6 +147,7 @@ class KinesisConfig:
 # ──────────────────────────────────────────────────────────────────────────────
 # Base producer
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class BaseMLProducer(ABC):
     @abstractmethod
@@ -152,9 +159,7 @@ class BaseMLProducer(ABC):
     @abstractmethod
     def close(self): ...
 
-    def send_inference_request(
-        self, query: str, user_id: Optional[str] = None, **kwargs
-    ) -> str:
+    def send_inference_request(self, query: str, user_id: str | None = None, **kwargs) -> str:
         """Convenience wrapper — returns the event_id for correlation."""
         event = MLEvent(
             event_type="inference_request",
@@ -164,9 +169,7 @@ class BaseMLProducer(ABC):
         self.send(event)
         return event.event_id
 
-    def send_ingest_request(
-        self, doc_id: str, text: str, metadata: Optional[Dict] = None
-    ) -> str:
+    def send_ingest_request(self, doc_id: str, text: str, metadata: dict | None = None) -> str:
         event = MLEvent(
             event_type="ingest",
             payload={"doc_id": doc_id, "text": text, "metadata": metadata or {}},
@@ -174,7 +177,7 @@ class BaseMLProducer(ABC):
         self.send(event)
         return event.event_id
 
-    def send_monitor_event(self, metrics: Dict) -> str:
+    def send_monitor_event(self, metrics: dict) -> str:
         event = MLEvent(event_type="monitor", payload=metrics)
         self.send(event)
         return event.event_id
@@ -184,17 +187,18 @@ class BaseMLProducer(ABC):
 # Base consumer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class BaseMLConsumer(ABC):
     MAX_RETRIES = 3
 
-    def __init__(self, inference_fn: Optional[Callable] = None):
+    def __init__(self, inference_fn: Callable | None = None):
         self.inference_fn = inference_fn
         self._running = False
         self.processed = 0
         self.errors = 0
 
     @abstractmethod
-    def poll(self, timeout_ms: int = 1000) -> List[MLEvent]: ...
+    def poll(self, timeout_ms: int = 1000) -> list[MLEvent]: ...
 
     @abstractmethod
     def commit(self): ...
@@ -208,7 +212,7 @@ class BaseMLConsumer(ABC):
     @abstractmethod
     def close(self): ...
 
-    def process_event(self, event: MLEvent) -> Optional[InferenceResult]:
+    def process_event(self, event: MLEvent) -> InferenceResult | None:
         """Route event to the appropriate handler by event_type."""
         handlers = {
             "inference_request": self._handle_inference,
@@ -253,7 +257,7 @@ class BaseMLConsumer(ABC):
         logger.debug("Monitor event: %s", event.payload)
         return None
 
-    def run(self, max_events: Optional[int] = None, poll_timeout_ms: int = 1000):
+    def run(self, max_events: int | None = None, poll_timeout_ms: int = 1000):
         """
         Main consumer loop.
 
@@ -289,7 +293,8 @@ class BaseMLConsumer(ABC):
                             self.send_to_dlq(event, str(e))
                             logger.warning(
                                 "Event %s sent to DLQ after %d retries",
-                                event.event_id, self.MAX_RETRIES,
+                                event.event_id,
+                                self.MAX_RETRIES,
                             )
                         self._log_metrics()
         finally:
@@ -301,6 +306,7 @@ class BaseMLConsumer(ABC):
     def _log_metrics(self):
         try:
             import mlflow
+
             mlflow.log_metric("events_processed", self.processed)
             mlflow.log_metric("events_errored", self.errors)
         except Exception:
@@ -311,6 +317,7 @@ class BaseMLConsumer(ABC):
 # Kafka producer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class KafkaMLProducer(BaseMLProducer):
     """
     Kafka producer for ML pipeline events.
@@ -318,7 +325,7 @@ class KafkaMLProducer(BaseMLProducer):
     Idempotent producer enabled by default (acks=all + enable_idempotence).
     """
 
-    def __init__(self, topic: str, cfg: Optional[KafkaConfig] = None):
+    def __init__(self, topic: str, cfg: KafkaConfig | None = None):
         self.topic = topic
         self.cfg = cfg or KafkaConfig()
         self._producer = None
@@ -330,7 +337,7 @@ class KafkaMLProducer(BaseMLProducer):
             except ImportError:
                 raise ImportError("kafka-python required: pip install kafka-python")
 
-            kwargs: Dict = {
+            kwargs: dict = {
                 "bootstrap_servers": self.cfg.bootstrap_servers,
                 "value_serializer": lambda v: v.encode("utf-8"),
                 "key_serializer": lambda k: k.encode("utf-8") if k else None,
@@ -339,15 +346,16 @@ class KafkaMLProducer(BaseMLProducer):
                 "enable_idempotence": True,
             }
             if self.cfg.security_protocol == "SASL_SSL":
-                kwargs.update({
-                    "security_protocol": "SASL_SSL",
-                    "sasl_mechanism": self.cfg.sasl_mechanism,
-                    "sasl_plain_username": self.cfg.sasl_username,
-                    "sasl_plain_password": self.cfg.sasl_password,
-                })
+                kwargs.update(
+                    {
+                        "security_protocol": "SASL_SSL",
+                        "sasl_mechanism": self.cfg.sasl_mechanism,
+                        "sasl_plain_username": self.cfg.sasl_username,
+                        "sasl_plain_password": self.cfg.sasl_password,
+                    }
+                )
             self._producer = KafkaProducer(**kwargs)
-            logger.info("Kafka producer connected: %s → %s",
-                        self.cfg.bootstrap_servers, self.topic)
+            logger.info("Kafka producer connected: %s → %s", self.cfg.bootstrap_servers, self.topic)
         return self._producer
 
     def send(self, event: MLEvent) -> bool:
@@ -364,7 +372,7 @@ class KafkaMLProducer(BaseMLProducer):
             logger.error("Kafka send failed: %s", e)
             return False
 
-    def send_batch(self, events: List[MLEvent]) -> int:
+    def send_batch(self, events: list[MLEvent]) -> int:
         """Send a batch of events without waiting for individual acks."""
         producer = self._get_producer()
         for event in events:
@@ -386,6 +394,7 @@ class KafkaMLProducer(BaseMLProducer):
 # Kafka consumer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class KafkaInferenceConsumer(BaseMLConsumer):
     """
     Kafka consumer with:
@@ -398,15 +407,15 @@ class KafkaInferenceConsumer(BaseMLConsumer):
     def __init__(
         self,
         topic: str,
-        cfg: Optional[KafkaConfig] = None,
-        inference_fn: Optional[Callable] = None,
+        cfg: KafkaConfig | None = None,
+        inference_fn: Callable | None = None,
     ):
         super().__init__(inference_fn)
         self.topic = topic
         self.cfg = cfg or KafkaConfig()
         self._consumer = None
-        self._result_producer: Optional[KafkaMLProducer] = None
-        self._dlq_producer: Optional[KafkaMLProducer] = None
+        self._result_producer: KafkaMLProducer | None = None
+        self._dlq_producer: KafkaMLProducer | None = None
 
     def _get_consumer(self):
         if self._consumer is None:
@@ -425,11 +434,12 @@ class KafkaInferenceConsumer(BaseMLConsumer):
                 session_timeout_ms=self.cfg.session_timeout_ms,
                 request_timeout_ms=self.cfg.request_timeout_ms,
             )
-            logger.info("Kafka consumer connected: topic=%s group=%s",
-                        self.topic, self.cfg.group_id)
+            logger.info(
+                "Kafka consumer connected: topic=%s group=%s", self.topic, self.cfg.group_id
+            )
         return self._consumer
 
-    def poll(self, timeout_ms: int = 1000) -> List[MLEvent]:
+    def poll(self, timeout_ms: int = 1000) -> list[MLEvent]:
         records = self._get_consumer().poll(timeout_ms=timeout_ms)
         events = []
         for _tp, messages in records.items():
@@ -446,9 +456,7 @@ class KafkaInferenceConsumer(BaseMLConsumer):
 
     def send_to_dlq(self, event: MLEvent, error: str):
         if self._dlq_producer is None:
-            self._dlq_producer = KafkaMLProducer(
-                self.topic + self.cfg.dlq_topic_suffix, self.cfg
-            )
+            self._dlq_producer = KafkaMLProducer(self.topic + self.cfg.dlq_topic_suffix, self.cfg)
         event.payload["dlq_error"] = error
         event.payload["dlq_timestamp"] = datetime.utcnow().isoformat()
         self._dlq_producer.send(event)
@@ -458,10 +466,12 @@ class KafkaInferenceConsumer(BaseMLConsumer):
             self._result_producer = KafkaMLProducer(
                 self.topic + self.cfg.results_topic_suffix, self.cfg
             )
-        self._result_producer.send(MLEvent(
-            event_type="inference_result",
-            payload=json.loads(result.to_json()),
-        ))
+        self._result_producer.send(
+            MLEvent(
+                event_type="inference_result",
+                payload=json.loads(result.to_json()),
+            )
+        )
 
     def close(self):
         if self._consumer:
@@ -476,10 +486,11 @@ class KafkaInferenceConsumer(BaseMLConsumer):
 # Kinesis producer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class KinesisMLProducer(BaseMLProducer):
     """AWS Kinesis Data Streams producer."""
 
-    def __init__(self, cfg: Optional[KinesisConfig] = None):
+    def __init__(self, cfg: KinesisConfig | None = None):
         self.cfg = cfg or KinesisConfig()
         self._client = None
 
@@ -487,6 +498,7 @@ class KinesisMLProducer(BaseMLProducer):
         if self._client is None:
             try:
                 import boto3
+
                 self._client = boto3.client("kinesis", region_name=self.cfg.region)
                 logger.info("Kinesis producer connected: %s", self.cfg.stream_name)
             except ImportError:
@@ -505,22 +517,19 @@ class KinesisMLProducer(BaseMLProducer):
             logger.error("Kinesis put_record failed: %s", e)
             return False
 
-    def send_batch(self, events: List[MLEvent]) -> int:
+    def send_batch(self, events: list[MLEvent]) -> int:
         """
         Kinesis batch put — max 500 records or 5 MB per call.
         Returns number of successfully sent records.
         """
         client = self._get_client()
         records = [
-            {"Data": e.to_json().encode("utf-8"), "PartitionKey": e.event_id}
-            for e in events
+            {"Data": e.to_json().encode("utf-8"), "PartitionKey": e.event_id} for e in events
         ]
         sent = 0
         for i in range(0, len(records), 500):
-            batch = records[i:i + 500]
-            response = client.put_records(
-                StreamName=self.cfg.stream_name, Records=batch
-            )
+            batch = records[i : i + 500]
+            response = client.put_records(StreamName=self.cfg.stream_name, Records=batch)
             sent += len(batch) - response.get("FailedRecordCount", 0)
         return sent
 
@@ -535,6 +544,7 @@ class KinesisMLProducer(BaseMLProducer):
 # Kinesis consumer
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class KinesisInferenceConsumer(BaseMLConsumer):
     """
     AWS Kinesis consumer using GetShardIterator / GetRecords.
@@ -547,18 +557,19 @@ class KinesisInferenceConsumer(BaseMLConsumer):
 
     def __init__(
         self,
-        cfg: Optional[KinesisConfig] = None,
-        inference_fn: Optional[Callable] = None,
+        cfg: KinesisConfig | None = None,
+        inference_fn: Callable | None = None,
     ):
         super().__init__(inference_fn)
         self.cfg = cfg or KinesisConfig()
         self._client = None
-        self._shard_iterators: Dict[str, str] = {}
-        self._last_sequences: Dict[str, str] = {}
+        self._shard_iterators: dict[str, str] = {}
+        self._last_sequences: dict[str, str] = {}
 
     def _get_client(self):
         if self._client is None:
             import boto3
+
             self._client = boto3.client("kinesis", region_name=self.cfg.region)
         return self._client
 
@@ -585,15 +596,16 @@ class KinesisInferenceConsumer(BaseMLConsumer):
                 )
             self._shard_iterators[shard_id] = iter_resp["ShardIterator"]
 
-        logger.info("Kinesis: initialised %d shards for stream %s",
-                    len(shards), self.cfg.stream_name)
+        logger.info(
+            "Kinesis: initialised %d shards for stream %s", len(shards), self.cfg.stream_name
+        )
 
-    def poll(self, timeout_ms: int = 1000) -> List[MLEvent]:
+    def poll(self, timeout_ms: int = 1000) -> list[MLEvent]:
         if not self._shard_iterators:
             self._init_shards()
 
         client = self._get_client()
-        events: List[MLEvent] = []
+        events: list[MLEvent] = []
 
         for shard_id, iterator in list(self._shard_iterators.items()):
             try:
@@ -627,20 +639,24 @@ class KinesisInferenceConsumer(BaseMLConsumer):
     def _save_checkpoint(self, shard_id: str, sequence: str):
         try:
             import boto3
+
             dynamodb = boto3.resource("dynamodb", region_name=self.cfg.region)
             table = dynamodb.Table(self.cfg.checkpoint_table)
-            table.put_item(Item={
-                "shard_id": shard_id,
-                "sequence_number": sequence,
-                "timestamp": datetime.utcnow().isoformat(),
-                "stream": self.cfg.stream_name,
-            })
+            table.put_item(
+                Item={
+                    "shard_id": shard_id,
+                    "sequence_number": sequence,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "stream": self.cfg.stream_name,
+                }
+            )
         except Exception as e:
             logger.warning("Checkpoint save failed (shard=%s): %s", shard_id, e)
 
-    def _load_checkpoint(self, shard_id: str) -> Optional[str]:
+    def _load_checkpoint(self, shard_id: str) -> str | None:
         try:
             import boto3
+
             dynamodb = boto3.resource("dynamodb", region_name=self.cfg.region)
             table = dynamodb.Table(self.cfg.checkpoint_table)
             response = table.get_item(Key={"shard_id": shard_id})
@@ -651,6 +667,7 @@ class KinesisInferenceConsumer(BaseMLConsumer):
     def send_to_dlq(self, event: MLEvent, error: str):
         try:
             import boto3
+
             client = boto3.client("kinesis", region_name=self.cfg.region)
             event.payload["dlq_error"] = error
             event.payload["dlq_timestamp"] = datetime.utcnow().isoformat()
@@ -659,14 +676,16 @@ class KinesisInferenceConsumer(BaseMLConsumer):
                 Data=event.to_json().encode("utf-8"),
                 PartitionKey=event.event_id,
             )
-            logger.warning("Event %s sent to DLQ stream %s: %s",
-                           event.event_id, self.cfg.dlq_stream, error)
+            logger.warning(
+                "Event %s sent to DLQ stream %s: %s", event.event_id, self.cfg.dlq_stream, error
+            )
         except Exception as e:
             logger.error("DLQ send failed: %s", e)
 
     def send_result(self, result: InferenceResult):
         try:
             import boto3
+
             client = boto3.client("kinesis", region_name=self.cfg.region)
             client.put_record(
                 StreamName=self.cfg.results_stream,
@@ -683,6 +702,7 @@ class KinesisInferenceConsumer(BaseMLConsumer):
 # ──────────────────────────────────────────────────────────────────────────────
 # Stream topology builder
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class StreamTopology:
     """
@@ -728,12 +748,12 @@ class StreamTopology:
     def create_kinesis_streams(cfg: KinesisConfig) -> None:
         try:
             import boto3
+
             client = boto3.client("kinesis", region_name=cfg.region)
             for stream in StreamTopology.KINESIS_STREAMS:
                 try:
                     client.create_stream(StreamName=stream, ShardCount=cfg.shard_count)
-                    logger.info("Created Kinesis stream: %s (%d shards)",
-                                stream, cfg.shard_count)
+                    logger.info("Created Kinesis stream: %s (%d shards)", stream, cfg.shard_count)
                 except client.exceptions.ResourceInUseException:
                     logger.info("Kinesis stream already exists: %s", stream)
         except Exception as e:
@@ -744,13 +764,12 @@ class StreamTopology:
         """Provision the DynamoDB table used for Kinesis checkpointing."""
         try:
             import boto3
+
             dynamodb = boto3.client("dynamodb", region_name=cfg.region)
             dynamodb.create_table(
                 TableName=cfg.checkpoint_table,
                 KeySchema=[{"AttributeName": "shard_id", "KeyType": "HASH"}],
-                AttributeDefinitions=[
-                    {"AttributeName": "shard_id", "AttributeType": "S"}
-                ],
+                AttributeDefinitions=[{"AttributeName": "shard_id", "AttributeType": "S"}],
                 BillingMode="PAY_PER_REQUEST",
             )
             logger.info("DynamoDB checkpoint table created: %s", cfg.checkpoint_table)
@@ -769,8 +788,9 @@ if __name__ == "__main__":
     parser.add_argument("--backend", choices=["kafka", "kinesis"], default="kafka")
     parser.add_argument("--mode", choices=["produce", "consume", "setup"], default="produce")
     parser.add_argument("--n-events", type=int, default=10)
-    parser.add_argument("--topic", default="llmops-queries",
-                        help="Kafka topic (ignored for Kinesis)")
+    parser.add_argument(
+        "--topic", default="llmops-queries", help="Kafka topic (ignored for Kinesis)"
+    )
     args = parser.parse_args()
 
     if args.backend == "kafka":

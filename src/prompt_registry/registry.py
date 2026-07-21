@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import yaml
 
@@ -18,7 +18,7 @@ class PromptRegistry:
     def __init__(self, prompts_dir: str | Path = "prompt_registry/prompts") -> None:
         self.prompts_dir = Path(prompts_dir)
 
-    def load(self, name: str, version: str) -> Dict[str, Any]:
+    def load(self, name: str, version: str) -> dict[str, Any]:
         """
         Load one prompt version.
 
@@ -51,7 +51,7 @@ class PromptRegistry:
 
         return data
 
-    def list_versions(self, name: str) -> List[str]:
+    def list_versions(self, name: str) -> list[str]:
         """
         List available versions for a prompt family.
 
@@ -64,7 +64,7 @@ class PromptRegistry:
         if not self.prompts_dir.exists():
             return []
 
-        versions: List[str] = []
+        versions: list[str] = []
         for file_path in sorted(self.prompts_dir.glob(f"{name}_v*.yaml")):
             stem = file_path.stem
             # Example stem: rag_synthesizer_v1
@@ -81,4 +81,3 @@ class PromptRegistry:
         if numeric.isdigit():
             return (int(numeric), version)
         return (10**9, version)
-

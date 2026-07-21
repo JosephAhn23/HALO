@@ -19,14 +19,15 @@ Requirements (optional — install for Azure deployment):
     azure-mgmt-appcontainers>=3.0.0
     openai>=1.14.0
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class AzureConfig:
@@ -54,6 +56,7 @@ class AzureConfig:
 # Azure ML Manager
 # ---------------------------------------------------------------------------
 
+
 class AzureMLManager:
     """
     Register models, create managed online endpoints, and configure A/B traffic splits.
@@ -69,6 +72,7 @@ class AzureMLManager:
         try:
             from azure.ai.ml import MLClient
             from azure.identity import DefaultAzureCredential
+
             self._client = MLClient(
                 DefaultAzureCredential(),
                 self.config.subscription_id,
@@ -88,12 +92,13 @@ class AzureMLManager:
         model_path: str,
         model_name: str,
         description: str = "",
-        tags: Optional[Dict[str, str]] = None,
+        tags: dict[str, str] | None = None,
     ) -> str:
         """Register a model in the Azure ML registry. Returns the assigned version string."""
         try:
-            from azure.ai.ml.entities import Model
             from azure.ai.ml.constants import AssetTypes
+            from azure.ai.ml.entities import Model
+
             model = Model(
                 path=model_path,
                 name=model_name,
@@ -119,7 +124,7 @@ class AzureMLManager:
     ) -> None:
         """Create a managed online endpoint and deploy a model to it."""
         try:
-            from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment
+            from azure.ai.ml.entities import ManagedOnlineDeployment, ManagedOnlineEndpoint
 
             endpoint = ManagedOnlineEndpoint(
                 name=endpoint_name,
@@ -147,7 +152,7 @@ class AzureMLManager:
     def ab_deploy(
         self,
         endpoint_name: str,
-        blue_model: tuple,   # (model_name, model_version)
+        blue_model: tuple,  # (model_name, model_version)
         green_model: tuple,  # (model_name, model_version)
         blue_traffic: int = 80,
     ) -> None:
@@ -156,9 +161,9 @@ class AzureMLManager:
         Creates both deployments atomically then sets the traffic split.
         """
         try:
-            from azure.ai.ml.entities import ManagedOnlineDeployment, ManagedOnlineEndpoint
+            from azure.ai.ml.entities import ManagedOnlineDeployment
 
-            for color, (name, version), traffic in [
+            for color, (name, version), _traffic in [
                 ("blue", blue_model, blue_traffic),
                 ("green", green_model, 100 - blue_traffic),
             ]:
@@ -179,7 +184,7 @@ class AzureMLManager:
             logger.error("A/B deploy failed: %s", e)
             raise
 
-    def list_models(self) -> List[Dict]:
+    def list_models(self) -> list[dict]:
         """List all registered models in the workspace."""
         try:
             return [
@@ -195,6 +200,7 @@ class AzureMLManager:
 # Azure Container Apps Deployer
 # ---------------------------------------------------------------------------
 
+
 class AzureContainerAppsDeployer:
     """
     Deploy the FastAPI gateway to Azure Container Apps (serverless).
@@ -208,8 +214,9 @@ class AzureContainerAppsDeployer:
 
     def _init_client(self) -> None:
         try:
-            from azure.mgmt.appcontainers import ContainerAppsAPIClient
             from azure.identity import DefaultAzureCredential
+            from azure.mgmt.appcontainers import ContainerAppsAPIClient
+
             self._client = ContainerAppsAPIClient(
                 DefaultAzureCredential(), self.config.subscription_id
             )
@@ -229,23 +236,23 @@ class AzureContainerAppsDeployer:
     def deploy(
         self,
         image: str,
-        env_vars: Optional[Dict[str, str]] = None,
+        env_vars: dict[str, str] | None = None,
         min_replicas: int = 1,
         max_replicas: int = 10,
         cpu: float = 1.0,
         memory: str = "2Gi",
-    ) -> Dict:
+    ) -> dict:
         """Deploy or update the Container App."""
         try:
             from azure.mgmt.appcontainers.models import (
-                ContainerApp,
                 Configuration,
-                Ingress,
-                Template,
                 Container,
-                Scale,
+                ContainerApp,
                 EnvironmentVar,
+                Ingress,
                 RegistryCredentials,
+                Scale,
+                Template,
             )
 
             containers = [
@@ -253,10 +260,7 @@ class AzureContainerAppsDeployer:
                     name="llmops-api",
                     image=image,
                     resources={"cpu": cpu, "memory": memory},
-                    env=[
-                        EnvironmentVar(name=k, value=v)
-                        for k, v in (env_vars or {}).items()
-                    ],
+                    env=[EnvironmentVar(name=k, value=v) for k, v in (env_vars or {}).items()],
                 )
             ]
             app = ContainerApp(
@@ -282,7 +286,8 @@ class AzureContainerAppsDeployer:
             ).result()
             fqdn = getattr(
                 getattr(getattr(result, "properties", None), "configuration", None),
-                "ingress", type("", (), {"fqdn": "pending"})()
+                "ingress",
+                type("", (), {"fqdn": "pending"})(),
             ).fqdn
             url = f"https://{fqdn}"
             logger.info("Container App deployed: %s → %s", self.config.container_app_name, url)
@@ -296,6 +301,7 @@ class AzureContainerAppsDeployer:
 # Azure OpenAI Backend
 # ---------------------------------------------------------------------------
 
+
 class AzureOpenAIBackend:
     """
     Azure OpenAI inference backend — drop-in replacement for the standard OpenAI client.
@@ -304,7 +310,7 @@ class AzureOpenAIBackend:
     Accepts a messages list directly (matching the chat completions API shape).
     """
 
-    def __init__(self, config: Optional[AzureConfig] = None):
+    def __init__(self, config: AzureConfig | None = None):
         cfg = config or AzureConfig()
         self._client = None
         self.deployment = cfg.openai_deployment
@@ -315,6 +321,7 @@ class AzureOpenAIBackend:
     def _init_client(self) -> None:
         try:
             from openai import AzureOpenAI
+
             self._client = AzureOpenAI(
                 azure_endpoint=self._endpoint,
                 api_key=self._api_key,
@@ -326,11 +333,11 @@ class AzureOpenAIBackend:
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int = 1024,
         stream: bool = False,
-    ) -> Union[str, Iterator]:
+    ) -> str | Iterator:
         """
         Send a chat completion request.
 
@@ -356,9 +363,9 @@ class AzureOpenAIBackend:
 
     def embed(
         self,
-        texts: List[str],
+        texts: list[str],
         model: str = "text-embedding-3-small",
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         """Generate embeddings using Azure OpenAI."""
         if self._client is None:
             raise RuntimeError("Azure OpenAI client not initialised")
@@ -370,13 +377,14 @@ class AzureOpenAIBackend:
 # Azure Monitor
 # ---------------------------------------------------------------------------
 
+
 class AzureMonitor:
     """
     Emit custom metrics via the Azure Monitor custom metrics REST API.
     Mirrors infra/aws_observability.py (CloudWatch PutMetricData).
     """
 
-    def __init__(self, config: Optional[AzureConfig] = None):
+    def __init__(self, config: AzureConfig | None = None):
         cfg = config or AzureConfig()
         self._subscription_id = cfg.subscription_id
         self._resource_group = cfg.resource_group
@@ -387,6 +395,7 @@ class AzureMonitor:
     def _init_credential(self) -> None:
         try:
             from azure.identity import DefaultAzureCredential
+
             self._credential = DefaultAzureCredential()
         except ImportError:
             logger.warning("azure-identity not installed — Azure Monitor metrics disabled")
@@ -396,7 +405,7 @@ class AzureMonitor:
         metric_name: str,
         value: float,
         namespace: str = "LLMOps",
-        dimensions: Optional[Dict[str, str]] = None,
+        dimensions: dict[str, str] | None = None,
     ) -> None:
         """Emit a custom metric to Azure Monitor."""
         if self._credential is None:
@@ -404,6 +413,7 @@ class AzureMonitor:
             return
         try:
             import requests
+
             body = {
                 "time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "data": {
@@ -411,20 +421,21 @@ class AzureMonitor:
                         "metric": metric_name,
                         "namespace": namespace,
                         "dimNames": list((dimensions or {}).keys()),
-                        "series": [{
-                            "dimValues": list((dimensions or {}).values()),
-                            "min": value,
-                            "max": value,
-                            "sum": value,
-                            "count": 1,
-                        }],
+                        "series": [
+                            {
+                                "dimValues": list((dimensions or {}).values()),
+                                "min": value,
+                                "max": value,
+                                "sum": value,
+                                "count": 1,
+                            }
+                        ],
                     }
                 },
             }
             token = self._credential.get_token("https://monitor.azure.com/").token
             resource_id = (
-                f"/subscriptions/{self._subscription_id}"
-                f"/resourceGroups/{self._resource_group}"
+                f"/subscriptions/{self._subscription_id}" f"/resourceGroups/{self._resource_group}"
             )
             url = f"https://{self._location}.monitoring.azure.com{resource_id}/metrics"
             resp = requests.post(
@@ -442,10 +453,14 @@ class AzureMonitor:
         self.emit_metric(f"{operation}_latency_ms", latency_ms, dimensions={"operation": operation})
 
     def track_request(self, endpoint: str, status_code: int) -> None:
-        self.emit_metric("api_requests", 1.0, dimensions={"endpoint": endpoint, "status": str(status_code)})
+        self.emit_metric(
+            "api_requests", 1.0, dimensions={"endpoint": endpoint, "status": str(status_code)}
+        )
 
     def track_ragas_score(self, metric: str, score: float) -> None:
-        self.emit_metric(f"ragas_{metric}", score, namespace="LLMOps/RAGAS", dimensions={"metric": metric})
+        self.emit_metric(
+            f"ragas_{metric}", score, namespace="LLMOps/RAGAS", dimensions={"metric": metric}
+        )
 
     def track_model_inference(self, model: str, tokens: int, latency_ms: float) -> None:
         self.emit_metric("inference_tokens", float(tokens), dimensions={"model": model})
@@ -456,25 +471,41 @@ class AzureMonitor:
 # Mock clients for environments without Azure SDK
 # ---------------------------------------------------------------------------
 
+
 class _MockMLClient:
     class _Models:
-        def list(self): return []
+        def list(self):
+            return []
+
         def create_or_update(self, m):
             m.version = "1"
             return m
+
     class _Endpoints:
         def begin_create_or_update(self, e):
             class _P:
-                def wait(self): pass
-                def result(self): return e
+                def wait(self):
+                    pass
+
+                def result(self):
+                    return e
+
             return _P()
-        def get(self, name): return type("E", (), {"traffic": {}})()
+
+        def get(self, name):
+            return type("E", (), {"traffic": {}})()
+
     class _Deployments:
         def begin_create_or_update(self, d):
             class _P:
-                def wait(self): pass
-                def result(self): return d
+                def wait(self):
+                    pass
+
+                def result(self):
+                    return d
+
             return _P()
+
     models = _Models()
     online_endpoints = _Endpoints()
     online_deployments = _Deployments()
@@ -484,10 +515,15 @@ class _MockACAClient:
     class _Apps:
         def begin_create_or_update(self, rg, name, app):
             class _P:
-                def result(self): return type("R", (), {"properties": None})()
+                def result(self):
+                    return type("R", (), {"properties": None})()
+
             return _P()
+
     class _Envs:
-        def get(self, rg, name): return type("E", (), {"id": f"/mock/env/{name}"})()
+        def get(self, rg, name):
+            return type("E", (), {"id": f"/mock/env/{name}"})()
+
     container_apps = _Apps()
     managed_environments = _Envs()
 
@@ -496,7 +532,7 @@ class _MockACAClient:
 # Terraform template
 # ---------------------------------------------------------------------------
 
-AZURE_TERRAFORM = '''
+AZURE_TERRAFORM = """
 # Azure infrastructure for HALO
 # Mirrors infra/terraform/main.tf (AWS) — adds Azure path
 #
@@ -636,7 +672,7 @@ data "azurerm_client_config" "current" {}
 output "api_url"          { value = azurerm_container_app.api.latest_revision_fqdn }
 output "openai_endpoint"  { value = azurerm_cognitive_account.openai.endpoint }
 output "acr_login_server" { value = azurerm_container_registry.acr.login_server }
-'''
+"""
 
 
 def write_terraform(output_dir: str = "./infra/azure") -> None:
@@ -652,13 +688,16 @@ def write_terraform(output_dir: str = "./infra/azure") -> None:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = AzureConfig()
 
     logger.info("=== Azure ML Manager demo ===")
     ml = AzureMLManager(config)
-    version = ml.register_model("./models/rag_model", "llmops-rag", description="RAG pipeline model")
+    version = ml.register_model(
+        "./models/rag_model", "llmops-rag", description="RAG pipeline model"
+    )
     logger.info("Registered version: %s", version)
 
     logger.info("=== Azure Container Apps demo ===")
@@ -670,9 +709,12 @@ def main() -> None:
     logger.info("Deploy result: %s", result)
 
     logger.info("=== Azure OpenAI Backend demo ===")
-    aoai = AzureOpenAIBackend(config)
-    logger.info("Azure OpenAI configured: endpoint=%s deployment=%s",
-                config.openai_endpoint or "(not set)", config.openai_deployment)
+    AzureOpenAIBackend(config)
+    logger.info(
+        "Azure OpenAI configured: endpoint=%s deployment=%s",
+        config.openai_endpoint or "(not set)",
+        config.openai_deployment,
+    )
 
     logger.info("=== Azure Monitor demo ===")
     monitor = AzureMonitor(config)
@@ -683,7 +725,9 @@ def main() -> None:
     logger.info("=== Writing Terraform template ===")
     write_terraform()
 
-    logger.info("Set AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_OPENAI_ENDPOINT to use live Azure.")
+    logger.info(
+        "Set AZURE_SUBSCRIPTION_ID, AZURE_RESOURCE_GROUP, AZURE_OPENAI_ENDPOINT to use live Azure."
+    )
 
 
 if __name__ == "__main__":

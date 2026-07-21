@@ -11,13 +11,14 @@ Key design decisions:
   - TTL eviction prevents unbounded memory growth in long-running sessions
   - Semantic search on long-term memory enables agents to recall relevant prior work
 """
+
 from __future__ import annotations
 
 import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,8 @@ class MemoryEntry:
     author: str
     version: int
     created_at: float = field(default_factory=time.time)
-    ttl_seconds: Optional[float] = None
-    tags: List[str] = field(default_factory=list)
+    ttl_seconds: float | None = None
+    tags: list[str] = field(default_factory=list)
 
     def is_expired(self) -> bool:
         if self.ttl_seconds is None:
@@ -50,18 +51,18 @@ class ShortTermMemory:
     """
 
     def __init__(self, default_ttl_seconds: float = 3600.0):
-        self._store: Dict[str, MemoryEntry] = {}
+        self._store: dict[str, MemoryEntry] = {}
         self._default_ttl = default_ttl_seconds
-        self._write_log: List[Dict] = []
+        self._write_log: list[dict] = []
 
     def write(
         self,
         key: str,
         value: Any,
         author: str,
-        ttl_seconds: Optional[float] = None,
-        expected_version: Optional[int] = None,
-        tags: Optional[List[str]] = None,
+        ttl_seconds: float | None = None,
+        expected_version: int | None = None,
+        tags: list[str] | None = None,
     ) -> int:
         """
         Write with optimistic locking.
@@ -86,17 +87,19 @@ class ShortTermMemory:
             tags=tags or [],
         )
         self._store[key] = entry
-        self._write_log.append({
-            "key": key,
-            "author": author,
-            "version": new_version,
-            "hash": entry.content_hash(),
-            "ts": time.time(),
-        })
+        self._write_log.append(
+            {
+                "key": key,
+                "author": author,
+                "version": new_version,
+                "hash": entry.content_hash(),
+                "ts": time.time(),
+            }
+        )
         logger.debug("Memory write: key=%s author=%s v%d", key, author, new_version)
         return new_version
 
-    def read(self, key: str) -> Tuple[Any, int]:
+    def read(self, key: str) -> tuple[Any, int]:
         """Returns (value, version). Returns (None, 0) if missing or expired."""
         entry = self._store.get(key)
         if entry is None:
@@ -106,7 +109,7 @@ class ShortTermMemory:
             return None, 0
         return entry.value, entry.version
 
-    def read_all(self, tag: Optional[str] = None) -> Dict[str, Any]:
+    def read_all(self, tag: str | None = None) -> dict[str, Any]:
         """Read all non-expired entries, optionally filtered by tag."""
         result = {}
         expired_keys = []
@@ -127,12 +130,12 @@ class ShortTermMemory:
             del self._store[k]
         return len(expired)
 
-    def audit_trail(self, key: Optional[str] = None) -> List[Dict]:
+    def audit_trail(self, key: str | None = None) -> list[dict]:
         if key:
             return [e for e in self._write_log if e["key"] == key]
         return list(self._write_log)
 
-    def snapshot(self) -> Dict[str, Any]:
+    def snapshot(self) -> dict[str, Any]:
         """Full snapshot of non-expired state for debugging."""
         return {k: v.value for k, v in self._store.items() if not v.is_expired()}
 
@@ -149,24 +152,25 @@ class LongTermMemory:
     """
 
     def __init__(self, embedding_dim: int = 64):
-        self._entries: List[Dict[str, Any]] = []
-        self._embeddings: List[Any] = []
+        self._entries: list[dict[str, Any]] = []
+        self._embeddings: list[Any] = []
         self._dim = embedding_dim
 
-    def store(self, key: str, text: str, metadata: Optional[Dict] = None) -> None:
+    def store(self, key: str, text: str, metadata: dict | None = None) -> None:
         """Store a text entry with a simulated embedding."""
         embedding = self._embed(text)
         self._entries.append({"key": key, "text": text, "metadata": metadata or {}})
         self._embeddings.append(embedding)
         logger.debug("LTM store: key=%s len=%d", key, len(self._entries))
 
-    def retrieve(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 3) -> list[dict[str, Any]]:
         """Semantic search: returns top_k most similar entries."""
         if not self._entries:
             return []
 
         try:
             import numpy as np
+
             q_emb = self._embed(query)
             emb_matrix = np.array(self._embeddings)
             q_norm = q_emb / (np.linalg.norm(q_emb) + 1e-9)
@@ -174,10 +178,7 @@ class LongTermMemory:
             normed = emb_matrix / (norms + 1e-9)
             scores = normed @ q_norm
             top_idx = scores.argsort()[::-1][:top_k]
-            return [
-                {**self._entries[i], "score": float(scores[i])}
-                for i in top_idx
-            ]
+            return [{**self._entries[i], "score": float(scores[i])} for i in top_idx]
         except ImportError:
             return self._entries[:top_k]
 
@@ -185,6 +186,7 @@ class LongTermMemory:
         """Deterministic pseudo-embedding from text (no model needed)."""
         try:
             import numpy as np
+
             h = hashlib.sha256(text.encode()).digest()
             seed = int.from_bytes(h[:4], "big")
             rng = np.random.RandomState(seed)
@@ -210,18 +212,18 @@ class WorkingMemory:
     def set(self, key: str, value: Any, author: str, **kwargs) -> int:
         return self.short_term.write(key, value, author, **kwargs)
 
-    def get(self, key: str) -> Tuple[Any, int]:
+    def get(self, key: str) -> tuple[Any, int]:
         return self.short_term.read(key)
 
-    def remember(self, key: str, text: str, metadata: Optional[Dict] = None) -> None:
+    def remember(self, key: str, text: str, metadata: dict | None = None) -> None:
         """Persist important findings to long-term memory."""
         self.long_term.store(key, text, metadata)
 
-    def recall(self, query: str, top_k: int = 3) -> List[Dict]:
+    def recall(self, query: str, top_k: int = 3) -> list[dict]:
         """Semantic retrieval from long-term memory."""
         return self.long_term.retrieve(query, top_k)
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         return {
             "session_id": self.session_id,
             "short_term_keys": list(self.short_term.snapshot().keys()),

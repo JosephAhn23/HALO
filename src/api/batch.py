@@ -3,12 +3,12 @@ Production Celery - DLQ, Flower monitoring, retry backoff,
 task routing, worker health checks.
 Covers: Celery (real production depth)
 """
+
 import json
 import logging
 import os
 import time
 import uuid
-from typing import Dict
 
 import redis
 from celery import Celery
@@ -30,9 +30,9 @@ def _get_cw():
     global _cw
     if _cw is None:
         from src.infra.aws_observability import CloudWatchObservability
+
         _cw = CloudWatchObservability()
     return _cw
-
 
 
 # ─── Celery Config with task routing ──────────────────────────
@@ -68,6 +68,7 @@ celery_app.conf.update(
 
 # ─── Signal Handlers ──────────────────────────────────────────
 
+
 @task_success.connect
 def on_task_success(sender, result, **kwargs):
     _get_cw().log_structured(
@@ -100,6 +101,7 @@ def on_worker_ready(sender, **kwargs):
 
 # ─── Dead Letter Queue ────────────────────────────────────────
 
+
 @celery_app.task(queue="dead_letter", name="tasks.dead_letter")
 def dead_letter_task(job_id: str, query: str, error: str, original_task_id: str):
     """Permanently failed tasks land here for manual inspection."""
@@ -126,6 +128,7 @@ def dead_letter_task(job_id: str, query: str, error: str, original_task_id: str)
 
 # ─── Main Task ────────────────────────────────────────────────
 
+
 @celery_app.task(
     bind=True,
     name="tasks.process_query",
@@ -136,13 +139,14 @@ def dead_letter_task(job_id: str, query: str, error: str, original_task_id: str)
     soft_time_limit=30,
     time_limit=60,
 )
-def process_query_task(self, job_id: str, query: str) -> Dict:
+def process_query_task(self, job_id: str, query: str) -> dict:
     start = time.time()
     try:
         result = run_pipeline(query)
 
         latency = (time.time() - start) * 1000
         from src.infra.aws_observability import InferenceMetrics
+
         _get_cw().emit_inference_metrics(
             InferenceMetrics(
                 latency_ms=latency,
@@ -182,7 +186,7 @@ def process_query_task(self, job_id: str, query: str) -> Dict:
 
     except Exception as exc:
         retry_count = self.request.retries
-        backoff = 2 ** retry_count
+        backoff = 2**retry_count
 
         _get_cw().log_structured(
             "celery-errors",
@@ -208,6 +212,7 @@ def process_query_task(self, job_id: str, query: str) -> Dict:
 
 # ─── High Priority Task ───────────────────────────────────────
 
+
 @celery_app.task(
     bind=True,
     name="tasks.process_query_priority",
@@ -216,7 +221,7 @@ def process_query_task(self, job_id: str, query: str) -> Dict:
     soft_time_limit=15,
     time_limit=30,
 )
-def process_query_priority_task(self, job_id: str, query: str) -> Dict:
+def process_query_priority_task(self, job_id: str, query: str) -> dict:
     """High priority queue - SLA-bound queries.
 
     Delegates to the same pipeline logic as the default task but runs in the
@@ -230,6 +235,7 @@ def process_query_priority_task(self, job_id: str, query: str) -> Dict:
 
         latency = (time.time() - start) * 1000
         from src.infra.aws_observability import InferenceMetrics
+
         _get_cw().emit_inference_metrics(
             InferenceMetrics(
                 latency_ms=latency,
@@ -257,19 +263,23 @@ def process_query_priority_task(self, job_id: str, query: str) -> Dict:
         return result
 
     except SoftTimeLimitExceeded as exc:
-        logger.warning("Soft timeout hit for priority job %s (attempt %d)", job_id, self.request.retries + 1)
+        logger.warning(
+            "Soft timeout hit for priority job %s (attempt %d)", job_id, self.request.retries + 1
+        )
         if self.request.retries >= 2:
             dead_letter_task.apply_async(
                 args=[job_id, query, "SoftTimeLimitExceeded", self.request.id],
                 queue="dead_letter",
             )
             redis_client.hset(f"job:{job_id}", "_status", "failed")
-            raise MaxRetriesExceededError(f"Timeout: priority task {job_id} permanently failed") from exc
+            raise MaxRetriesExceededError(
+                f"Timeout: priority task {job_id} permanently failed"
+            ) from exc
         raise self.retry(exc=exc, countdown=2)
 
     except Exception as exc:
         retry_count = self.request.retries
-        backoff = 2 ** retry_count
+        backoff = 2**retry_count
 
         if retry_count >= self.max_retries:
             dead_letter_task.apply_async(
@@ -284,11 +294,12 @@ def process_query_priority_task(self, job_id: str, query: str) -> Dict:
 
 # ─── Job Management ───────────────────────────────────────────
 
+
 def enqueue_batch_job(
     job_id: str,
     queries: list,
     priority: bool = False,
-) -> Dict:
+) -> dict:
     """Enqueue batch with optional priority routing."""
     if not queries:
         raise ValueError("queries list must not be empty")
@@ -316,7 +327,7 @@ def enqueue_batch_job(
     return {"job_id": job_id, "tasks": len(queries), "priority": priority}
 
 
-def get_job_status(job_id: str) -> Dict:
+def get_job_status(job_id: str) -> dict:
     data = redis_client.hgetall(f"job:{job_id}")
     if not data:
         return {"error": "job not found"}

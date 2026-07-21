@@ -14,19 +14,18 @@ dropped first. Supports:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
-from typing import Literal
 
 logger = logging.getLogger(__name__)
 
 
 class Priority(IntEnum):
-    SYSTEM = 100    # never evicted
-    FEW_SHOT = 80   # evict last among optional
+    SYSTEM = 100  # never evicted
+    FEW_SHOT = 80  # evict last among optional
     RETRIEVED = 60  # evict if over budget
-    HISTORY = 40    # evict oldest first
-    SCRATCH = 20    # ephemeral, first to go
+    HISTORY = 40  # evict oldest first
+    SCRATCH = 20  # ephemeral, first to go
 
 
 @dataclass
@@ -156,9 +155,7 @@ class ContextWindowManager:
             )
 
         # sort: lowest priority first, then oldest (FIFO within priority)
-        eviction_order = sorted(
-            self._slots, key=lambda s: (s.priority, -s.position)
-        )
+        eviction_order = sorted(self._slots, key=lambda s: (s.priority, -s.position))
 
         evictable = {Priority.SCRATCH, Priority.HISTORY, Priority.RETRIEVED, Priority.FEW_SHOT}
         evicted: list[ContextSlot] = []
@@ -174,7 +171,8 @@ class ContextWindowManager:
         if current_tokens > self._effective_budget:
             logger.warning(
                 "Could not fit within budget (%d > %d); system/few-shot slots are too large",
-                current_tokens, self._effective_budget,
+                current_tokens,
+                self._effective_budget,
             )
 
         evicted_keys = {s.key for s in evicted}
@@ -203,6 +201,7 @@ class ContextWindowManager:
         if self._tokenizer_name and self._tokenizer is None:
             try:
                 from transformers import AutoTokenizer
+
                 self._tokenizer = AutoTokenizer.from_pretrained(self._tokenizer_name)
             except Exception:
                 pass

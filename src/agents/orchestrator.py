@@ -5,20 +5,21 @@ Optional post-synthesis ``consensus_gate`` runs a cross-provider truth committee
 (two models + optional judge) on the same context as the synthesizer — a
 quality gate before the answer is returned.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import threading
-from typing import TYPE_CHECKING, Any, Dict, List, NotRequired, Optional, TypedDict
+from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
 
 from src.agents.protocols import Reranker, Retriever, Synthesizer
 from src.mlops.compat import mlflow
 
 if TYPE_CHECKING:
     from src.agents.multi_agent.consensus_orchestrator import ConsensusOrchestrator
-    from src.agents.multi_agent.cross_provider_consensus import CrossProviderConsensusNode
     from src.agents.multi_agent.cost_router import CostAwareRouter
+    from src.agents.multi_agent.cross_provider_consensus import CrossProviderConsensusNode
     from src.governance.constitution import ConstitutionalClassifier
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ _CONSENSUS_SYSTEM = (
 )
 
 
-def _format_context_chunks(chunks: List[Dict[str, Any]]) -> str:
+def _format_context_chunks(chunks: list[dict[str, Any]]) -> str:
     """Same structure as ``SynthesizerAgent._build_context`` for prompt alignment."""
     parts: list[str] = []
     for i, chunk in enumerate(chunks):
@@ -41,12 +42,12 @@ def _format_context_chunks(chunks: List[Dict[str, Any]]) -> str:
 
 class AgentState(TypedDict):
     query: str
-    retrieved_chunks: List[Dict[str, Any]]
-    reranked_chunks: List[Dict[str, Any]]
-    response: Dict[str, Any]
+    retrieved_chunks: list[dict[str, Any]]
+    reranked_chunks: list[dict[str, Any]]
+    response: dict[str, Any]
     error: str
     skip_rag: NotRequired[bool]
-    route_decision: NotRequired[Dict[str, Any]]
+    route_decision: NotRequired[dict[str, Any]]
 
 
 class Pipeline:
@@ -57,15 +58,15 @@ class Pipeline:
         retriever: Retriever,
         reranker: Reranker,
         synthesizer: Synthesizer,
-        truth_committee: Optional["CrossProviderConsensusNode"] = None,
-        constitutional_classifier: Optional["ConstitutionalClassifier"] = None,
+        truth_committee: CrossProviderConsensusNode | None = None,
+        constitutional_classifier: ConstitutionalClassifier | None = None,
         enable_attribution: bool = False,
         enable_behavioral_gate: bool = False,
         enable_policy_enforcement: bool = False,
-        adversarial_orchestrator: Optional["ConsensusOrchestrator"] = None,
+        adversarial_orchestrator: ConsensusOrchestrator | None = None,
         enable_paragraph_provenance: bool = False,
-        cost_router: Optional["CostAwareRouter"] = None,
-        synthesizer_tiers: Optional[Dict[str, Synthesizer]] = None,
+        cost_router: CostAwareRouter | None = None,
+        synthesizer_tiers: dict[str, Synthesizer] | None = None,
     ) -> None:
         self.retriever = retriever
         self.reranker = reranker
@@ -122,7 +123,9 @@ class Pipeline:
             return state
         try:
             reranked = self.reranker.rerank(state["query"], state["retrieved_chunks"])
-            from src.context_engineering.mandatory_attribution import enrich_chunks_with_attribution_ids
+            from src.context_engineering.mandatory_attribution import (
+                enrich_chunks_with_attribution_ids,
+            )
             from src.context_engineering.traceable_rag import enrich_chunks_provenance
 
             reranked = enrich_chunks_provenance(enrich_chunks_with_attribution_ids(reranked))
@@ -171,7 +174,7 @@ class Pipeline:
                 tier = route_decision.get("complexity_tier")
                 synthesizer = self.synthesizer_tiers.get(tier, self.synthesizer)
             feedback_suffix = ""
-            response: Dict[str, Any] = {}
+            response: dict[str, Any] = {}
             max_c = 3 if self.constitutional_classifier else 1
             for attempt in range(max_c):
                 response = synthesizer.synthesize(q + feedback_suffix, chunks)
@@ -197,11 +200,7 @@ class Pipeline:
             return {**state, "error": str(exc)}
 
     def _policy_enforcement(self, state: AgentState) -> AgentState:
-        if (
-            state.get("error")
-            or state.get("skip_rag")
-            or not self.enable_policy_enforcement
-        ):
+        if state.get("error") or state.get("skip_rag") or not self.enable_policy_enforcement:
             return state
         resp = state.get("response") or {}
         ans = (resp.get("answer") or "").strip()
@@ -224,11 +223,7 @@ class Pipeline:
         Dual-researcher + numeric verifier + skeptic (see ``ConsensusOrchestrator``).
         Replaces ``answer`` when enabled; skips on pipeline error or empty synthesis.
         """
-        if (
-            self.adversarial_orchestrator is None
-            or state.get("error")
-            or state.get("skip_rag")
-        ):
+        if self.adversarial_orchestrator is None or state.get("error") or state.get("skip_rag"):
             return state
         resp = state.get("response") or {}
         if not (resp.get("answer") or "").strip():
@@ -345,7 +340,7 @@ class Pipeline:
             new_resp["answer_with_provenance"] = append_paragraph_provenance(ans, chunks)
         return {**state, "response": new_resp}
 
-    def run(self, query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+    def run(self, query: str, session_id: str | None = None) -> dict[str, Any]:
         with mlflow.start_run(nested=mlflow.active_run() is not None):
             effective_query = query
             if session_id and os.getenv("RESEARCH_LOG_INJECT", "").lower() in (
@@ -411,9 +406,7 @@ class Pipeline:
                             self._policy_enforcement(
                                 self._synthesize(
                                     self._cost_route_gate(
-                                        self._rerank(
-                                            self._retrieve(self._behavioral_gate(initial))
-                                        )
+                                        self._rerank(self._retrieve(self._behavioral_gate(initial)))
                                     )
                                 )
                             )
@@ -430,7 +423,9 @@ class Pipeline:
                 if route_decision:
                     from src.agents.multi_agent.cost_router import estimate_cost_usd
 
-                    mlflow.log_param("cost_router_abstain", "1" if route_decision["abstain"] else "0")
+                    mlflow.log_param(
+                        "cost_router_abstain", "1" if route_decision["abstain"] else "0"
+                    )
                     if not route_decision["abstain"]:
                         mlflow.log_param("cost_router_tier", route_decision["complexity_tier"])
                         mlflow.log_param("cost_router_model", route_decision["model"])
@@ -538,7 +533,7 @@ def get_pipeline() -> Pipeline:
                 )
 
                 cost_router = None
-                synthesizer_tiers: Dict[str, Any] = {}
+                synthesizer_tiers: dict[str, Any] = {}
                 if os.getenv("ENABLE_COST_ROUTER", "").lower() in ("1", "true", "yes"):
                     try:
                         from src.agents.multi_agent.cost_router import (
@@ -550,8 +545,13 @@ def get_pipeline() -> Pipeline:
                         # One SynthesizerAgent per distinct model in the tier map, so
                         # "low"/"medium" sharing gpt-4o-mini don't spin up duplicate
                         # OpenAI clients.
-                        by_model = {model: SynthesizerAgent(model=model) for model in set(TIER_MODEL_MAP.values())}
-                        synthesizer_tiers = {tier: by_model[model] for tier, model in TIER_MODEL_MAP.items()}
+                        by_model = {
+                            model: SynthesizerAgent(model=model)
+                            for model in set(TIER_MODEL_MAP.values())
+                        }
+                        synthesizer_tiers = {
+                            tier: by_model[model] for tier, model in TIER_MODEL_MAP.items()
+                        }
                     except Exception as exc:
                         logger.warning("Cost router requested but init failed: %s", exc)
                         cost_router = None
@@ -573,6 +573,6 @@ def get_pipeline() -> Pipeline:
     return _default_pipeline
 
 
-def run_pipeline(query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
+def run_pipeline(query: str, session_id: str | None = None) -> dict[str, Any]:
     """Run RAG pipeline; optional ``session_id`` for research-log prompt injection."""
     return get_pipeline().run(query, session_id=session_id)

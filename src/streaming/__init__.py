@@ -1,10 +1,10 @@
 from src.streaming.realtime_features import (
-    StreamEvent,
-    DriftAlert,
-    PageHinkley,
     ADWIN,
-    WindowedAggregator,
+    DriftAlert,
     OnlineEmbeddingRefresher,
+    PageHinkley,
+    StreamEvent,
+    WindowedAggregator,
 )
 
 __all__ = [

@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: []
     environment: production
+    # Skip cleanly instead of failing red when no cloud credentials are configured yet.
+    if: secrets.AWS_ACCESS_KEY_ID != ''
 
     steps:
       - uses: actions/checkout@v4

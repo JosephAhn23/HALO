@@ -13,16 +13,13 @@ FastAPI route snippets at the bottom can be pasted into api/main.py.
 Requirements: torch, transformers, diffusers, pillow, faiss-cpu
 GPU recommended for LLaVA and Stable Diffusion inference.
 """
+
 from __future__ import annotations
 
-import base64
-import io
 import logging
-import os
 import pickle
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -34,6 +31,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class MultimodalConfig:
@@ -60,15 +58,16 @@ class MultimodalConfig:
 # CLIP Image Index
 # ---------------------------------------------------------------------------
 
+
 class CLIPImageIndex:
     """
     FAISS-backed image index using CLIP embeddings.
     Supports text-to-image and image-to-image retrieval, plus fused queries.
     """
 
-    def __init__(self, model_name: str = "openai/clip-vit-base-patch32", device: Optional[str] = None):
-        from transformers import CLIPModel, CLIPProcessor
+    def __init__(self, model_name: str = "openai/clip-vit-base-patch32", device: str | None = None):
         import faiss
+        from transformers import CLIPModel, CLIPProcessor
 
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         logger.info("Loading CLIP: %s", model_name)
@@ -78,45 +77,47 @@ class CLIPImageIndex:
 
         self.dim = 512  # CLIP ViT-B/32 embedding dim
         self.index = faiss.IndexFlatIP(self.dim)  # inner product = cosine on L2-normalised vecs
-        self.metadata: List[Dict] = []
+        self.metadata: list[dict] = []
 
     @torch.no_grad()
-    def _encode_images(self, images: List[Image.Image]) -> np.ndarray:
+    def _encode_images(self, images: list[Image.Image]) -> np.ndarray:
         inputs = self.processor(images=images, return_tensors="pt").to(self.device)
         feats = self.model.get_image_features(**inputs)
         feats = feats / feats.norm(dim=-1, keepdim=True)
         return feats.cpu().numpy().astype("float32")
 
     @torch.no_grad()
-    def _encode_text(self, texts: List[str]) -> np.ndarray:
-        inputs = self.processor(
-            text=texts, return_tensors="pt", padding=True, truncation=True
-        ).to(self.device)
+    def _encode_text(self, texts: list[str]) -> np.ndarray:
+        inputs = self.processor(text=texts, return_tensors="pt", padding=True, truncation=True).to(
+            self.device
+        )
         feats = self.model.get_text_features(**inputs)
         feats = feats / feats.norm(dim=-1, keepdim=True)
         return feats.cpu().numpy().astype("float32")
 
     def add_images(
         self,
-        image_paths: List[Union[str, Path]],
-        captions: Optional[List[str]] = None,
+        image_paths: list[str | Path],
+        captions: list[str] | None = None,
     ) -> None:
         """Index images from disk paths."""
         images = [Image.open(p).convert("RGB") for p in image_paths]
         embeddings = self._encode_images(images)
         self.index.add(embeddings)
         for i, path in enumerate(image_paths):
-            self.metadata.append({
-                "path": str(path),
-                "caption": captions[i] if captions else "",
-                "index": len(self.metadata),
-            })
+            self.metadata.append(
+                {
+                    "path": str(path),
+                    "caption": captions[i] if captions else "",
+                    "index": len(self.metadata),
+                }
+            )
         logger.info("Indexed %d images. Total: %d", len(image_paths), self.index.ntotal)
 
     def add_pil_images(
         self,
-        images: List[Image.Image],
-        metadata: Optional[List[Dict]] = None,
+        images: list[Image.Image],
+        metadata: list[dict] | None = None,
     ) -> None:
         """Index PIL images directly (no disk path required)."""
         if not images:
@@ -128,7 +129,7 @@ class CLIPImageIndex:
             self.metadata.append({"index": len(self.metadata), **meta})
         logger.info("Indexed %d PIL images (total: %d)", len(images), self.index.ntotal)
 
-    def search_by_text(self, query: str, top_k: int = 5) -> List[Dict]:
+    def search_by_text(self, query: str, top_k: int = 5) -> list[dict]:
         """Return top-k images matching a text query."""
         if self.index.ntotal == 0:
             return []
@@ -140,7 +141,7 @@ class CLIPImageIndex:
             if idx >= 0 and idx < len(self.metadata)
         ]
 
-    def search_by_image(self, image: Image.Image, top_k: int = 5) -> List[Dict]:
+    def search_by_image(self, image: Image.Image, top_k: int = 5) -> list[dict]:
         """Return top-k visually similar images."""
         if self.index.ntotal == 0:
             return []
@@ -155,10 +156,10 @@ class CLIPImageIndex:
     def search_multimodal(
         self,
         text: str,
-        image: Optional[Image.Image] = None,
+        image: Image.Image | None = None,
         top_k: int = 5,
         alpha: float = 0.5,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Fuse text and image query embeddings (weighted sum) for multimodal retrieval.
         alpha=1.0 → text only, alpha=0.0 → image only.
@@ -181,12 +182,14 @@ class CLIPImageIndex:
 
     def save(self, path: str) -> None:
         import faiss
+
         faiss.write_index(self.index, f"{path}.faiss")
         with open(f"{path}.meta.pkl", "wb") as f:
             pickle.dump(self.metadata, f)
 
     def load(self, path: str) -> None:
         import faiss
+
         self.index = faiss.read_index(f"{path}.faiss")
         with open(f"{path}.meta.pkl", "rb") as f:
             self.metadata = pickle.load(f)
@@ -196,12 +199,13 @@ class CLIPImageIndex:
 # Vision Language Model (LLaVA-1.5)
 # ---------------------------------------------------------------------------
 
+
 class VisionLanguageModel:
     """
     LLaVA-1.5 VQA and captioning. Lazy-loaded on first use.
     """
 
-    def __init__(self, model_name: str = "llava-hf/llava-1.5-7b-hf", device: Optional[str] = None):
+    def __init__(self, model_name: str = "llava-hf/llava-1.5-7b-hf", device: str | None = None):
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._model = None
@@ -210,7 +214,8 @@ class VisionLanguageModel:
     def _load(self) -> None:
         if self._model is not None:
             return
-        from transformers import LlavaForConditionalGeneration, AutoProcessor
+        from transformers import AutoProcessor, LlavaForConditionalGeneration
+
         logger.info("Loading VLM: %s (requires GPU for full performance)", self.model_name)
         self._processor = AutoProcessor.from_pretrained(self.model_name)
         self._model = LlavaForConditionalGeneration.from_pretrained(
@@ -225,9 +230,7 @@ class VisionLanguageModel:
         """Answer a question grounded in the provided image."""
         self._load()
         prompt = f"USER: <image>\n{question}\nASSISTANT:"
-        inputs = self._processor(
-            text=prompt, images=image, return_tensors="pt"
-        ).to(self.device)
+        inputs = self._processor(text=prompt, images=image, return_tensors="pt").to(self.device)
         output = self._model.generate(**inputs, max_new_tokens=max_new_tokens)
         decoded = self._processor.decode(output[0], skip_special_tokens=True)
         if "ASSISTANT:" in decoded:
@@ -244,6 +247,7 @@ class VisionLanguageModel:
 # RAG Image Generator (Stable Diffusion + retrieved captions)
 # ---------------------------------------------------------------------------
 
+
 class RAGImageGenerator:
     """
     RAG-enriched Stable Diffusion image generation. Lazy-loaded on first use.
@@ -256,7 +260,7 @@ class RAGImageGenerator:
     def __init__(
         self,
         model_name: str = "stabilityai/stable-diffusion-2-1",
-        device: Optional[str] = None,
+        device: str | None = None,
     ):
         self.model_name = model_name
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -265,22 +269,21 @@ class RAGImageGenerator:
     def _load(self) -> None:
         if self._pipe is not None:
             return
-        from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
+        from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
+
         logger.info("Loading Stable Diffusion: %s", self.model_name)
         self._pipe = StableDiffusionPipeline.from_pretrained(
             self.model_name,
             torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
         ).to(self.device)
-        self._pipe.scheduler = DPMSolverMultistepScheduler.from_config(
-            self._pipe.scheduler.config
-        )
+        self._pipe.scheduler = DPMSolverMultistepScheduler.from_config(self._pipe.scheduler.config)
         if self.device == "cpu":
             self._pipe.enable_attention_slicing()
 
     def generate(
         self,
         user_query: str,
-        retrieved_captions: Optional[List[str]] = None,
+        retrieved_captions: list[str] | None = None,
         negative_prompt: str = "blurry, low quality, distorted",
         num_inference_steps: int = 25,
         guidance_scale: float = 7.5,
@@ -310,6 +313,7 @@ class RAGImageGenerator:
 # Multimodal RAG Pipeline (orchestrator)
 # ---------------------------------------------------------------------------
 
+
 class MultimodalRAGPipeline:
     """
     Full multimodal pipeline:
@@ -323,11 +327,11 @@ class MultimodalRAGPipeline:
     VLM and diffusion model are lazy-loaded on first use.
     """
 
-    def __init__(self, config: Optional[MultimodalConfig] = None):
+    def __init__(self, config: MultimodalConfig | None = None):
         self.config = config or MultimodalConfig()
         self.clip_index = CLIPImageIndex(self.config.clip_model, device=self.config.device)
-        self._vlm: Optional[VisionLanguageModel] = None
-        self._generator: Optional[RAGImageGenerator] = None
+        self._vlm: VisionLanguageModel | None = None
+        self._generator: RAGImageGenerator | None = None
 
     @property
     def vlm(self) -> VisionLanguageModel:
@@ -345,13 +349,13 @@ class MultimodalRAGPipeline:
 
     def index(
         self,
-        image_paths: List[str],
-        captions: Optional[List[str]] = None,
+        image_paths: list[str],
+        captions: list[str] | None = None,
     ) -> None:
         """Index images from disk paths."""
         self.clip_index.add_images(image_paths, captions)
 
-    def visual_qa(self, query: str) -> Dict:
+    def visual_qa(self, query: str) -> dict:
         """
         Answer a text query using retrieved images as grounding context.
         Filters retrieved images by similarity_threshold.
@@ -370,7 +374,7 @@ class MultimodalRAGPipeline:
 
         return {"query": query, "retrieved_count": len(retrieved), "answers": answers}
 
-    def image_to_image_qa(self, image: Image.Image, question: str) -> Dict:
+    def image_to_image_qa(self, image: Image.Image, question: str) -> dict:
         """
         Answer a question about an uploaded image, enriched by retrieved similar images.
         """
@@ -415,9 +419,9 @@ class MultimodalRAGPipeline:
     def multimodal_query(
         self,
         text: str,
-        image: Optional[Image.Image] = None,
+        image: Image.Image | None = None,
         k: int = 5,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Fused text + image retrieval."""
         return self.clip_index.search_multimodal(text, image=image, top_k=k)
 
@@ -492,6 +496,7 @@ async def index_images(images: list[UploadFile] = File(...)):
 # Demo / smoke test
 # ---------------------------------------------------------------------------
 
+
 def demo() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     logger.info("Multimodal RAG Pipeline demo (CPU mode — CLIP only, no GPU required)")
@@ -501,8 +506,7 @@ def demo() -> None:
 
     # Synthetic demo images (solid colours)
     demo_images = [
-        Image.new("RGB", (224, 224), color=(int(i * 40) % 255, 100, 200 - i * 20))
-        for i in range(5)
+        Image.new("RGB", (224, 224), color=(int(i * 40) % 255, 100, 200 - i * 20)) for i in range(5)
     ]
     captions = [
         "a neural network architecture diagram",
@@ -524,7 +528,9 @@ def demo() -> None:
     for r in results2:
         logger.info("  [%.3f] %s", r["score"], r.get("caption", ""))
 
-    logger.info("Demo complete. VLM and Stable Diffusion load lazily on first use (GPU recommended).")
+    logger.info(
+        "Demo complete. VLM and Stable Diffusion load lazily on first use (GPU recommended)."
+    )
 
 
 if __name__ == "__main__":

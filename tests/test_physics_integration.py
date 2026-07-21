@@ -1,10 +1,9 @@
 """Physics simulation integration tests."""
 
-import pytest
 import torch
-import numpy as np
-from src.simulation import batch_simulate, QualityGates, track_to_mlflow
+
 from src.inference.cuda_dispatch.dispatcher import get_hardware_info
+from src.simulation import QualityGates, batch_simulate, track_to_mlflow
 
 
 class TestBatchSimulate:
@@ -16,9 +15,16 @@ class TestBatchSimulate:
             batch_size=5,
             num_steps=100,
             params={
-                "q": 1.0, "m": 0.938, "c": 299.792458, "anomaly": 1.793,
-                "edm_eta": 1e-3, "L": 0.5, "B0_initial": 1.0, "dtau": 1e-3,
-                "sensitivity_eps": 1e-6, "shape_sensitivity_eps": 1e-6,
+                "q": 1.0,
+                "m": 0.938,
+                "c": 299.792458,
+                "anomaly": 1.793,
+                "edm_eta": 1e-3,
+                "L": 0.5,
+                "B0_initial": 1.0,
+                "dtau": 1e-3,
+                "sensitivity_eps": 1e-6,
+                "shape_sensitivity_eps": 1e-6,
             },
         )
 
@@ -227,9 +233,16 @@ class TestEdgeCases:
             batch_size=1,
             num_steps=50,
             params={
-                "q": 1.0, "m": 0.938, "c": 299.792458, "anomaly": 1.793,
-                "edm_eta": 0.0, "L": 0.5, "B0_initial": 1.0, "dtau": 1e-3,
-                "sensitivity_eps": 1e-6, "shape_sensitivity_eps": 1e-6,
+                "q": 1.0,
+                "m": 0.938,
+                "c": 299.792458,
+                "anomaly": 1.793,
+                "edm_eta": 0.0,
+                "L": 0.5,
+                "B0_initial": 1.0,
+                "dtau": 1e-3,
+                "sensitivity_eps": 1e-6,
+                "shape_sensitivity_eps": 1e-6,
             },
         )
 

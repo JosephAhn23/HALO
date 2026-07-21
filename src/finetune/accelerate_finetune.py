@@ -2,6 +2,7 @@
 LoRA fine-tuning with HuggingFace Accelerate.
 Covers: Accelerate, mixed precision, multi-GPU, gradient accumulation
 """
+
 import json
 
 from accelerate import Accelerator
@@ -96,7 +97,9 @@ def run_accelerate_finetune(
         num_training_steps=total_steps,
     )
 
-    model, optimizer, dataloader, scheduler = accelerator.prepare(model, optimizer, dataloader, scheduler)
+    model, optimizer, dataloader, scheduler = accelerator.prepare(
+        model, optimizer, dataloader, scheduler
+    )
 
     model.train()
     global_step = 0

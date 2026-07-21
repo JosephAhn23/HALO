@@ -1,13 +1,14 @@
 """
 Tests for ingestion pipeline - chunking, embedding, quality filtering.
 """
+
+from unittest.mock import patch
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, patch
 
 from src.ingestion.data_quality import DataQualityFilter, Deduplicator
 from src.ingestion.pipeline import EmbeddingModel, chunk_text
-
 
 # ─── Chunking Tests ───────────────────────────────────────────
 

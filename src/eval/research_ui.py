@@ -22,6 +22,7 @@ Run (API must be up: ``uvicorn api.main:app --reload``)::
 Env (optional):
     RESEARCH_UI_API_BASE — default http://127.0.0.1:8000
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 try:
     import gradio as gr
@@ -43,21 +44,21 @@ def _api_base() -> str:
     return os.getenv("RESEARCH_UI_API_BASE", "http://127.0.0.1:8000").rstrip("/")
 
 
-def _headers(api_key: str) -> Dict[str, str]:
+def _headers(api_key: str) -> dict[str, str]:
     h = {"Content-Type": "application/json"}
     if (api_key or "").strip():
         h["X-API-Key"] = api_key.strip()
     return h
 
 
-def _post_json(url: str, payload: dict, headers: Dict[str, str]) -> dict:
+def _post_json(url: str, payload: dict, headers: dict[str, str]) -> dict:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     with urllib.request.urlopen(req, timeout=300) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _trust_proxy(chunk: Dict[str, Any]) -> float:
+def _trust_proxy(chunk: dict[str, Any]) -> float:
     """Heuristic 0–1 score (proxy for RAGAS faithfulness context relevance)."""
     for key in ("rerank_score", "retrieval_score", "score"):
         v = chunk.get(key)
@@ -69,22 +70,28 @@ def _trust_proxy(chunk: Dict[str, Any]) -> float:
     return 0.55
 
 
-def _format_sources_markdown(chunks: List[Dict[str, Any]]) -> str:
+def _format_sources_markdown(chunks: list[dict[str, Any]]) -> str:
     lines = [
         "| # | Trust (proxy) | Source | doc_id | ingested_at | Preview |",
         "|---:|---:|---|---|---|---|",
     ]
     for i, ch in enumerate(chunks):
-        prev = (ch.get("text") or ch.get("text_preview") or "")[:320].replace("|", "\\|").replace("\n", " ")
+        prev = (
+            (ch.get("text") or ch.get("text_preview") or "")[:320]
+            .replace("|", "\\|")
+            .replace("\n", " ")
+        )
         lines.append(
             f"| {i + 1} | {_trust_proxy(ch):.2f} | {ch.get('source', '')} | "
             f"{ch.get('doc_id', '—')} | {ch.get('ingested_at', '—')} | {prev} |"
         )
-    lines.append("\n*Trust scores are retrieval/rerank proxies unless RAGAS batch metrics are wired in.*")
+    lines.append(
+        "\n*Trust scores are retrieval/rerank proxies unless RAGAS batch metrics are wired in.*"
+    )
     return "\n".join(lines)
 
 
-def _thinking_from_chunks(query: str, chunks: List[Dict[str, Any]]) -> str:
+def _thinking_from_chunks(query: str, chunks: list[dict[str, Any]]) -> str:
     from src.context_engineering.chain_of_thought import ChainOfThoughtBuilder
 
     context_str = ""
@@ -94,12 +101,14 @@ def _thinking_from_chunks(query: str, chunks: List[Dict[str, Any]]) -> str:
     try:
         return ChainOfThoughtBuilder().build(query, context_str, strategy="scratchpad")
     except Exception as exc:
-        return f"[CoT fallback] {exc}\n\nQuery:\n{query[:2000]}\n\nContext chars: {len(context_str)}"
+        return (
+            f"[CoT fallback] {exc}\n\nQuery:\n{query[:2000]}\n\nContext chars: {len(context_str)}"
+        )
 
 
-def _consensus_rest(data: Dict[str, Any]) -> Tuple[str, str]:
+def _consensus_rest(data: dict[str, Any]) -> tuple[str, str]:
     """Returns (markdown_badge, detail_json)."""
-    detail: Dict[str, Any] = {"raw_keys": sorted(data.keys())}
+    detail: dict[str, Any] = {"raw_keys": sorted(data.keys())}
 
     if data.get("behavioral_blocked"):
         detail["behavioral_reasons"] = data.get("behavioral_reasons", [])
@@ -153,7 +162,7 @@ def run_transparent_rest(
     api_base: str,
     api_key: str,
     session_id: str,
-) -> Tuple[str, str, str, str, str, str]:
+) -> tuple[str, str, str, str, str, str]:
     """REST glass-box path."""
     query = (query or "").strip()
     if not query:
@@ -178,7 +187,7 @@ def run_transparent_rest(
     thinking = _thinking_from_chunks(query, chunks)
     sources_md = _format_sources_markdown(chunks)
 
-    payload: Dict[str, Any] = {"query": query}
+    payload: dict[str, Any] = {"query": query}
     if (session_id or "").strip():
         payload["session_id"] = session_id.strip()
 
@@ -214,7 +223,9 @@ def run_transparent_rest(
     )
 
 
-async def _ws_collect(base_http: str, query: str, api_key: str) -> Tuple[str, str, str, str, str, str]:
+async def _ws_collect(
+    base_http: str, query: str, api_key: str
+) -> tuple[str, str, str, str, str, str]:
     try:
         import websockets
     except ImportError:
@@ -238,7 +249,7 @@ async def _ws_collect(base_http: str, query: str, api_key: str) -> Tuple[str, st
     answer = ""
     err = ""
 
-    connect_kw: Dict[str, Any] = {"max_size": 16_000_000}
+    connect_kw: dict[str, Any] = {"max_size": 16_000_000}
     if extra_headers:
         # websockets >=11 prefers additional_headers; older uses extra_headers
         connect_kw["additional_headers"] = extra_headers
@@ -287,7 +298,9 @@ async def _ws_collect(base_http: str, query: str, api_key: str) -> Tuple[str, st
     return thinking_txt, sources_md, consensus_md, answer, sandbox_log, detail
 
 
-def run_websocket_stream(query: str, api_base: str, api_key: str) -> Tuple[str, str, str, str, str, str]:
+def run_websocket_stream(
+    query: str, api_base: str, api_key: str
+) -> tuple[str, str, str, str, str, str]:
     query = (query or "").strip()
     if not query:
         return (
@@ -331,7 +344,9 @@ def build_demo():
             label="Mode",
         )
 
-        query = gr.Textbox(label="Your question", lines=3, placeholder="Ask a grounded research question…")
+        query = gr.Textbox(
+            label="Your question", lines=3, placeholder="Ask a grounded research question…"
+        )
         submit = gr.Button("Run", variant="primary")
 
         with gr.Row():
@@ -384,7 +399,10 @@ def build_demo():
 
 def main() -> None:
     demo = build_demo()
-    demo.launch(server_name=os.getenv("RESEARCH_UI_HOST", "127.0.0.1"), server_port=int(os.getenv("RESEARCH_UI_PORT", "7861")))
+    demo.launch(
+        server_name=os.getenv("RESEARCH_UI_HOST", "127.0.0.1"),
+        server_port=int(os.getenv("RESEARCH_UI_PORT", "7861")),
+    )
 
 
 if __name__ == "__main__":

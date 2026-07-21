@@ -1,12 +1,12 @@
 """
 Shard-local retrieval service for distributed FAISS microservice topology.
 """
+
 from __future__ import annotations
 
 import json
 import os
 from pathlib import Path
-from typing import List
 
 import faiss
 import numpy as np
@@ -25,7 +25,7 @@ metadata = []
 
 
 class SearchRequest(BaseModel):
-    query_vector: List[float]
+    query_vector: list[float]
     top_k: int = 10
 
 

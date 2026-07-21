@@ -1,4 +1,5 @@
 """TDD reproduce-first loop (isolated temp project)."""
+
 from __future__ import annotations
 
 from pathlib import Path

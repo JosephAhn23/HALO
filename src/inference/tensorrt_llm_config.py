@@ -33,15 +33,16 @@ Usage:
     bench = NIMBenchmark(nim_backend=nim)
     bench.run(prompts=["..."] * 100)
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterator, List, Optional
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -51,21 +52,23 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # TensorRT-LLM configuration
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class TRTLLMConfig:
     """
     Full configuration for a TensorRT-LLM engine build.
     Maps directly to trtllm-build CLI arguments.
     """
+
     # Model identity
     model_name: str = "llama-3.1-8b"
-    model_type: str = "llama"           # llama | mistral | mixtral | falcon | gpt2 | gemma
-    hf_model_dir: str = ""              # path to HuggingFace checkpoint
+    model_type: str = "llama"  # llama | mistral | mixtral | falcon | gpt2 | gemma
+    hf_model_dir: str = ""  # path to HuggingFace checkpoint
     engine_output_dir: str = "engines/trtllm"
 
     # Precision & quantization
-    dtype: str = "float16"              # float16 | bfloat16 | float32
-    quant_mode: str = "none"            # none | int8_sq | int4_awq | int4_gptq | fp8
+    dtype: str = "float16"  # float16 | bfloat16 | float32
+    quant_mode: str = "none"  # none | int8_sq | int4_awq | int4_gptq | fp8
     # SmoothQuant (INT8)
     smoothquant_alpha: float = 0.5
     # AWQ / GPTQ (INT4)
@@ -73,9 +76,9 @@ class TRTLLMConfig:
     has_zero_point: bool = False
 
     # Parallelism
-    tp_size: int = 1                    # tensor parallel degree
-    pp_size: int = 1                    # pipeline parallel degree
-    world_size: int = 1                 # tp_size * pp_size
+    tp_size: int = 1  # tensor parallel degree
+    pp_size: int = 1  # pipeline parallel degree
+    world_size: int = 1  # tp_size * pp_size
 
     # Sequence lengths
     max_input_len: int = 2048
@@ -86,7 +89,7 @@ class TRTLLMConfig:
     # KV-cache
     paged_kv_cache: bool = True
     tokens_per_block: int = 128
-    max_num_tokens: int = 8192          # total tokens in flight (in-flight batching)
+    max_num_tokens: int = 8192  # total tokens in flight (in-flight batching)
 
     # In-flight batching
     enable_chunked_prefill: bool = True
@@ -96,13 +99,13 @@ class TRTLLMConfig:
     use_gpt_attention_plugin: str = "float16"
     use_gemm_plugin: str = "float16"
     use_rmsnorm_plugin: str = "float16"
-    enable_context_fmha: bool = True    # fused MHA for prefill
+    enable_context_fmha: bool = True  # fused MHA for prefill
 
     # Speculative decoding
     speculative_decoding_mode: str = "none"  # none | draft_tokens_external | medusa
     num_draft_tokens: int = 5
 
-    def to_build_args(self) -> List[str]:
+    def to_build_args(self) -> list[str]:
         """Convert config to trtllm-build CLI arguments."""
         args = [
             f"--model_dir={self.hf_model_dir}",
@@ -128,21 +131,25 @@ class TRTLLMConfig:
         if self.quant_mode == "int8_sq":
             args += [
                 "--use_smooth_quant",
-                f"--per_channel",
-                f"--per_token",
+                "--per_channel",
+                "--per_token",
                 f"--smoothquant_alpha={self.smoothquant_alpha}",
             ]
         elif self.quant_mode in ("int4_awq", "int4_gptq"):
             args += [
                 "--use_weight_only",
-                "--weight_only_precision=int4_awq" if self.quant_mode == "int4_awq" else "--weight_only_precision=int4",
+                (
+                    "--weight_only_precision=int4_awq"
+                    if self.quant_mode == "int4_awq"
+                    else "--weight_only_precision=int4"
+                ),
                 f"--group_size={self.group_size}",
             ]
         elif self.quant_mode == "fp8":
             args.append("--strongly_typed")
         return args
 
-    def to_triton_config(self) -> Dict:
+    def to_triton_config(self) -> dict:
         """Generate Triton model repository config for this engine."""
         return {
             "name": self.model_name,
@@ -171,7 +178,9 @@ class TRTLLMConfig:
                 "engine_dir": {"string_value": f"{self.engine_output_dir}/{self.model_name}"},
                 "max_tokens_in_paged_kvcache": {"string_value": str(self.max_num_tokens)},
                 "kv_cache_free_gpu_mem_fraction": {"string_value": "0.9"},
-                "executor_worker_path": {"string_value": "/opt/tritonserver/backends/tensorrtllm/trtllmExecutorWorker"},
+                "executor_worker_path": {
+                    "string_value": "/opt/tritonserver/backends/tensorrtllm/trtllmExecutorWorker"
+                },
                 "batching_strategy": {"string_value": "inflight_fused_batching"},
                 "decoupled_mode": {"string_value": "true"},
             },
@@ -206,7 +215,8 @@ class TRTLLMEngineBuilder:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         cmd = [
-            "python", f"examples/{self.config.model_type}/convert_checkpoint.py",
+            "python",
+            f"examples/{self.config.model_type}/convert_checkpoint.py",
             f"--model_dir={self.config.hf_model_dir}",
             f"--output_dir={output_dir}",
             f"--dtype={self.config.dtype}",
@@ -215,10 +225,13 @@ class TRTLLMEngineBuilder:
         ]
 
         if self.config.quant_mode == "int4_awq":
-            cmd += ["--use_weight_only", "--weight_only_precision=int4_awq",
-                    f"--group_size={self.config.group_size}"]
+            cmd += [
+                "--use_weight_only",
+                "--weight_only_precision=int4_awq",
+                f"--group_size={self.config.group_size}",
+            ]
         elif self.config.quant_mode == "int8_sq":
-            cmd += ["--smoothquant", f"--per_channel", "--per_token"]
+            cmd += ["--smoothquant", "--per_channel", "--per_token"]
 
         logger.info("Converting checkpoint: %s", " ".join(cmd))
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -228,7 +241,7 @@ class TRTLLMEngineBuilder:
         logger.info("Checkpoint converted to: %s", output_dir)
         return str(output_dir)
 
-    def build(self, checkpoint_dir: Optional[str] = None) -> str:
+    def build(self, checkpoint_dir: str | None = None) -> str:
         """
         Build TRT-LLM engine from checkpoint.
         Returns path to the built engine directory.
@@ -262,30 +275,33 @@ class TRTLLMEngineBuilder:
         triton_cfg = self.config.to_triton_config()
         config_path = engine_dir / "config.pbtxt"
 
-        lines = [f'name: "{triton_cfg["name"]}"', f'backend: "{triton_cfg["backend"]}"',
-                 f'max_batch_size: {triton_cfg["max_batch_size"]}']
+        lines = [
+            f'name: "{triton_cfg["name"]}"',
+            f'backend: "{triton_cfg["backend"]}"',
+            f'max_batch_size: {triton_cfg["max_batch_size"]}',
+        ]
         for key, val in triton_cfg.get("parameters", {}).items():
-            lines.append(f'parameters {{ key: "{key}" value {{ string_value: "{val["string_value"]}" }} }}')
+            lines.append(
+                f'parameters {{ key: "{key}" value {{ string_value: "{val["string_value"]}" }} }}'
+            )
 
         config_path.write_text("\n".join(lines))
         logger.info("Triton config written: %s", config_path)
 
         # Also write JSON for inspection
-        (engine_dir / "build_config.json").write_text(
-            json.dumps(triton_cfg, indent=2)
-        )
+        (engine_dir / "build_config.json").write_text(json.dumps(triton_cfg, indent=2))
 
-    def validate(self, engine_dir: str, prompt: str = "What is RAG?") -> Dict:
+    def validate(self, engine_dir: str, prompt: str = "What is RAG?") -> dict:
         """Run a test inference to validate the built engine."""
         try:
-            import tensorrt_llm
             from tensorrt_llm.runtime import ModelRunner
 
             runner = ModelRunner.from_dir(engine_dir, rank=0)
             import torch
+
             input_ids = torch.tensor([[1, 2, 3, 4, 5]], dtype=torch.int32)  # placeholder
             t0 = time.perf_counter()
-            outputs = runner.generate(input_ids, max_new_tokens=50)
+            runner.generate(input_ids, max_new_tokens=50)
             latency_ms = (time.perf_counter() - t0) * 1000
             logger.info("Engine validation passed. Latency: %.1f ms", latency_ms)
             return {"status": "ok", "latency_ms": latency_ms}
@@ -301,6 +317,7 @@ class TRTLLMEngineBuilder:
 # NVIDIA NIM backend adapter
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class NIMConfig:
     """
@@ -308,6 +325,7 @@ class NIMConfig:
     NIM exposes an OpenAI-compatible API — swap base_url to point at
     a self-hosted NIM container or the NVIDIA cloud API.
     """
+
     # NVIDIA cloud API
     api_key: str = field(default_factory=lambda: os.getenv("NVIDIA_API_KEY", ""))
     base_url: str = "https://integrate.api.nvidia.com/v1"
@@ -323,7 +341,7 @@ class NIMConfig:
 
     # Embeddings
     embedding_model: str = "nvidia/nv-embedqa-e5-v5"
-    embedding_truncate: str = "END"     # NONE | START | END
+    embedding_truncate: str = "END"  # NONE | START | END
 
     # Timeout / retry
     timeout: float = 60.0
@@ -341,7 +359,7 @@ class NIMBackend:
         synthesizer = SynthesizerAgent(llm_backend=NIMBackend(NIMConfig()))
     """
 
-    def __init__(self, config: Optional[NIMConfig] = None):
+    def __init__(self, config: NIMConfig | None = None):
         self.config = config or NIMConfig()
         self._client = None
 
@@ -349,25 +367,27 @@ class NIMBackend:
         if self._client is None:
             try:
                 from openai import OpenAI
+
                 self._client = OpenAI(
                     api_key=self.config.api_key,
                     base_url=self.config.base_url,
                     timeout=self.config.timeout,
                     max_retries=self.config.max_retries,
                 )
-                logger.info("NIM client connected: %s → %s",
-                            self.config.base_url, self.config.model)
+                logger.info(
+                    "NIM client connected: %s → %s", self.config.base_url, self.config.model
+                )
             except ImportError:
                 raise ImportError("openai>=1.0 required: pip install openai")
         return self._client
 
     def chat(
         self,
-        messages: List[Dict],
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
-        stream: Optional[bool] = None,
+        messages: list[dict],
+        model: str | None = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+        stream: bool | None = None,
     ) -> str:
         """
         Send a chat completion request to NIM.
@@ -386,7 +406,7 @@ class NIMBackend:
             return response  # caller iterates chunks
         return response.choices[0].message.content
 
-    def stream_chat(self, messages: List[Dict], **kwargs) -> Iterator[str]:
+    def stream_chat(self, messages: list[dict], **kwargs) -> Iterator[str]:
         """Yield token strings from a streaming NIM response."""
         for chunk in self.chat(messages, stream=True, **kwargs):
             if chunk.choices[0].delta.content:
@@ -394,10 +414,10 @@ class NIMBackend:
 
     def embed(
         self,
-        texts: List[str],
-        model: Optional[str] = None,
-        input_type: str = "query",   # "query" | "passage"
-    ) -> List[List[float]]:
+        texts: list[str],
+        model: str | None = None,
+        input_type: str = "query",  # "query" | "passage"
+    ) -> list[list[float]]:
         """
         Get embeddings from NIM's embedding endpoint.
         Uses nvidia/nv-embedqa-e5-v5 by default (optimised for RAG).
@@ -414,16 +434,16 @@ class NIMBackend:
         )
         return [item.embedding for item in response.data]
 
-    def list_models(self) -> List[str]:
+    def list_models(self) -> list[str]:
         """List available NIM models."""
         client = self._get_client()
         return [m.id for m in client.models.list().data]
 
-    def health_check(self) -> Dict:
+    def health_check(self) -> dict:
         """Verify NIM endpoint is reachable and responding."""
         try:
             t0 = time.perf_counter()
-            response = self.chat(
+            self.chat(
                 [{"role": "user", "content": "ping"}],
                 max_tokens=5,
             )
@@ -436,6 +456,7 @@ class NIMBackend:
 # ──────────────────────────────────────────────────────────────────────────────
 # NIM benchmarking
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 @dataclass
 class NIMBenchResult:
@@ -469,7 +490,7 @@ class NIMBenchmark:
 
     def run(
         self,
-        prompts: Optional[List[str]] = None,
+        prompts: list[str] | None = None,
         n_requests: int = 50,
         max_tokens: int = 100,
     ) -> NIMBenchResult:
@@ -483,10 +504,12 @@ class NIMBenchmark:
             ] * (n_requests // 3 + 1)
 
         prompts = prompts[:n_requests]
-        latencies: List[float] = []
+        latencies: list[float] = []
         errors = 0
 
-        logger.info("Running NIM benchmark: %d requests, model=%s", n_requests, self.nim.config.model)
+        logger.info(
+            "Running NIM benchmark: %d requests, model=%s", n_requests, self.nim.config.model
+        )
         t_total_start = time.perf_counter()
 
         for i, prompt in enumerate(prompts):
@@ -540,8 +563,9 @@ if __name__ == "__main__":
     build_p.add_argument("--model-dir", required=True)
     build_p.add_argument("--output-dir", default="engines/trtllm")
     build_p.add_argument("--dtype", default="float16")
-    build_p.add_argument("--quant", default="none",
-                         choices=["none", "int8_sq", "int4_awq", "int4_gptq", "fp8"])
+    build_p.add_argument(
+        "--quant", default="none", choices=["none", "int8_sq", "int4_awq", "int4_gptq", "fp8"]
+    )
     build_p.add_argument("--tp-size", type=int, default=1)
 
     # NIM health check

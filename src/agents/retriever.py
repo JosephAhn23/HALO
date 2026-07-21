@@ -1,6 +1,7 @@
 """
 Retriever Agent - semantic search over FAISS index.
 """
+
 from __future__ import annotations
 
 import json
@@ -8,11 +9,11 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
-from src.ingestion.pipeline import EMBED_MODEL, INDEX_PATH, META_PATH, EmbeddingModel
+from src.ingestion.pipeline import INDEX_PATH, META_PATH, EmbeddingModel
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class RetrievedChunk:
     text: str
     source: str
     retrieval_score: float
-    rerank_score: Optional[float] = None
+    rerank_score: float | None = None
 
 
 class RetrieverAgent:
@@ -37,7 +38,7 @@ class RetrieverAgent:
         self.use_distributed = False
         self.distributed_index = None
         self.index = None
-        self.metadata: List[Dict[str, Any]] = []
+        self.metadata: list[dict[str, Any]] = []
 
         if self.use_microservice_distributed:
             return
@@ -65,25 +66,21 @@ class RetrieverAgent:
                 self.metadata = json.load(f)
             logger.info("Loaded local FAISS index with %d vectors", self.index.ntotal)
 
-    def _aggregator_search(self, query_vec: list[float]) -> List[Dict[str, Any]]:
+    def _aggregator_search(self, query_vec: list[float]) -> list[dict[str, Any]]:
         payload = {"query_vector": query_vec, "top_k": self.top_k}
         last_exc: Exception | None = None
         for attempt in range(1, MAX_RETRIES + 1):
             try:
-                resp = httpx.post(
-                    f"{self.aggregator_url}/search", json=payload, timeout=15.0
-                )
+                resp = httpx.post(f"{self.aggregator_url}/search", json=payload, timeout=15.0)
                 resp.raise_for_status()
                 return resp.json().get("results", [])
             except (httpx.TransportError, httpx.HTTPStatusError) as exc:
                 last_exc = exc
-                logger.warning(
-                    "Aggregator attempt %d/%d failed: %s", attempt, MAX_RETRIES, exc
-                )
+                logger.warning("Aggregator attempt %d/%d failed: %s", attempt, MAX_RETRIES, exc)
                 time.sleep(RETRY_BACKOFF_S * attempt)
         raise RuntimeError(f"Aggregator unreachable after {MAX_RETRIES} retries") from last_exc
 
-    def retrieve(self, query: str) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str) -> list[dict[str, Any]]:
         query_vec = self.embedder.embed([query])
 
         if self.use_microservice_distributed:
@@ -95,7 +92,7 @@ class RetrieverAgent:
         assert self.index is not None, "No FAISS index loaded"
         scores, indices = self.index.search(query_vec, self.top_k)
 
-        results: List[Dict[str, Any]] = []
+        results: list[dict[str, Any]] = []
         for score, idx in zip(scores[0], indices[0]):
             if idx == -1 or idx >= len(self.metadata):
                 continue

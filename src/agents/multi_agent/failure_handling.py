@@ -18,15 +18,16 @@ Interview talking point:
    to returning unverified output with a confidence penalty, rather than
    timing out the user request."
 """
+
 from __future__ import annotations
 
 import logging
-import math
 import random
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Optional, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +57,13 @@ class CircuitBreaker:
     If the probe succeeds, closes the circuit. If it fails, re-opens.
     """
 
-    def __init__(self, name: str, config: Optional[CircuitBreakerConfig] = None):
+    def __init__(self, name: str, config: CircuitBreakerConfig | None = None):
         self.name = name
         self.config = config or CircuitBreakerConfig()
         self._state = CircuitState.CLOSED
         self._failure_count = 0
         self._success_count = 0
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
         self._half_open_calls = 0
 
     @property
@@ -110,9 +111,7 @@ class CircuitBreaker:
             logger.warning("Circuit '%s' -> OPEN (probe failed)", self.name)
         elif self._failure_count >= self.config.failure_threshold:
             self._state = CircuitState.OPEN
-            logger.warning(
-                "Circuit '%s' -> OPEN (%d failures)", self.name, self._failure_count
-            )
+            logger.warning("Circuit '%s' -> OPEN (%d failures)", self.name, self._failure_count)
 
     def status(self) -> dict:
         return {
@@ -120,8 +119,7 @@ class CircuitBreaker:
             "state": self.state.value,
             "failure_count": self._failure_count,
             "last_failure_ago_s": (
-                round(time.time() - self._last_failure_time, 1)
-                if self._last_failure_time else None
+                round(time.time() - self._last_failure_time, 1) if self._last_failure_time else None
             ),
         }
 
@@ -144,11 +142,11 @@ class RetryPolicy:
     simultaneously. Adding random jitter spreads the load.
     """
 
-    def __init__(self, config: Optional[RetryConfig] = None):
+    def __init__(self, config: RetryConfig | None = None):
         self.config = config or RetryConfig()
 
     def execute(self, fn: Callable[[], T], context: str = "") -> T:
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(1, self.config.max_attempts + 1):
             try:
@@ -162,15 +160,20 @@ class RetryPolicy:
                     break
 
                 delay = min(
-                    self.config.base_delay_seconds * (self.config.exponential_base ** (attempt - 1)),
+                    self.config.base_delay_seconds
+                    * (self.config.exponential_base ** (attempt - 1)),
                     self.config.max_delay_seconds,
                 )
                 if self.config.jitter:
-                    delay *= (0.5 + random.random() * 0.5)
+                    delay *= 0.5 + random.random() * 0.5
 
                 logger.warning(
                     "Attempt %d/%d failed for '%s': %s. Retrying in %.2fs.",
-                    attempt, self.config.max_attempts, context, e, delay,
+                    attempt,
+                    self.config.max_attempts,
+                    context,
+                    e,
+                    delay,
                 )
                 time.sleep(delay)
 
@@ -185,7 +188,7 @@ class RetryPolicy:
             self.config.max_delay_seconds,
         )
         if self.config.jitter:
-            delay *= (0.5 + random.random() * 0.5)
+            delay *= 0.5 + random.random() * 0.5
         return delay
 
 
@@ -197,9 +200,9 @@ class TimeoutGuard:
 
     def __init__(self, timeout_seconds: float):
         self.timeout_seconds = timeout_seconds
-        self._start: Optional[float] = None
+        self._start: float | None = None
 
-    def __enter__(self) -> "TimeoutGuard":
+    def __enter__(self) -> TimeoutGuard:
         self._start = time.perf_counter()
         return self
 
@@ -211,9 +214,7 @@ class TimeoutGuard:
             return
         elapsed = time.perf_counter() - self._start
         if elapsed > self.timeout_seconds:
-            raise TimeoutError(
-                f"Agent exceeded deadline: {elapsed:.2f}s > {self.timeout_seconds}s"
-            )
+            raise TimeoutError(f"Agent exceeded deadline: {elapsed:.2f}s > {self.timeout_seconds}s")
 
     def remaining(self) -> float:
         if self._start is None:
@@ -252,7 +253,9 @@ class GracefulDegradation:
                 if i > 0:
                     logger.warning(
                         "Degraded to fallback '%s' (level %d, confidence penalty %.0f%%)",
-                        name, i, i * 15,
+                        name,
+                        i,
+                        i * 15,
                     )
                 return result, name, max(confidence_multiplier, 0.1)
             except Exception as e:

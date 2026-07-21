@@ -11,11 +11,11 @@ Dimensions evaluated:
 Returns structured critique with improvement suggestions that the
 ResearchAgent uses in the next iteration.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Dict, List, Optional
 
 from src.agents.multi_agent.base_agent import (
     AgentResult,
@@ -36,8 +36,16 @@ CRITIQUE_DIMENSIONS = [
 ]
 
 UNCERTAINTY_PHRASES = [
-    "may", "might", "generally", "typically", "often", "can vary",
-    "depends", "in some cases", "it is possible", "evidence suggests",
+    "may",
+    "might",
+    "generally",
+    "typically",
+    "often",
+    "can vary",
+    "depends",
+    "in some cases",
+    "it is possible",
+    "evidence suggests",
 ]
 
 CONTRADICTION_PATTERNS = [
@@ -69,7 +77,7 @@ class CriticAgent(BaseAgent):
         self,
         name: str = "critic",
         quality_threshold: float = 0.75,
-        tools: Optional[ToolRegistry] = None,
+        tools: ToolRegistry | None = None,
         timeout_seconds: float = 10.0,
     ):
         super().__init__(name, tools, timeout_seconds)
@@ -90,10 +98,7 @@ class CriticAgent(BaseAgent):
             )
 
         scores = self._evaluate_all(answer, query, retrieved_context)
-        overall = sum(
-            scores[dim] * self.DIMENSION_WEIGHTS[dim]
-            for dim in CRITIQUE_DIMENSIONS
-        )
+        overall = sum(scores[dim] * self.DIMENSION_WEIGHTS[dim] for dim in CRITIQUE_DIMENSIONS)
         issues = self._identify_issues(scores, answer)
         suggestions = self._generate_suggestions(issues, query)
 
@@ -102,7 +107,9 @@ class CriticAgent(BaseAgent):
 
         self.logger.info(
             "Critique: task=%s score=%.3f needs_revision=%s",
-            task.task_id, overall, needs_revision,
+            task.task_id,
+            overall,
+            needs_revision,
         )
 
         return AgentResult(
@@ -125,8 +132,8 @@ class CriticAgent(BaseAgent):
         self,
         answer: str,
         query: str,
-        context: List[Dict],
-    ) -> Dict[str, float]:
+        context: list[dict],
+    ) -> dict[str, float]:
         return {
             "factual_grounding": self._score_factual_grounding(answer, context),
             "completeness": self._score_completeness(answer, query),
@@ -135,7 +142,7 @@ class CriticAgent(BaseAgent):
             "source_coverage": self._score_source_coverage(answer, context),
         }
 
-    def _score_factual_grounding(self, answer: str, context: List[Dict]) -> float:
+    def _score_factual_grounding(self, answer: str, context: list[dict]) -> float:
         if not context:
             return 0.3
         answer_words = set(answer.lower().split())
@@ -169,12 +176,12 @@ class CriticAgent(BaseAgent):
         hits = sum(1 for p in UNCERTAINTY_PHRASES if p in answer_lower)
         return min(0.5 + hits * 0.1, 1.0)
 
-    def _score_source_coverage(self, answer: str, context: List[Dict]) -> float:
+    def _score_source_coverage(self, answer: str, context: list[dict]) -> float:
         if not context:
             return 0.3
         return min(len(context) / 3, 1.0)
 
-    def _identify_issues(self, scores: Dict[str, float], answer: str) -> List[str]:
+    def _identify_issues(self, scores: dict[str, float], answer: str) -> list[str]:
         issues = []
         if scores["factual_grounding"] < 0.5:
             issues.append("Low factual grounding: answer not well-supported by retrieved context.")
@@ -188,7 +195,7 @@ class CriticAgent(BaseAgent):
             issues.append("Answer is too brief (< 30 words).")
         return issues
 
-    def _generate_suggestions(self, issues: List[str], query: str) -> List[str]:
+    def _generate_suggestions(self, issues: list[str], query: str) -> list[str]:
         suggestions = []
         for issue in issues:
             if "factual grounding" in issue:
@@ -205,10 +212,10 @@ class CriticAgent(BaseAgent):
 
     def _format_critique(
         self,
-        scores: Dict[str, float],
+        scores: dict[str, float],
         overall: float,
-        issues: List[str],
-        suggestions: List[str],
+        issues: list[str],
+        suggestions: list[str],
     ) -> str:
         lines = [f"Overall score: {overall:.3f}"]
         for dim in CRITIQUE_DIMENSIONS:

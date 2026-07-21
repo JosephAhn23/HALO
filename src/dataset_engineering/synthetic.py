@@ -34,19 +34,16 @@ Context: {context}
 
 Output JSON array:
 [{{"question": "...", "answer": "...", "type": "factoid"}}]""",
-
     "multi_hop": """Generate {n} multi-hop questions requiring reasoning across multiple sentences.
 Context: {context}
 
 Output JSON array:
 [{{"question": "...", "answer": "...", "type": "multi_hop", "reasoning": "..."}}]""",
-
     "abstractive": """Generate {n} questions requiring abstractive summarisation of the context.
 Context: {context}
 
 Output JSON array:
 [{{"question": "...", "answer": "...", "type": "abstractive"}}]""",
-
     "negative": """Generate {n} plausible but UNANSWERABLE questions based on the context.
 The question should be related to the topic but not answerable from the text.
 Context: {context}
@@ -86,15 +83,18 @@ class SyntheticDataset:
 
     def to_dataframe(self):
         import pandas as pd
-        return pd.DataFrame([
-            {
-                "question": s.question,
-                "answer": s.answer,
-                "question_type": s.question_type,
-                "difficulty": s.difficulty,
-            }
-            for s in self.samples
-        ])
+
+        return pd.DataFrame(
+            [
+                {
+                    "question": s.question,
+                    "answer": s.answer,
+                    "question_type": s.question_type,
+                    "difficulty": s.difficulty,
+                }
+                for s in self.samples
+            ]
+        )
 
 
 class SyntheticQAGenerator:
@@ -144,6 +144,7 @@ class SyntheticQAGenerator:
     ):
         """Convert generated records to a DatasetVersion."""
         import pandas as pd
+
         from src.dataset_engineering.versioning import DatasetLineage, DatasetVersion
 
         df = pd.DataFrame(records)
@@ -187,9 +188,7 @@ class SyntheticQAGenerator:
     # Internal
     # ------------------------------------------------------------------
 
-    def _generate_for_chunk(
-        self, chunk: str, chunk_idx: int, n_per_type: int
-    ) -> list[dict]:
+    def _generate_for_chunk(self, chunk: str, chunk_idx: int, n_per_type: int) -> list[dict]:
         records = []
         context = chunk[: self.config.max_context_chars]
 
@@ -198,14 +197,16 @@ class SyntheticQAGenerator:
             raw = self._call_llm(prompt)
             parsed = self._parse_response(raw)
             for item in parsed:
-                records.append({
-                    "question": item.get("question", ""),
-                    "answer": item.get("answer", ""),
-                    "context": context,
-                    "type": q_type,
-                    "chunk_idx": chunk_idx,
-                    "reasoning": item.get("reasoning", ""),
-                })
+                records.append(
+                    {
+                        "question": item.get("question", ""),
+                        "answer": item.get("answer", ""),
+                        "context": context,
+                        "type": q_type,
+                        "chunk_idx": chunk_idx,
+                        "reasoning": item.get("reasoning", ""),
+                    }
+                )
         return records
 
     def _call_llm(self, prompt: str) -> str:
@@ -224,10 +225,12 @@ class SyntheticQAGenerator:
                 )
                 return response.choices[0].message.content
             except Exception as e:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 logger.warning(
                     "LLM call failed (attempt %d): %s. Retrying in %ds",
-                    attempt + 1, e, wait,
+                    attempt + 1,
+                    e,
+                    wait,
                 )
                 time.sleep(wait)
         raise RuntimeError(f"LLM call failed after {self.config.max_retries} retries")
@@ -265,6 +268,7 @@ class SyntheticQAGenerator:
         if self._client is None:
             try:
                 from openai import OpenAI
+
                 kwargs = {}
                 if self.config.openai_api_key:
                     kwargs["api_key"] = self.config.openai_api_key

@@ -19,25 +19,24 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 # Basic PII patterns
 _PII_PATTERNS = {
-    "email":       re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
-    "phone":       re.compile(r"\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
-    "ssn":         re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+    "phone": re.compile(r"\b(\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+    "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     "credit_card": re.compile(r"\b(?:\d{4}[-\s]?){3}\d{4}\b"),
-    "ip_address":  re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"),
+    "ip_address": re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b"),
 }
 
 
 @dataclass
 class QualityIssue:
     check: str
-    severity: str   # "error" | "warning" | "info"
+    severity: str  # "error" | "warning" | "info"
     message: str
     affected_rows: list[int] = field(default_factory=list)
     count: int = 0
@@ -130,7 +129,8 @@ class QualityChecker:
         if has_errors:
             logger.warning(
                 "Quality check FAILED for %s: %d errors",
-                dataset_name, len(report.errors),
+                dataset_name,
+                len(report.errors),
             )
         else:
             logger.info("Quality check passed for %s", dataset_name)
@@ -166,7 +166,9 @@ class QualityChecker:
         if drifted:
             logger.warning(
                 "Distribution drift detected in '%s': KS=%.4f p=%.4f",
-                text_col, ks_stat, p_value,
+                text_col,
+                ks_stat,
+                p_value,
             )
         return result
 
@@ -178,20 +180,24 @@ class QualityChecker:
         issues = []
         missing = [c for c in self.required_cols if c not in df.columns]
         if missing:
-            issues.append(QualityIssue(
-                check="schema",
-                severity="error",
-                message=f"Missing required columns: {missing}",
-            ))
+            issues.append(
+                QualityIssue(
+                    check="schema",
+                    severity="error",
+                    message=f"Missing required columns: {missing}",
+                )
+            )
         return issues
 
     def _check_min_rows(self, df: pd.DataFrame) -> list[QualityIssue]:
         if len(df) < self.min_rows:
-            return [QualityIssue(
-                check="min_rows",
-                severity="error",
-                message=f"Only {len(df)} rows (minimum: {self.min_rows})",
-            )]
+            return [
+                QualityIssue(
+                    check="min_rows",
+                    severity="error",
+                    message=f"Only {len(df)} rows (minimum: {self.min_rows})",
+                )
+            ]
         return []
 
     def _check_nulls(self, df: pd.DataFrame) -> list[QualityIssue]:
@@ -200,19 +206,23 @@ class QualityChecker:
             null_count = int(df[col].isnull().sum())
             null_pct = null_count / len(df)
             if null_pct > self.max_null_pct:
-                issues.append(QualityIssue(
-                    check="nulls",
-                    severity="error",
-                    message=f"Column '{col}': {null_pct:.1%} null (max: {self.max_null_pct:.1%})",
-                    count=null_count,
-                ))
+                issues.append(
+                    QualityIssue(
+                        check="nulls",
+                        severity="error",
+                        message=f"Column '{col}': {null_pct:.1%} null (max: {self.max_null_pct:.1%})",
+                        count=null_count,
+                    )
+                )
             elif null_count > 0:
-                issues.append(QualityIssue(
-                    check="nulls",
-                    severity="warning",
-                    message=f"Column '{col}': {null_count} null values",
-                    count=null_count,
-                ))
+                issues.append(
+                    QualityIssue(
+                        check="nulls",
+                        severity="warning",
+                        message=f"Column '{col}': {null_count} null values",
+                        count=null_count,
+                    )
+                )
         return issues
 
     def _check_text_length(self, df: pd.DataFrame) -> list[QualityIssue]:
@@ -223,16 +233,18 @@ class QualityChecker:
             too_short = lengths < self.min_text_len
             if too_short.any():
                 rows = lengths[too_short].index.tolist()
-                issues.append(QualityIssue(
-                    check="text_length",
-                    severity="warning",
-                    message=(
-                        f"Column '{col}': {too_short.sum()} values "
-                        f"shorter than {self.min_text_len} chars"
-                    ),
-                    affected_rows=rows[:20],
-                    count=int(too_short.sum()),
-                ))
+                issues.append(
+                    QualityIssue(
+                        check="text_length",
+                        severity="warning",
+                        message=(
+                            f"Column '{col}': {too_short.sum()} values "
+                            f"shorter than {self.min_text_len} chars"
+                        ),
+                        affected_rows=rows[:20],
+                        count=int(too_short.sum()),
+                    )
+                )
         return issues
 
     def _check_duplicates(self, df: pd.DataFrame) -> list[QualityIssue]:
@@ -241,19 +253,23 @@ class QualityChecker:
         dup_pct = dup_count / len(df)
 
         if dup_pct > self.max_dup_pct:
-            issues.append(QualityIssue(
-                check="duplicates",
-                severity="error",
-                message=f"{dup_pct:.1%} exact duplicates (max: {self.max_dup_pct:.1%})",
-                count=dup_count,
-            ))
+            issues.append(
+                QualityIssue(
+                    check="duplicates",
+                    severity="error",
+                    message=f"{dup_pct:.1%} exact duplicates (max: {self.max_dup_pct:.1%})",
+                    count=dup_count,
+                )
+            )
         elif dup_count > 0:
-            issues.append(QualityIssue(
-                check="duplicates",
-                severity="warning",
-                message=f"{dup_count} exact duplicate rows found",
-                count=dup_count,
-            ))
+            issues.append(
+                QualityIssue(
+                    check="duplicates",
+                    severity="warning",
+                    message=f"{dup_count} exact duplicate rows found",
+                    count=dup_count,
+                )
+            )
         return issues
 
     def _check_pii(self, df: pd.DataFrame) -> list[QualityIssue]:
@@ -264,10 +280,12 @@ class QualityChecker:
                 matches = df[col].dropna().str.contains(pattern, regex=True)
                 count = int(matches.sum())
                 if count > 0:
-                    issues.append(QualityIssue(
-                        check="pii",
-                        severity="warning",
-                        message=f"Column '{col}': {count} rows may contain {pii_type}",
-                        count=count,
-                    ))
+                    issues.append(
+                        QualityIssue(
+                            check="pii",
+                            severity="warning",
+                            message=f"Column '{col}': {count} rows may contain {pii_type}",
+                            count=count,
+                        )
+                    )
         return issues

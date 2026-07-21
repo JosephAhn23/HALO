@@ -1,10 +1,10 @@
 """Policy enforcement: drop unsupported sentences."""
 
+from src.agents.multi_agent.base_agent import AgentStatus, AgentTask
 from src.agents.multi_agent.policy_enforcement_agent import (
     PolicyEnforcementAgent,
     enforce_grounded_answer,
 )
-from src.agents.multi_agent.base_agent import AgentStatus, AgentTask
 
 
 def test_enforce_keeps_cited_sentence() -> None:

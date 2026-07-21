@@ -1,12 +1,13 @@
 """
 Synthesizer Agent - LLM response generation with citation tracking.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +42,7 @@ class SynthesizerAgent:
 
                 vllm_model = os.getenv("VLLM_MODEL", "meta-llama/Llama-3-8B-Instruct")
                 self.vllm_llm = LLM(model=vllm_model)
-                self.vllm_sampling = SamplingParams(
-                    temperature=0.2, max_tokens=self.max_tokens
-                )
+                self.vllm_sampling = SamplingParams(temperature=0.2, max_tokens=self.max_tokens)
                 self._ready = True
                 logger.info("Synthesizer using vLLM backend: %s", vllm_model)
                 return
@@ -59,13 +58,13 @@ class SynthesizerAgent:
         except Exception as exc:
             logger.warning("OpenAI client unavailable: %s", exc)
 
-    def _build_context(self, context_chunks: List[Dict[str, Any]]) -> str:
+    def _build_context(self, context_chunks: list[dict[str, Any]]) -> str:
         parts: list[str] = []
         for i, chunk in enumerate(context_chunks):
             parts.append(f"[source_{i + 1}] (from {chunk['source']}):\n{chunk['text']}")
         return "\n\n".join(parts)
 
-    def synthesize(self, query: str, context_chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def synthesize(self, query: str, context_chunks: list[dict[str, Any]]) -> dict[str, Any]:
         context_str = self._build_context(context_chunks)
 
         if not self._ready:
@@ -83,8 +82,8 @@ class SynthesizerAgent:
         return self._synthesize_openai(query, context_str, context_chunks)
 
     def _synthesize_vllm(
-        self, query: str, context_str: str, context_chunks: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, query: str, context_str: str, context_chunks: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         prompt = (
             f"{SYSTEM_PROMPT}\n\nContext:\n{context_str}\n\n"
             f"Question: {query}\nAnswer with citations."
@@ -103,8 +102,8 @@ class SynthesizerAgent:
         }
 
     def _synthesize_openai(
-        self, query: str, context_str: str, context_chunks: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, query: str, context_str: str, context_chunks: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Context:\n{context_str}\n\nQuestion: {query}"},

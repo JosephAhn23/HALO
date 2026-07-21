@@ -26,14 +26,15 @@ Usage:
     # Compile a specific model and save
     python inference/torch_compile_bench.py --compile-only --model reranker
 """
+
 from __future__ import annotations
 
 import argparse
 import logging
 import time
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -48,6 +49,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="torch")
 # Result dataclass
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CompileBenchResult:
     model_name: str
@@ -60,7 +62,7 @@ class CompileBenchResult:
     compiled_ms: float
     compile_time_s: float
     speedup: float = field(init=False)
-    first_run_ms: float = 0.0   # includes compilation warm-up
+    first_run_ms: float = 0.0  # includes compilation warm-up
 
     def __post_init__(self):
         self.speedup = self.eager_ms / self.compiled_ms if self.compiled_ms > 0 else 0.0
@@ -78,24 +80,33 @@ class CompileBenchResult:
 # Model factories (lightweight stand-ins for the real pipeline models)
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class EmbeddingModel(nn.Module):
     """
     Lightweight sentence-embedding model (mirrors all-MiniLM-L6-v2 architecture).
     Used in the FAISS retrieval pipeline.
     """
-    def __init__(self, vocab_size: int = 30522, hidden: int = 384, layers: int = 6, heads: int = 12):
+
+    def __init__(
+        self, vocab_size: int = 30522, hidden: int = 384, layers: int = 6, heads: int = 12
+    ):
         super().__init__()
         self.embed = nn.Embedding(vocab_size, hidden)
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden, nhead=heads, dim_feedforward=hidden * 4,
-            dropout=0.0, batch_first=True,
+            d_model=hidden,
+            nhead=heads,
+            dim_feedforward=hidden * 4,
+            dropout=0.0,
+            batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=layers)
         self.pool = nn.Linear(hidden, hidden)
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None):
         x = self.embed(input_ids)
-        x = self.encoder(x, src_key_padding_mask=(attention_mask == 0) if attention_mask is not None else None)
+        x = self.encoder(
+            x, src_key_padding_mask=(attention_mask == 0) if attention_mask is not None else None
+        )
         # Mean pooling
         if attention_mask is not None:
             mask = attention_mask.unsqueeze(-1).float()
@@ -110,17 +121,23 @@ class CrossEncoderModel(nn.Module):
     Cross-encoder reranker (mirrors ms-marco-MiniLM architecture).
     Scores query-document pairs for the reranking stage.
     """
-    def __init__(self, vocab_size: int = 30522, hidden: int = 384, layers: int = 6, heads: int = 12):
+
+    def __init__(
+        self, vocab_size: int = 30522, hidden: int = 384, layers: int = 6, heads: int = 12
+    ):
         super().__init__()
         self.embed = nn.Embedding(vocab_size, hidden)
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden, nhead=heads, dim_feedforward=hidden * 4,
-            dropout=0.0, batch_first=True,
+            d_model=hidden,
+            nhead=heads,
+            dim_feedforward=hidden * 4,
+            dropout=0.0,
+            batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=layers)
         self.classifier = nn.Linear(hidden, 1)
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None):
+    def forward(self, input_ids: torch.Tensor, attention_mask: torch.Tensor | None = None):
         x = self.embed(input_ids)
         x = self.encoder(x)
         return self.classifier(x[:, 0, :]).squeeze(-1)
@@ -131,12 +148,16 @@ class RewardModel(nn.Module):
     Reward model for RLHF scoring (mirrors deberta-v3-large reward model).
     Scores response quality for PPO training.
     """
+
     def __init__(self, vocab_size: int = 50265, hidden: int = 512, layers: int = 4, heads: int = 8):
         super().__init__()
         self.embed = nn.Embedding(vocab_size, hidden)
         encoder_layer = nn.TransformerEncoderLayer(
-            d_model=hidden, nhead=heads, dim_feedforward=hidden * 4,
-            dropout=0.0, batch_first=True,
+            d_model=hidden,
+            nhead=heads,
+            dim_feedforward=hidden * 4,
+            dropout=0.0,
+            batch_first=True,
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=layers)
         self.head = nn.Linear(hidden, 1)
@@ -147,7 +168,7 @@ class RewardModel(nn.Module):
         return self.head(x[:, 0, :]).squeeze(-1)
 
 
-MODEL_REGISTRY: Dict[str, Callable] = {
+MODEL_REGISTRY: dict[str, Callable] = {
     "embedding": EmbeddingModel,
     "reranker": CrossEncoderModel,
     "reward": RewardModel,
@@ -158,13 +179,14 @@ MODEL_REGISTRY: Dict[str, Callable] = {
 # Benchmarking engine
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def _timed_run(
     model: nn.Module,
-    inputs: Tuple,
+    inputs: tuple,
     runs: int = 50,
     warmup: int = 5,
     device: str = "cpu",
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """
     Returns (first_run_ms, mean_ms_after_warmup).
     First run captures compilation + execution time.
@@ -204,9 +226,9 @@ def benchmark_model(
     batch_size: int = 8,
     seq_len: int = 128,
     runs: int = 50,
-    backends: Optional[List[str]] = None,
-    modes: Optional[List[str]] = None,
-) -> List[CompileBenchResult]:
+    backends: list[str] | None = None,
+    modes: list[str] | None = None,
+) -> list[CompileBenchResult]:
     """
     Benchmark eager vs torch.compile() for a single model class.
     Returns a list of CompileBenchResult, one per (backend, mode) combination.
@@ -216,7 +238,7 @@ def benchmark_model(
     if modes is None:
         modes = ["default", "reduce-overhead"]
 
-    results: List[CompileBenchResult] = []
+    results: list[CompileBenchResult] = []
 
     # Build inputs
     model = model_class().to(device)
@@ -239,7 +261,7 @@ def benchmark_model(
             model_fresh = model_class().to(device)
             model_fresh.load_state_dict(model.state_dict())
 
-            compile_kwargs: Dict = {"backend": backend, "fullgraph": False}
+            compile_kwargs: dict = {"backend": backend, "fullgraph": False}
             if backend == "inductor":
                 compile_kwargs["mode"] = mode
 
@@ -275,9 +297,10 @@ def benchmark_model(
 # AoT export helpers
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def export_aot(
     model: nn.Module,
-    example_inputs: Tuple,
+    example_inputs: tuple,
     output_path: str,
     dynamic_shapes: bool = True,
 ) -> str:
@@ -328,7 +351,10 @@ def load_aot(path: str) -> torch.export.ExportedProgram:
 # MLflow logging
 # ──────────────────────────────────────────────────────────────────────────────
 
-def log_results_to_mlflow(results: List[CompileBenchResult], experiment: str = "torch-compile-bench"):
+
+def log_results_to_mlflow(
+    results: list[CompileBenchResult], experiment: str = "torch-compile-bench"
+):
     try:
         import mlflow
 
@@ -336,12 +362,14 @@ def log_results_to_mlflow(results: List[CompileBenchResult], experiment: str = "
         with mlflow.start_run(run_name="compile-benchmark"):
             for r in results:
                 prefix = f"{r.model_name}.{r.backend}.{r.mode}"
-                mlflow.log_metrics({
-                    f"{prefix}.eager_ms": r.eager_ms,
-                    f"{prefix}.compiled_ms": r.compiled_ms,
-                    f"{prefix}.speedup": r.speedup,
-                    f"{prefix}.compile_time_s": r.compile_time_s,
-                })
+                mlflow.log_metrics(
+                    {
+                        f"{prefix}.eager_ms": r.eager_ms,
+                        f"{prefix}.compiled_ms": r.compiled_ms,
+                        f"{prefix}.speedup": r.speedup,
+                        f"{prefix}.compile_time_s": r.compile_time_s,
+                    }
+                )
         logger.info("Results logged to MLflow experiment: %s", experiment)
     except Exception as e:
         logger.warning("MLflow logging failed: %s", e)
@@ -350,6 +378,7 @@ def log_results_to_mlflow(results: List[CompileBenchResult], experiment: str = "
 # ──────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser(description="torch.compile benchmarking suite")
@@ -375,7 +404,9 @@ def main():
         default=["default", "reduce-overhead"],
         choices=["default", "reduce-overhead", "max-autotune"],
     )
-    parser.add_argument("--export-aot", action="store_true", help="Export best model with torch.export")
+    parser.add_argument(
+        "--export-aot", action="store_true", help="Export best model with torch.export"
+    )
     parser.add_argument("--mlflow", action="store_true", help="Log results to MLflow")
     parser.add_argument("--compile-only", action="store_true", help="Compile without benchmarking")
     args = parser.parse_args()
@@ -385,7 +416,7 @@ def main():
         args.device = "cpu"
 
     model_names = list(MODEL_REGISTRY.keys()) if args.model == "all" else [args.model]
-    all_results: List[CompileBenchResult] = []
+    all_results: list[CompileBenchResult] = []
 
     for name in model_names:
         results = benchmark_model(
@@ -402,19 +433,25 @@ def main():
 
     # Summary table
     print("\n" + "=" * 120)
-    print(f"{'Model':<20} {'Backend':<12} {'Mode':<18} {'Device':<6} {'BS':>4} {'Seq':>4} "
-          f"{'Eager ms':>10} {'Compiled ms':>12} {'Speedup':>9} {'Compile s':>10}")
+    print(
+        f"{'Model':<20} {'Backend':<12} {'Mode':<18} {'Device':<6} {'BS':>4} {'Seq':>4} "
+        f"{'Eager ms':>10} {'Compiled ms':>12} {'Speedup':>9} {'Compile s':>10}"
+    )
     print("-" * 120)
     for r in all_results:
-        print(f"{r.model_name:<20} {r.backend:<12} {r.mode:<18} {r.device:<6} "
-              f"{r.batch_size:>4} {r.seq_len:>4} "
-              f"{r.eager_ms:>10.2f} {r.compiled_ms:>12.2f} "
-              f"{r.speedup:>8.2f}x {r.compile_time_s:>10.1f}s")
+        print(
+            f"{r.model_name:<20} {r.backend:<12} {r.mode:<18} {r.device:<6} "
+            f"{r.batch_size:>4} {r.seq_len:>4} "
+            f"{r.eager_ms:>10.2f} {r.compiled_ms:>12.2f} "
+            f"{r.speedup:>8.2f}x {r.compile_time_s:>10.1f}s"
+        )
     print("=" * 120)
 
     if all_results:
         best = max(all_results, key=lambda r: r.speedup)
-        print(f"\nBest speedup: {best.speedup:.2f}x  ({best.model_name} / {best.backend} / {best.mode})")
+        print(
+            f"\nBest speedup: {best.speedup:.2f}x  ({best.model_name} / {best.backend} / {best.mode})"
+        )
 
     if args.export_aot and all_results:
         model_name = model_names[0]

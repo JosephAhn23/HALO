@@ -9,13 +9,14 @@ See also :mod:`governance.model_card_generator` and :mod:`governance.constitutio
 for documentation-grade artifacts; this module is optimized for **latency** on
 every HTTP request.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.safety.behavioral_classifier import STANDARD_REFUSAL, classify_prompt_heuristic
 
@@ -23,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 # Model-card inspired: refuse encoded / exfiltration-style payloads at the edge
 _OVERSIZED_BYTES = int(os.getenv("GATEWAY_MAX_QUERY_BYTES", "12000"))
-_SUSPICIOUS_ENCODED = re.compile(r"(?:\\x[0-9a-fA-F]{2}){8,}|%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}")
+_SUSPICIOUS_ENCODED = re.compile(
+    r"(?:\\x[0-9a-fA-F]{2}){8,}|%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}%[0-9a-fA-F]{2}"
+)
 
 
 @dataclass
@@ -72,7 +75,7 @@ def audit_gateway_decision(
     allowed: bool,
     reason: str,
     actor: str = "api_gateway",
-    extra: Optional[Dict[str, Any]] = None,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     """Append to SHA-256 audit chain when ``AUDIT_LOG_PATH`` is set."""
     path = os.getenv("AUDIT_LOG_PATH", "").strip()

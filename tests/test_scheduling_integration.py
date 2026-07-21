@@ -1,8 +1,10 @@
 """Fleet scheduling integration tests."""
 
-import pytest
 import json
 from pathlib import Path
+
+import pytest
+
 from src.scheduling import FleetReconciler, parse_fleet_config
 from src.scheduling.metrics import SchedulingMetrics
 
@@ -18,7 +20,9 @@ class TestFleetReconciler:
     @pytest.fixture
     def sample_config(self):
         """Load sample fleet config."""
-        dynamo_dir = Path(__file__).parent.parent / "dynamo-8b56404-systems-infrastructure-and-operations"
+        dynamo_dir = (
+            Path(__file__).parent.parent / "dynamo-8b56404-systems-infrastructure-and-operations"
+        )
         fleet_path = dynamo_dir / "task/environment/data/fleet.json"
 
         if not fleet_path.exists():
@@ -61,9 +65,7 @@ class TestFleetReconciler:
 
     def test_parse_fleet_config(self):
         """Test fleet config builder."""
-        workers = [
-            {"id": "w1", "cpu": 4, "memory": 8, "labels": ["compute"], "blackouts": []}
-        ]
+        workers = [{"id": "w1", "cpu": 4, "memory": 8, "labels": ["compute"], "blackouts": []}]
         jobs = [
             {
                 "id": "job1",

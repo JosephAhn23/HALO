@@ -9,14 +9,15 @@ Workflow for agents:
 
 This module only orchestrates subprocess ``pytest``; the agent supplies paths and edits.
 """
+
 from __future__ import annotations
 
 import logging
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +44,17 @@ class TDDPhaseResult:
 @dataclass
 class TDDDebugLoopResult:
     red: TDDPhaseResult
-    green: Optional[TDDPhaseResult] = None
-    regression: Optional[TDDPhaseResult] = None
+    green: TDDPhaseResult | None = None
+    regression: TDDPhaseResult | None = None
     success: bool = False
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 def run_pytest(
     targets: Sequence[str],
     cwd: Path,
     *,
-    extra_args: Optional[Sequence[str]] = None,
+    extra_args: Sequence[str] | None = None,
     timeout_s: float = 300.0,
 ) -> PytestOutcome:
     """Run pytest as a module (same interpreter)."""
@@ -83,7 +84,9 @@ class TDDDebugLoop:
         self.project_root = Path(project_root).resolve()
         self.full_suite_path = full_suite_path
 
-    def ensure_red(self, test_target: str, *, extra_args: Optional[Sequence[str]] = None) -> TDDPhaseResult:
+    def ensure_red(
+        self, test_target: str, *, extra_args: Sequence[str] | None = None
+    ) -> TDDPhaseResult:
         """Require at least one failing test (typical pytest exit code 1)."""
         out = run_pytest([test_target], self.project_root, extra_args=extra_args)
         # pytest: 0 = all passed, 1 = failures, 5 = no tests collected
@@ -98,11 +101,15 @@ class TDDDebugLoop:
             msg = "RED phase OK: pytest reported test failures (repro active)."
         else:
             ok = False
-            msg = f"RED phase inconclusive: pytest exit {out.exit_code}. stderr={out.stderr[:300]!r}"
+            msg = (
+                f"RED phase inconclusive: pytest exit {out.exit_code}. stderr={out.stderr[:300]!r}"
+            )
         logger.info("TDD red phase exit=%s ok=%s", out.exit_code, ok)
         return TDDPhaseResult("red", ok, out, msg)
 
-    def ensure_green(self, test_target: str, *, extra_args: Optional[Sequence[str]] = None) -> TDDPhaseResult:
+    def ensure_green(
+        self, test_target: str, *, extra_args: Sequence[str] | None = None
+    ) -> TDDPhaseResult:
         """After fix, repro tests must pass."""
         out = run_pytest([test_target], self.project_root, extra_args=extra_args)
         ok = out.exit_code == 0
@@ -113,7 +120,7 @@ class TDDDebugLoop:
     def run_full_regression(
         self,
         *,
-        extra_args: Optional[Sequence[str]] = None,
+        extra_args: Sequence[str] | None = None,
     ) -> TDDPhaseResult:
         """Run full suite (default ``tests/``)."""
         target = self.full_suite_path
@@ -129,14 +136,14 @@ class TDDDebugLoop:
         self,
         repro_test_target: str,
         *,
-        extra_args: Optional[Sequence[str]] = None,
+        extra_args: Sequence[str] | None = None,
         skip_red_check: bool = False,
     ) -> TDDDebugLoopResult:
         """
         Run green + full regression. Call ``ensure_red`` yourself first unless
         ``skip_red_check=True`` (e.g. red already verified in a prior step).
         """
-        errors: List[str] = []
+        errors: list[str] = []
         red = TDDPhaseResult("red", True, PytestOutcome(0, "", ""), "skipped")
         if not skip_red_check:
             red = self.ensure_red(repro_test_target, extra_args=extra_args)
@@ -152,8 +159,14 @@ class TDDDebugLoop:
         reg = self.run_full_regression(extra_args=extra_args)
         if not reg.ok:
             errors.append(reg.message)
-            return TDDDebugLoopResult(red=red, green=green, regression=reg, success=False, errors=errors)
+            return TDDDebugLoopResult(
+                red=red, green=green, regression=reg, success=False, errors=errors
+            )
 
         return TDDDebugLoopResult(
-            red=red, green=green, regression=reg, success=True, errors=[],
+            red=red,
+            green=green,
+            regression=reg,
+            success=True,
+            errors=[],
         )

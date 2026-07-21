@@ -17,7 +17,9 @@ def test_parse_score_and_violations():
 
 def test_classifier_uses_openai_mock():
     mock_resp = MagicMock()
-    mock_resp.choices = [MagicMock(message=MagicMock(content="SCORE: 95\nVIOLATIONS: NONE\nRATIONALE: ok."))]
+    mock_resp.choices = [
+        MagicMock(message=MagicMock(content="SCORE: 95\nVIOLATIONS: NONE\nRATIONALE: ok."))
+    ]
 
     with patch("openai.OpenAI") as m_client:
         m_client.return_value.chat.completions.create.return_value = mock_resp

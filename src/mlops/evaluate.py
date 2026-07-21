@@ -2,15 +2,14 @@
 RAGAS evaluation pipeline for RAG quality measurement.
 Covers: MLOps, evaluation pipelines
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import time
-from typing import Dict, List
 
 import numpy as np
-
 from datasets import Dataset
 from ragas import evaluate
 from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
@@ -24,7 +23,7 @@ _REQUIRED_COLUMNS = {"question", "answer", "contexts"}
 _MAX_RETRIES = 3
 
 
-def evaluate_pipeline(test_cases: List[Dict]) -> Dict:
+def evaluate_pipeline(test_cases: list[dict]) -> dict:
     """
     Run RAGAS evaluation and log scores to MLflow.
 
@@ -52,13 +51,11 @@ def evaluate_pipeline(test_cases: List[Dict]) -> Dict:
             last_exc = exc
             logger.warning("RAGAS evaluate attempt %d/%d failed: %s", attempt, _MAX_RETRIES, exc)
             if attempt < _MAX_RETRIES:
-                time.sleep(2 ** attempt)
+                time.sleep(2**attempt)
     else:
-        raise RuntimeError(
-            f"RAGAS evaluation failed after {_MAX_RETRIES} retries"
-        ) from last_exc
+        raise RuntimeError(f"RAGAS evaluation failed after {_MAX_RETRIES} retries") from last_exc
 
-    raw_scores: Dict[str, float] = {
+    raw_scores: dict[str, float] = {
         k: float(v)
         for k, v in results.to_pandas().mean().items()
         if isinstance(v, (float, np.floating))

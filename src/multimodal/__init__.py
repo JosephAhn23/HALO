@@ -1,6 +1,6 @@
 from src.multimodal.multimodal_pipeline import (
-    MultimodalConfig,
     CLIPImageIndex,
+    MultimodalConfig,
     MultimodalRAGPipeline,
 )
 

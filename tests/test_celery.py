@@ -1,6 +1,7 @@
 """
 Tests for Celery tasks - retry logic, DLQ, job tracking.
 """
+
 import importlib
 import json
 from unittest.mock import MagicMock, patch
@@ -25,9 +26,11 @@ class TestProcessQueryTask:
         }
 
         batch_mod = importlib.import_module("src.api.batch")
-        with patch.object(batch_mod, "run_pipeline", return_value=mock_result), patch.object(
-            batch_mod, "redis_client"
-        ) as mock_redis, patch.object(batch_mod, "_get_cw", return_value=MagicMock()):
+        with (
+            patch.object(batch_mod, "run_pipeline", return_value=mock_result),
+            patch.object(batch_mod, "redis_client") as mock_redis,
+            patch.object(batch_mod, "_get_cw", return_value=MagicMock()),
+        ):
             process_query_task = batch_mod.process_query_task
 
             result = process_query_task.__wrapped__("job-123", "test query")
@@ -36,9 +39,12 @@ class TestProcessQueryTask:
 
     def test_failed_task_retries_with_backoff(self):
         batch_mod = importlib.import_module("src.api.batch")
-        with patch.object(batch_mod, "run_pipeline", side_effect=Exception("connection error")), patch.object(
-            batch_mod, "redis_client"
-        ), patch.object(batch_mod, "_get_cw", return_value=MagicMock()), patch.object(batch_mod, "dead_letter_task"):
+        with (
+            patch.object(batch_mod, "run_pipeline", side_effect=Exception("connection error")),
+            patch.object(batch_mod, "redis_client"),
+            patch.object(batch_mod, "_get_cw", return_value=MagicMock()),
+            patch.object(batch_mod, "dead_letter_task"),
+        ):
             process_query_task = batch_mod.process_query_task
             from celery.exceptions import Retry
 
@@ -56,15 +62,16 @@ class TestProcessQueryTask:
     def test_exponential_backoff_progression(self):
         expected_backoffs = [1, 2, 4]
         for attempt in range(3):
-            assert 2 ** attempt == expected_backoffs[attempt]
+            assert 2**attempt == expected_backoffs[attempt]
 
 
 class TestJobTracking:
     def test_enqueue_sets_initial_status(self):
         batch_mod = importlib.import_module("src.api.batch")
-        with patch.object(batch_mod, "process_query_task") as mock_task, patch.object(
-            batch_mod, "redis_client"
-        ) as mock_redis:
+        with (
+            patch.object(batch_mod, "process_query_task") as mock_task,
+            patch.object(batch_mod, "redis_client") as mock_redis,
+        ):
             mock_task.apply_async.return_value = MagicMock(id="task-123")
             result = batch_mod.enqueue_batch_job("job-001", ["q1", "q2", "q3"])
 
@@ -97,8 +104,13 @@ class TestJobTracking:
 class TestDeadLetterQueue:
     def test_dlq_stores_failed_task(self):
         batch_mod = importlib.import_module("src.api.batch")
-        with patch.object(batch_mod, "redis_client") as mock_redis, patch.object(batch_mod, "_get_cw", return_value=MagicMock()):
-            batch_mod.dead_letter_task.__wrapped__("job-fail", "bad query", "connection timeout", "task-xyz")
+        with (
+            patch.object(batch_mod, "redis_client") as mock_redis,
+            patch.object(batch_mod, "_get_cw", return_value=MagicMock()),
+        ):
+            batch_mod.dead_letter_task.__wrapped__(
+                "job-fail", "bad query", "connection timeout", "task-xyz"
+            )
 
             mock_redis.lpush.assert_called_once()
             call_args = mock_redis.lpush.call_args[0]

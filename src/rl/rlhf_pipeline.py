@@ -10,12 +10,12 @@ Architecture:
   3. RewardModel                       — HuggingFace sequence-classifier reward scorer
   4. RLHFTrainer                       — full PPO training loop with MLflow tracking
 """
+
 from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass, field
-from typing import List, Optional
+from dataclasses import dataclass
 
 import torch
 from datasets import Dataset, load_dataset
@@ -35,6 +35,7 @@ logger = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class RLHFConfig:
     # Model
@@ -50,7 +51,7 @@ class RLHFConfig:
     max_steps: int = 200
     clip_range: float = 0.2
     vf_coef: float = 0.1
-    kl_penalty: str = "kl"      # 'kl' | 'abs' | 'mse' | 'full'
+    kl_penalty: str = "kl"  # 'kl' | 'abs' | 'mse' | 'full'
     target_kl: float = 6.0
     init_kl_coef: float = 0.2
 
@@ -72,6 +73,7 @@ class RLHFConfig:
 # ---------------------------------------------------------------------------
 # Reward Model Wrapper
 # ---------------------------------------------------------------------------
+
 
 class RewardModel:
     """
@@ -103,7 +105,7 @@ class RewardModel:
         # Most reward models output a single logit (higher = better)
         return logits[0, 0].item()
 
-    def batch_score(self, queries: List[str], responses: List[str]) -> List[float]:
+    def batch_score(self, queries: list[str], responses: list[str]) -> list[float]:
         return [self.score(q, r) for q, r in zip(queries, responses)]
 
 
@@ -111,7 +113,8 @@ class RewardModel:
 # Dataset helpers
 # ---------------------------------------------------------------------------
 
-def build_ppo_dataset(tokenizer, prompts: List[str], max_length: int = 256) -> Dataset:
+
+def build_ppo_dataset(tokenizer, prompts: list[str], max_length: int = 256) -> Dataset:
     """Tokenize prompts for PPO training."""
 
     def tokenize(sample):
@@ -125,7 +128,7 @@ def build_ppo_dataset(tokenizer, prompts: List[str], max_length: int = 256) -> D
     return dataset
 
 
-def load_prompts_from_hf(dataset_name: str, n: int = 1000) -> List[str]:
+def load_prompts_from_hf(dataset_name: str, n: int = 1000) -> list[str]:
     """Load and extract prompts from a HuggingFace preference dataset."""
     try:
         ds = load_dataset(dataset_name, split="train")
@@ -154,6 +157,7 @@ def load_prompts_from_hf(dataset_name: str, n: int = 1000) -> List[str]:
 # Trainer
 # ---------------------------------------------------------------------------
 
+
 class RLHFTrainer:
     """Full RLHF-PPO training loop using TRL with a frozen reference model."""
 
@@ -171,6 +175,7 @@ class RLHFTrainer:
         self._trl_available = self._check_trl()
         if self._trl_available:
             from trl import AutoModelForCausalLMWithValueHead, create_reference_model
+
             self.model = AutoModelForCausalLMWithValueHead.from_pretrained(
                 config.base_model, torch_dtype=torch.float32
             )
@@ -200,7 +205,8 @@ class RLHFTrainer:
 
     def _check_trl(self) -> bool:
         try:
-            from trl import PPOConfig, PPOTrainer, AutoModelForCausalLMWithValueHead  # noqa: F401
+            from trl import AutoModelForCausalLMWithValueHead, PPOConfig, PPOTrainer  # noqa: F401
+
             return True
         except ImportError:
             return False
@@ -231,7 +237,7 @@ class RLHFTrainer:
         )
 
     # ------------------------------------------------------------------
-    def train(self, prompts: Optional[List[str]] = None) -> None:
+    def train(self, prompts: list[str] | None = None) -> None:
         """Full RLHF-PPO training loop."""
         if prompts is None:
             prompts = load_prompts_from_hf(self.config.dataset_name)
@@ -245,16 +251,18 @@ class RLHFTrainer:
         mlflow.set_experiment(self.config.experiment_name)
 
         with mlflow.start_run(run_name="ppo-rlhf"):
-            mlflow.log_params({
-                "base_model": self.config.base_model,
-                "reward_model": self.config.reward_model,
-                "learning_rate": self.config.learning_rate,
-                "batch_size": self.config.batch_size,
-                "ppo_epochs": self.config.ppo_epochs,
-                "kl_penalty": self.config.kl_penalty,
-                "init_kl_coef": self.config.init_kl_coef,
-                "clip_range": self.config.clip_range,
-            })
+            mlflow.log_params(
+                {
+                    "base_model": self.config.base_model,
+                    "reward_model": self.config.reward_model,
+                    "learning_rate": self.config.learning_rate,
+                    "batch_size": self.config.batch_size,
+                    "ppo_epochs": self.config.ppo_epochs,
+                    "kl_penalty": self.config.kl_penalty,
+                    "init_kl_coef": self.config.init_kl_coef,
+                    "clip_range": self.config.clip_range,
+                }
+            )
 
             if self._trl_available:
                 self._train_trl(dataloader)
@@ -271,7 +279,7 @@ class RLHFTrainer:
         ppo_trainer = self._build_ppo_trainer()
         step = 0
 
-        for epoch in range(self.config.ppo_epochs):
+        for _epoch in range(self.config.ppo_epochs):
             for batch in dataloader:
                 if step >= self.config.max_steps:
                     return
@@ -285,8 +293,7 @@ class RLHFTrainer:
                 # Generate responses from the current policy
                 response_tensors = ppo_trainer.generate(query_tensors, **self.gen_kwargs)
                 responses = [
-                    self.tokenizer.decode(r, skip_special_tokens=True)
-                    for r in response_tensors
+                    self.tokenizer.decode(r, skip_special_tokens=True) for r in response_tensors
                 ]
 
                 # Score with reward model
@@ -301,7 +308,9 @@ class RLHFTrainer:
                 mean_reward = torch.stack(rewards).mean().item()
                 logger.info(
                     "Step %d | reward=%.4f | kl=%.4f",
-                    step, mean_reward, stats.get("objective/kl", 0),
+                    step,
+                    mean_reward,
+                    stats.get("objective/kl", 0),
                 )
                 mlflow.log_metrics(
                     {
@@ -324,8 +333,7 @@ class RLHFTrainer:
                 break
 
             queries = [
-                self.tokenizer.decode(ids, skip_special_tokens=True)
-                for ids in batch["input_ids"]
+                self.tokenizer.decode(ids, skip_special_tokens=True) for ids in batch["input_ids"]
             ]
 
             # Generate
@@ -335,7 +343,7 @@ class RLHFTrainer:
             with torch.no_grad():
                 out = self.model.generate(**enc, **self.gen_kwargs)
             responses = self.tokenizer.batch_decode(
-                out[:, enc["input_ids"].shape[1]:], skip_special_tokens=True
+                out[:, enc["input_ids"].shape[1] :], skip_special_tokens=True
             )
 
             # Reward + KL penalty
@@ -359,7 +367,10 @@ class RLHFTrainer:
 
             logger.info(
                 "Step %d | reward=%.4f | kl=%.4f | loss=%.4f",
-                step, rewards.mean().item(), kl.item(), loss.item(),
+                step,
+                rewards.mean().item(),
+                kl.item(),
+                loss.item(),
             )
             mlflow.log_metrics(
                 {
@@ -376,6 +387,7 @@ class RLHFTrainer:
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     sample_prompts = [

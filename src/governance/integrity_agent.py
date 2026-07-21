@@ -9,14 +9,16 @@ Flags:
 Optional: verify that cited source indices exist and that the cited chunk text
 substantiates the sentence (requires chunk list from ingestion / retrieval).
 """
+
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
 # ── Hedging / epistemic weakness (often "pleaser" or under-specified) ───────
-HEDGING_PATTERNS: Tuple[Tuple[str, str], ...] = (
+HEDGING_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\bit\s+is\s+possible\s+that\b", "hedging_possible"),
     (r"\bit\s+might\s+be\b", "hedging_might"),
     (r"\bit\s+could\s+be\b", "hedging_could"),
@@ -27,7 +29,7 @@ HEDGING_PATTERNS: Tuple[Tuple[str, str], ...] = (
     (r"\bwithout\s+loss\s+of\s+generality\b", "hedging_wlog"),  # OK in proofs — warning only
 )
 
-ASSUMPTION_PATTERNS: Tuple[Tuple[str, str], ...] = (
+ASSUMPTION_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"\bunverified\s+assumption\b", "assumption_unverified"),
     (r"\bwe\s+assume\b", "assumption_we_assume"),
     (r"\bfor\s+simplicity\b", "assumption_simplicity"),
@@ -58,10 +60,10 @@ class IntegrityViolation:
 @dataclass
 class IntegrityReport:
     passed: bool
-    violations: List[IntegrityViolation] = field(default_factory=list)
-    stats: Dict[str, Any] = field(default_factory=dict)
+    violations: list[IntegrityViolation] = field(default_factory=list)
+    stats: dict[str, Any] = field(default_factory=dict)
 
-    def blocking(self) -> List[IntegrityViolation]:
+    def blocking(self) -> list[IntegrityViolation]:
         return [v for v in self.violations if v.severity == "error"]
 
 
@@ -89,9 +91,9 @@ class IntegrityAgent:
         self,
         text: str,
         *,
-        chunks: Optional[Sequence[Dict[str, Any]]] = None,
+        chunks: Sequence[dict[str, Any]] | None = None,
     ) -> IntegrityReport:
-        violations: List[IntegrityViolation] = []
+        violations: list[IntegrityViolation] = []
         t = text.strip()
         if not t:
             return IntegrityReport(passed=True, violations=[], stats={"empty": True})
@@ -142,7 +144,7 @@ class IntegrityAgent:
             },
         )
 
-    def passes_gate(self, text: str, **kwargs: Any) -> Tuple[bool, IntegrityReport]:
+    def passes_gate(self, text: str, **kwargs: Any) -> tuple[bool, IntegrityReport]:
         report = self.scan(text, **kwargs)
         return report.passed, report
 
@@ -152,8 +154,8 @@ def _clip(s: str, n: int = 120) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-def _scan_uncited_strong_claims(text: str) -> List[IntegrityViolation]:
-    out: List[IntegrityViolation] = []
+def _scan_uncited_strong_claims(text: str) -> list[IntegrityViolation]:
+    out: list[IntegrityViolation] = []
     for sent in _SENTENCE_SPLIT.split(text):
         s = sent.strip()
         if len(s) < 20:
@@ -175,10 +177,10 @@ def _scan_uncited_strong_claims(text: str) -> List[IntegrityViolation]:
 
 def _verify_citations_against_chunks(
     text: str,
-    chunks: Sequence[Dict[str, Any]],
-) -> List[IntegrityViolation]:
+    chunks: Sequence[dict[str, Any]],
+) -> list[IntegrityViolation]:
     """Ensure each [source_k] index exists; optionally check light overlap with chunk text."""
-    violations: List[IntegrityViolation] = []
+    violations: list[IntegrityViolation] = []
     for m in _CITATION.finditer(text):
         idx = int(m.group(1))
         if idx < 1 or idx > len(chunks):

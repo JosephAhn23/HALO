@@ -4,6 +4,7 @@ Durable research session log — "lessons learned" across long agent runs.
 Append-only JSONL per ``session_id`` under ``RESEARCH_LOG_DIR`` (default
 ``outputs/research_logs``). Inject into prompts via :meth:`format_for_prompt`.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,7 +13,7 @@ import os
 import threading
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +23,9 @@ _DEFAULT_DIR = Path(os.getenv("RESEARCH_LOG_DIR", "outputs/research_logs"))
 class ResearchLog:
     """Thread-safe append + read for one logical research session."""
 
-    def __init__(self, base_dir: Optional[Path] = None) -> None:
+    def __init__(self, base_dir: Path | None = None) -> None:
         self._base = Path(base_dir) if base_dir is not None else _DEFAULT_DIR
-        self._locks: Dict[str, threading.Lock] = {}
+        self._locks: dict[str, threading.Lock] = {}
         self._meta = threading.Lock()
 
     def _path(self, session_id: str) -> Path:
@@ -45,7 +46,7 @@ class ResearchLog:
         lesson: str,
         *,
         kind: str = "lesson",
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record a lesson (e.g. sign error, wrong equation)."""
         lesson = lesson.strip()
@@ -64,13 +65,13 @@ class ResearchLog:
             path.open("a", encoding="utf-8").write(line)
         logger.info("ResearchLog: appended %s to %s", kind, path.name)
 
-    def read_lessons(self, session_id: str, *, max_entries: int = 50) -> List[Dict[str, Any]]:
+    def read_lessons(self, session_id: str, *, max_entries: int = 50) -> list[dict[str, Any]]:
         path = self._path(session_id)
         if not path.exists():
             return []
         with self._lock_for(session_id):
             lines = path.read_text(encoding="utf-8").strip().splitlines()
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for line in lines[-max_entries:]:
             try:
                 out.append(json.loads(line))

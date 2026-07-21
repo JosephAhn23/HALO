@@ -3,6 +3,7 @@ Deep AWS observability - custom CloudWatch metrics, dashboards, S3 multipart,
 presigned URLs, lifecycle policies.
 Covers: S3 + CloudWatch (real depth)
 """
+
 import io
 import json
 import logging
@@ -11,7 +12,7 @@ import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 
 import boto3
 import pandas as pd
@@ -25,6 +26,7 @@ AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 
 
 # ─── S3 Deep Integration ──────────────────────────────────────
+
 
 class S3Manager:
     """
@@ -141,7 +143,13 @@ class S3Manager:
                 Body=buf.read(),
                 ContentType="application/octet-stream",
             )
-            logger.info("Partition %s: %d rows -> s3://%s/%s", partition_value, len(partition_df), S3_BUCKET, key)
+            logger.info(
+                "Partition %s: %d rows -> s3://%s/%s",
+                partition_value,
+                len(partition_df),
+                S3_BUCKET,
+                key,
+            )
 
     def generate_presigned_url(self, s3_key: str, expiry_seconds: int = 3600) -> str:
         """Generate presigned URL for temporary model access."""
@@ -151,7 +159,7 @@ class S3Manager:
             ExpiresIn=expiry_seconds,
         )
 
-    def list_model_versions(self, prefix: str = "models/") -> List[Dict]:
+    def list_model_versions(self, prefix: str = "models/") -> list[dict]:
         """List all model versions with metadata."""
         response = self.client.list_object_versions(Bucket=S3_BUCKET, Prefix=prefix)
         versions = []
@@ -169,6 +177,7 @@ class S3Manager:
 
 
 # ─── CloudWatch Deep Integration ─────────────────────────────
+
 
 @dataclass
 class InferenceMetrics:
@@ -193,8 +202,8 @@ class CloudWatchObservability:
     def __init__(self):
         self.cw = boto3.client("cloudwatch", region_name=AWS_REGION)
         self.logs = boto3.client("logs", region_name=AWS_REGION)
-        self._sequence_tokens: Dict[str, str] = {}
-        self._metric_buffer: List[Dict] = []
+        self._sequence_tokens: dict[str, str] = {}
+        self._metric_buffer: list[dict] = []
         self._buffer_lock = threading.Lock()
         # Separate lock for CloudWatch Logs sequence tokens — the read-modify-
         # write on _sequence_tokens must be atomic across concurrent Celery
@@ -295,8 +304,13 @@ class CloudWatchObservability:
                     "properties": {
                         "title": "Inference Latency (p50/p90/p99)",
                         "metrics": [
-                            [CW_NAMESPACE, "InferenceLatency", "Environment", "production",
-                             {"stat": "p50", "label": "p50"}],
+                            [
+                                CW_NAMESPACE,
+                                "InferenceLatency",
+                                "Environment",
+                                "production",
+                                {"stat": "p50", "label": "p50"},
+                            ],
                             ["...", {"stat": "p90", "label": "p90"}],
                             ["...", {"stat": "p99", "label": "p99"}],
                         ],
@@ -309,8 +323,13 @@ class CloudWatchObservability:
                     "properties": {
                         "title": "Error Rate",
                         "metrics": [
-                            [CW_NAMESPACE, "ErrorRate", "Environment", "production",
-                             {"stat": "Average", "label": "Error Rate"}],
+                            [
+                                CW_NAMESPACE,
+                                "ErrorRate",
+                                "Environment",
+                                "production",
+                                {"stat": "Average", "label": "Error Rate"},
+                            ],
                         ],
                         "period": 60,
                         "view": "timeSeries",
@@ -321,8 +340,13 @@ class CloudWatchObservability:
                     "properties": {
                         "title": "Cache Hit Rate",
                         "metrics": [
-                            [CW_NAMESPACE, "CacheHitRate", "Environment", "production",
-                             {"stat": "Average"}],
+                            [
+                                CW_NAMESPACE,
+                                "CacheHitRate",
+                                "Environment",
+                                "production",
+                                {"stat": "Average"},
+                            ],
                         ],
                         "period": 300,
                     },
@@ -332,8 +356,13 @@ class CloudWatchObservability:
                     "properties": {
                         "title": "Tokens Generated",
                         "metrics": [
-                            [CW_NAMESPACE, "TokensGenerated", "Environment", "production",
-                             {"stat": "Sum", "label": "Total tokens/min"}],
+                            [
+                                CW_NAMESPACE,
+                                "TokensGenerated",
+                                "Environment",
+                                "production",
+                                {"stat": "Sum", "label": "Total tokens/min"},
+                            ],
                         ],
                         "period": 60,
                     },
@@ -402,15 +431,17 @@ class CloudWatchObservability:
             logGroupName=LOG_GROUP,
             filterName="InferenceErrors",
             filterPattern='{ $.event = "inference_error" }',
-            metricTransformations=[{
-                "metricName": "InferenceErrors",
-                "metricNamespace": CW_NAMESPACE,
-                "metricValue": "1",
-                "defaultValue": 0,
-            }],
+            metricTransformations=[
+                {
+                    "metricName": "InferenceErrors",
+                    "metricNamespace": CW_NAMESPACE,
+                    "metricValue": "1",
+                    "defaultValue": 0,
+                }
+            ],
         )
 
-    def log_structured(self, log_stream: str, event: Dict[str, Any]):
+    def log_structured(self, log_stream: str, event: dict[str, Any]):
         """Structured JSON logging to CloudWatch Logs.
 
         Thread-safe: the sequence-token read-modify-write is protected by
@@ -422,13 +453,17 @@ class CloudWatchObservability:
             pass
 
         with self._log_lock:
-            kwargs: Dict[str, Any] = {
+            kwargs: dict[str, Any] = {
                 "logGroupName": LOG_GROUP,
                 "logStreamName": log_stream,
-                "logEvents": [{
-                    "timestamp": int(time.time() * 1000),
-                    "message": json.dumps({**event, "timestamp": datetime.utcnow().isoformat()}),
-                }],
+                "logEvents": [
+                    {
+                        "timestamp": int(time.time() * 1000),
+                        "message": json.dumps(
+                            {**event, "timestamp": datetime.utcnow().isoformat()}
+                        ),
+                    }
+                ],
             }
             if log_stream in self._sequence_tokens:
                 kwargs["sequenceToken"] = self._sequence_tokens[log_stream]

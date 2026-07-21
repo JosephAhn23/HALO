@@ -21,12 +21,13 @@ RRF: rrf_score(doc) = sum over rankers r of 1/(k + rank_r(doc)), rank 1-indexed,
 k=60 (the constant used in the original Cormack et al. 2009 RRF paper and the
 de facto default in hybrid-search implementations).
 """
+
 from __future__ import annotations
 
 import json
 import re
 import time
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 from rank_bm25 import BM25Okapi
@@ -44,34 +45,34 @@ METHOD_LABELS = {
 }
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
-def precision_at_k(ranked_doc_ids: List[str], relevant: set[str], k: int) -> float:
+def precision_at_k(ranked_doc_ids: list[str], relevant: set[str], k: int) -> float:
     top_k = ranked_doc_ids[:k]
     if not top_k:
         return 0.0
     return sum(1 for d in top_k if d in relevant) / len(top_k)
 
 
-def recall_at_k(ranked_doc_ids: List[str], relevant: set[str], k: int) -> float:
+def recall_at_k(ranked_doc_ids: list[str], relevant: set[str], k: int) -> float:
     if not relevant:
         return 0.0
     top_k = ranked_doc_ids[:k]
     return sum(1 for d in top_k if d in relevant) / len(relevant)
 
 
-def reciprocal_rank_fusion(rankings: List[List[str]], k: int = RRF_K) -> List[str]:
+def reciprocal_rank_fusion(rankings: list[list[str]], k: int = RRF_K) -> list[str]:
     """Fuse N independent rankings of the same doc_ids into one, via RRF."""
-    scores: Dict[str, float] = {}
+    scores: dict[str, float] = {}
     for ranking in rankings:
         for rank, doc_id in enumerate(ranking, start=1):
             scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
     return sorted(scores, key=lambda d: scores[d], reverse=True)
 
 
-def run_ablation() -> Dict[str, Any]:
+def run_ablation() -> dict[str, Any]:
     print("=== Retrieval Ablation: bi-encoder vs. +cross-encoder vs. BM25+dense RRF ===\n")
 
     doc_ids = [d["doc_id"] for d in DOCUMENTS]
@@ -90,10 +91,10 @@ def run_ablation() -> Dict[str, Any]:
     tokenized_corpus = [_tokenize(t) for t in doc_texts]
     bm25 = BM25Okapi(tokenized_corpus)
 
-    per_query: List[Dict[str, Any]] = []
-    latencies_ms: Dict[str, List[float]] = {m: [] for m in METHODS}
-    scores: Dict[str, Dict[int, List[float]]] = {m: {k: [] for k in K_VALUES} for m in METHODS}
-    recalls: Dict[str, Dict[int, List[float]]] = {m: {k: [] for k in K_VALUES} for m in METHODS}
+    per_query: list[dict[str, Any]] = []
+    latencies_ms: dict[str, list[float]] = {m: [] for m in METHODS}
+    scores: dict[str, dict[int, list[float]]] = {m: {k: [] for k in K_VALUES} for m in METHODS}
+    recalls: dict[str, dict[int, list[float]]] = {m: {k: [] for k in K_VALUES} for m in METHODS}
 
     print(f"4. Running {len(QUERY_RELEVANCE)} queries through all three configs...\n")
     for item in QUERY_RELEVANCE:
@@ -126,9 +127,13 @@ def run_ablation() -> Dict[str, Any]:
         hybrid_latency = (time.perf_counter() - t0) * 1000 + bi_latency
         latencies_ms["hybrid_rrf"].append(hybrid_latency)
 
-        rankings = {"bi_only": bi_ranked_ids, "two_stage": two_stage_ranked_ids, "hybrid_rrf": hybrid_ranked_ids}
+        rankings = {
+            "bi_only": bi_ranked_ids,
+            "two_stage": two_stage_ranked_ids,
+            "hybrid_rrf": hybrid_ranked_ids,
+        }
 
-        row: Dict[str, Any] = {
+        row: dict[str, Any] = {
             "query": query,
             "relevant_doc_ids": sorted(relevant),
             **{f"{m}_top5": rankings[m][:5] for m in METHODS},
@@ -143,7 +148,7 @@ def run_ablation() -> Dict[str, Any]:
                 row.setdefault(f"recall_at_{k}", {})[m] = r
         per_query.append(row)
 
-    summary: Dict[str, Any] = {"n_queries": len(QUERY_RELEVANCE), "n_documents": len(DOCUMENTS)}
+    summary: dict[str, Any] = {"n_queries": len(QUERY_RELEVANCE), "n_documents": len(DOCUMENTS)}
     print("5. Results (macro-averaged over queries)\n")
     header = f"{'metric':<8}" + "".join(f"{METHOD_LABELS[m]:>18}" for m in METHODS)
     print(header)
@@ -156,7 +161,10 @@ def run_ablation() -> Dict[str, Any]:
         summary[f"recall_at_{k}"] = r_row
 
     latency_p50 = {m: float(np.median(latencies_ms[m])) for m in METHODS}
-    print("\nlatency p50 (ms):  " + "  ".join(f"{METHOD_LABELS[m]}={latency_p50[m]:.2f}" for m in METHODS))
+    print(
+        "\nlatency p50 (ms):  "
+        + "  ".join(f"{METHOD_LABELS[m]}={latency_p50[m]:.2f}" for m in METHODS)
+    )
     summary["latency_ms_p50"] = latency_p50
     summary["embed_corpus_s"] = embed_corpus_s
     summary["per_query"] = per_query

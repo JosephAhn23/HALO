@@ -1,10 +1,10 @@
 """
 Tests for retriever, reranker, synthesizer, orchestrator.
 """
-from unittest.mock import MagicMock, patch
+
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # ─── Retriever Tests ──────────────────────────────────────────
 
@@ -30,13 +30,17 @@ class TestRetrieverAgent:
         return agent
 
     def test_retriever_returns_top_k(self):
-        metadata = [{"text": f"chunk {i}", "source": f"doc_{i}", "chunk_id": str(i)} for i in range(5)]
+        metadata = [
+            {"text": f"chunk {i}", "source": f"doc_{i}", "chunk_id": str(i)} for i in range(5)
+        ]
         agent = self._make_retriever(metadata)
         results = agent.retrieve("test query")
         assert len(results) <= 3
 
     def test_retriever_includes_scores(self):
-        metadata = [{"text": f"chunk {i}", "source": f"doc_{i}", "chunk_id": str(i)} for i in range(5)]
+        metadata = [
+            {"text": f"chunk {i}", "source": f"doc_{i}", "chunk_id": str(i)} for i in range(5)
+        ]
         agent = self._make_retriever(metadata)
         results = agent.retrieve("test query")
         for r in results:
@@ -44,7 +48,9 @@ class TestRetrieverAgent:
             assert 0 <= r["retrieval_score"] <= 1.0
 
     def test_retriever_scores_descending(self):
-        metadata = [{"text": f"chunk {i}", "source": f"doc_{i}", "chunk_id": str(i)} for i in range(5)]
+        metadata = [
+            {"text": f"chunk {i}", "source": f"doc_{i}", "chunk_id": str(i)} for i in range(5)
+        ]
         agent = self._make_retriever(metadata)
         results = agent.retrieve("test query")
         scores = [r["retrieval_score"] for r in results]
@@ -64,15 +70,19 @@ class TestRerankerAgent:
         agent._ready = True
         agent.cross_encoder = MagicMock()
         agent.cross_encoder.score_pairs.return_value = [0.9, 0.3, 0.7, 0.1, 0.5]
-        yield agent
+        return agent
 
     def test_reranker_returns_top_k(self, mock_reranker):
-        candidates = [{"text": f"doc {i}", "source": f"s{i}", "retrieval_score": 0.5} for i in range(5)]
+        candidates = [
+            {"text": f"doc {i}", "source": f"s{i}", "retrieval_score": 0.5} for i in range(5)
+        ]
         results = mock_reranker.rerank("query", candidates)
         assert len(results) == 3
 
     def test_reranker_sorts_by_score(self, mock_reranker):
-        candidates = [{"text": f"doc {i}", "source": f"s{i}", "retrieval_score": 0.5} for i in range(5)]
+        candidates = [
+            {"text": f"doc {i}", "source": f"s{i}", "retrieval_score": 0.5} for i in range(5)
+        ]
         results = mock_reranker.rerank("query", candidates)
         scores = [r["rerank_score"] for r in results]
         assert scores == sorted(scores, reverse=True)

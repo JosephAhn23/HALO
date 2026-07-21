@@ -22,6 +22,7 @@ LangGraph-shaped state (for copying into a custom graph)::
         final_answer: str
         conflict_events: List[str]
 """
+
 from __future__ import annotations
 
 import concurrent.futures
@@ -29,7 +30,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass, field
-from typing import List, NotRequired, Optional, Tuple, TypedDict
+from typing import NotRequired, TypedDict
 
 from src.agents.multi_agent.cross_provider_consensus import (
     AnthropicMessagesProvider,
@@ -45,9 +46,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_NUMERIC_TOLERANCE = float(os.getenv("ADVERSARIAL_NUMERIC_TOLERANCE", "0.001"))
 DEFAULT_MAX_RESETS = int(os.getenv("ADVERSARIAL_MAX_HARD_RESETS", "2"))
 
-_RE_FLOAT = re.compile(
-    r"[-+]?(?:\d{1,3}(?:,\d{3})*(?:\.\d*)?|\d*\.\d+|\d+)(?:[eE][-+]?\d+)?"
-)
+_RE_FLOAT = re.compile(r"[-+]?(?:\d{1,3}(?:,\d{3})*(?:\.\d*)?|\d*\.\d+|\d+)(?:[eE][-+]?\d+)?")
 
 
 class AdversarialConsensusState(TypedDict, total=False):
@@ -62,7 +61,7 @@ class AdversarialConsensusState(TypedDict, total=False):
     skeptic_review: str
     reset_round: int
     final_answer: str
-    conflict_events: List[str]
+    conflict_events: list[str]
     done: NotRequired[bool]
 
 
@@ -84,10 +83,10 @@ HARD_RESET_USER_SUFFIX = (
 )
 
 
-def extract_floats(text: str) -> List[float]:
+def extract_floats(text: str) -> list[float]:
     """Parse numeric literals (scientific notation supported)."""
     scrubbed = re.sub(r"\[source_\d+\]", " ", text or "", flags=re.I)
-    out: List[float] = []
+    out: list[float] = []
     for m in _RE_FLOAT.finditer(scrubbed):
         raw = m.group(0).replace(",", "")
         try:
@@ -102,7 +101,7 @@ def numeric_relative_conflict(
     text_b: str,
     *,
     relative_tolerance: float = DEFAULT_NUMERIC_TOLERANCE,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """
     True if both texts contain numbers and any paired (sorted) value differs beyond
     ``relative_tolerance * max(|x|,|y|,1e-12)``.
@@ -144,7 +143,7 @@ def _parallel_complete(
     b: LLMProvider,
     system: str,
     user: str,
-) -> Tuple[ProviderAnswer, ProviderAnswer]:
+) -> tuple[ProviderAnswer, ProviderAnswer]:
     def _one(p: LLMProvider) -> ProviderAnswer:
         return p.complete(system, user)
 
@@ -160,7 +159,7 @@ class AdversarialConsensusOutcome:
     researcher_a: str
     researcher_b: str
     skeptic_review: str
-    conflict_events: List[str] = field(default_factory=list)
+    conflict_events: list[str] = field(default_factory=list)
     reset_count: int = 0
     hitl_recommended: bool = False
 
@@ -197,7 +196,7 @@ class ConsensusOrchestrator:
         self.max_hard_resets = max_hard_resets
 
     @classmethod
-    def from_env(cls) -> Optional["ConsensusOrchestrator"]:
+    def from_env(cls) -> ConsensusOrchestrator | None:
         """Build OpenAI + Anthropic researchers and OpenAI skeptic when keys allow."""
         if not os.getenv("OPENAI_API_KEY") or not os.getenv("ANTHROPIC_API_KEY"):
             return None
@@ -221,7 +220,7 @@ class ConsensusOrchestrator:
         return cls(oa, cl, sk)
 
     def run(self, query: str, rag_context: str) -> AdversarialConsensusOutcome:
-        conflict_events: List[str] = []
+        conflict_events: list[str] = []
         reset_count = 0
         user_base = f"Context:\n{rag_context}\n\nQuestion: {query}"
         extra = ""

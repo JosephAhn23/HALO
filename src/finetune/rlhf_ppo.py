@@ -11,23 +11,22 @@ Pipeline:
 Covers gaps: RLHF, PPO, reasoning fine-tuning, agentic training, TRL, VeRL-style
 reward shaping, MLflow experiment tracking.
 """
+
 from __future__ import annotations
 
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 import torch
 import torch.nn as nn
-from datasets import Dataset, load_dataset
+from datasets import load_dataset
+from peft import LoraConfig, TaskType, get_peft_model
 from transformers import (
     AutoModelForCausalLM,
     AutoModelForSequenceClassification,
     AutoTokenizer,
-    pipeline,
 )
-from peft import LoraConfig, TaskType, get_peft_model
 
 from src.mlops.compat import mlflow
 
@@ -42,28 +41,26 @@ logger = logging.getLogger(__name__)
 @dataclass
 class RLHFConfig:
     # Model
-    sft_model: str = "Qwen/Qwen2-0.5B-Instruct"   # small enough to run locally
+    sft_model: str = "Qwen/Qwen2-0.5B-Instruct"  # small enough to run locally
     reward_model: str = "Qwen/Qwen2-0.5B-Instruct"
     output_dir: str = "./checkpoints/rlhf-ppo"
 
     # LoRA (applied to policy only)
     lora_r: int = 8
     lora_alpha: int = 16
-    lora_target_modules: list = field(
-        default_factory=lambda: ["q_proj", "v_proj"]
-    )
+    lora_target_modules: list = field(default_factory=lambda: ["q_proj", "v_proj"])
 
     # PPO hyper-parameters
-    ppo_epochs: int = 1           # inner PPO epochs per batch
-    batch_size: int = 4           # number of prompts per PPO step
+    ppo_epochs: int = 1  # inner PPO epochs per batch
+    batch_size: int = 4  # number of prompts per PPO step
     mini_batch_size: int = 2
     gradient_accumulation_steps: int = 1
     learning_rate: float = 1.41e-5
-    kl_penalty: str = "kl"        # "kl" | "abs" | "mse" | "full"
-    init_kl_coef: float = 0.2     # starting KL coefficient
-    target_kl: float = 6.0        # adaptive KL target
-    cliprange: float = 0.2        # PPO clip ε
-    vf_coef: float = 0.1          # value-function loss coefficient
+    kl_penalty: str = "kl"  # "kl" | "abs" | "mse" | "full"
+    init_kl_coef: float = 0.2  # starting KL coefficient
+    target_kl: float = 6.0  # adaptive KL target
+    cliprange: float = 0.2  # PPO clip ε
+    vf_coef: float = 0.1  # value-function loss coefficient
     max_new_tokens: int = 128
 
     # Reward model training
@@ -79,7 +76,7 @@ class RLHFConfig:
 
     # MLflow
     mlflow_experiment: str = "rlhf-ppo"
-    mlflow_run_name: Optional[str] = None
+    mlflow_run_name: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +103,7 @@ class RewardModel(nn.Module):
 
     def forward(self, input_ids, attention_mask=None):
         out = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
-        return out.logits.squeeze(-1)   # (batch,)
+        return out.logits.squeeze(-1)  # (batch,)
 
     def preference_loss(self, chosen_ids, rejected_ids, chosen_mask, rejected_mask):
         r_chosen = self(chosen_ids, chosen_mask)
@@ -137,17 +134,25 @@ def train_reward_model(config: RLHFConfig, tokenizer) -> RewardModel:
         rejected_texts = batch["rejected"]
 
         chosen_enc = tokenizer(
-            chosen_texts, return_tensors="pt", truncation=True,
-            max_length=512, padding=True,
+            chosen_texts,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+            padding=True,
         )
         rejected_enc = tokenizer(
-            rejected_texts, return_tensors="pt", truncation=True,
-            max_length=512, padding=True,
+            rejected_texts,
+            return_tensors="pt",
+            truncation=True,
+            max_length=512,
+            padding=True,
         )
 
         loss, acc = rm.preference_loss(
-            chosen_enc["input_ids"], rejected_enc["input_ids"],
-            chosen_enc.get("attention_mask"), rejected_enc.get("attention_mask"),
+            chosen_enc["input_ids"],
+            rejected_enc["input_ids"],
+            chosen_enc.get("attention_mask"),
+            rejected_enc.get("attention_mask"),
         )
 
         optimizer.zero_grad()
@@ -197,20 +202,20 @@ class PPOTrainer:
         cfg = self.config
 
         with mlflow.start_run(run_name=cfg.mlflow_run_name or "ppo-run"):
-            mlflow.log_params({
-                "sft_model": cfg.sft_model,
-                "ppo_epochs": cfg.ppo_epochs,
-                "batch_size": cfg.batch_size,
-                "learning_rate": cfg.learning_rate,
-                "kl_penalty": cfg.kl_penalty,
-                "init_kl_coef": cfg.init_kl_coef,
-                "target_kl": cfg.target_kl,
-                "cliprange": cfg.cliprange,
-            })
-
-            tokenizer = AutoTokenizer.from_pretrained(
-                cfg.sft_model, trust_remote_code=True
+            mlflow.log_params(
+                {
+                    "sft_model": cfg.sft_model,
+                    "ppo_epochs": cfg.ppo_epochs,
+                    "batch_size": cfg.batch_size,
+                    "learning_rate": cfg.learning_rate,
+                    "kl_penalty": cfg.kl_penalty,
+                    "init_kl_coef": cfg.init_kl_coef,
+                    "target_kl": cfg.target_kl,
+                    "cliprange": cfg.cliprange,
+                }
             )
+
+            tokenizer = AutoTokenizer.from_pretrained(cfg.sft_model, trust_remote_code=True)
             if tokenizer.pad_token is None:
                 tokenizer.pad_token = tokenizer.eos_token
 
@@ -232,7 +237,8 @@ class PPOTrainer:
     # -- TRL PPO (preferred) -------------------------------------------------
 
     def _trl_ppo(self, cfg: RLHFConfig, tokenizer, reward_model: RewardModel) -> dict:
-        from trl import PPOConfig, PPOTrainer as TRLPPOTrainer, AutoModelForCausalLMWithValueHead
+        from trl import AutoModelForCausalLMWithValueHead, PPOConfig
+        from trl import PPOTrainer as TRLPPOTrainer
 
         ppo_config = PPOConfig(
             model_name=cfg.sft_model,
@@ -295,10 +301,12 @@ class PPOTrainer:
             if step % 10 == 0:
                 logger.info(
                     "PPO step %d — reward=%.4f  kl=%.4f",
-                    step, all_rewards[-1], all_kl[-1],
+                    step,
+                    all_rewards[-1],
+                    all_kl[-1],
                 )
 
-            if step >= 50:   # cap for demo; remove in production
+            if step >= 50:  # cap for demo; remove in production
                 break
 
         os.makedirs(cfg.output_dir, exist_ok=True)
@@ -360,13 +368,16 @@ class PPOTrainer:
                     temperature=0.9,
                     pad_token_id=tokenizer.eos_token_id,
                 )
-            response_ids = gen_ids[:, input_ids.shape[1]:]
+            response_ids = gen_ids[:, input_ids.shape[1] :]
 
             # Compute reward
             with torch.no_grad():
                 reward_enc = tokenizer(
                     [tokenizer.decode(r, skip_special_tokens=True) for r in response_ids],
-                    return_tensors="pt", truncation=True, max_length=256, padding=True,
+                    return_tensors="pt",
+                    truncation=True,
+                    max_length=256,
+                    padding=True,
                 ).to(device)
                 rewards = reward_model(
                     reward_enc["input_ids"], reward_enc.get("attention_mask")
@@ -413,10 +424,13 @@ class PPOTrainer:
             if step % 5 == 0:
                 logger.info(
                     "PPO step %d — reward=%.4f  kl=%.4f  kl_coef=%.4f",
-                    step, all_rewards[-1], mean_kl, kl_coef,
+                    step,
+                    all_rewards[-1],
+                    mean_kl,
+                    kl_coef,
                 )
 
-            if step >= 20:   # cap for demo
+            if step >= 20:  # cap for demo
                 break
 
         os.makedirs(cfg.output_dir, exist_ok=True)
@@ -448,12 +462,14 @@ class PPOTrainer:
         for i in range(0, len(raw), cfg.batch_size):
             slice_ = raw[i : i + cfg.batch_size]
             texts = [
-                f"### Instruction:\n{instr}\n\n### Response:\n"
-                for instr in slice_["instruction"]
+                f"### Instruction:\n{instr}\n\n### Response:\n" for instr in slice_["instruction"]
             ]
             enc = tokenizer(
-                texts, return_tensors="pt", truncation=True,
-                max_length=256, padding=True,
+                texts,
+                return_tensors="pt",
+                truncation=True,
+                max_length=256,
+                padding=True,
             )
             batches.append(enc)
         return batches
@@ -461,13 +477,13 @@ class PPOTrainer:
     @staticmethod
     def _make_reward_pipe(reward_model: RewardModel, tokenizer):
         """Return a callable that scores a single response string."""
+
         def score(text: str) -> float:
-            enc = tokenizer(
-                text, return_tensors="pt", truncation=True, max_length=256
-            )
+            enc = tokenizer(text, return_tensors="pt", truncation=True, max_length=256)
             with torch.no_grad():
                 r = reward_model(enc["input_ids"], enc.get("attention_mask"))
             return float(r.item())
+
         return score
 
 
@@ -493,9 +509,7 @@ class ProcessRewardModel:
         """Score each reasoning step independently."""
         scores = []
         for step in steps:
-            enc = self.tokenizer(
-                step, return_tensors="pt", truncation=True, max_length=256
-            )
+            enc = self.tokenizer(step, return_tensors="pt", truncation=True, max_length=256)
             with torch.no_grad():
                 r = self.rm(enc["input_ids"], enc.get("attention_mask"))
             scores.append(float(r.item()))

@@ -9,16 +9,15 @@ Tests cover:
   - Memory: TTL eviction, version conflicts, semantic retrieval
   - Routing: complexity classification, capability matching
 """
+
 from __future__ import annotations
 
 import time
-from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.agents.multi_agent.base_agent import AgentResult, AgentStatus, AgentTask, ToolRegistry
 from src.agents.multi_agent.consensus import (
-    ConsensusResult,
     DebateRefinement,
     MajorityVote,
     WeightedConfidence,
@@ -36,16 +35,16 @@ from src.agents.multi_agent.failure_handling import (
 from src.agents.multi_agent.memory import LongTermMemory, ShortTermMemory, WorkingMemory
 from src.agents.multi_agent.research_agent import ResearchAgent
 from src.agents.multi_agent.routing import (
+    AgentCapability,
     CapabilityRouter,
     ComplexityRouter,
     classify_complexity,
-    AgentCapability,
 )
 from src.agents.multi_agent.supervisor import Supervisor
 from src.agents.multi_agent.verifier_agent import VerifierAgent
 
-
 # ── Fixtures ───────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def simple_task():
@@ -82,6 +81,7 @@ def supervisor():
 
 # ── Base Agent ─────────────────────────────────────────────────────────────────
 
+
 class TestBaseAgent:
     def test_tool_registry_register_and_call(self):
         registry = ToolRegistry()
@@ -107,6 +107,7 @@ class TestBaseAgent:
 
 
 # ── Research Agent ─────────────────────────────────────────────────────────────
+
 
 class TestResearchAgent:
     def test_process_returns_result(self, researcher, simple_task):
@@ -146,6 +147,7 @@ class TestResearchAgent:
 
 # ── Critic Agent ───────────────────────────────────────────────────────────────
 
+
 class TestCriticAgent:
     def test_critique_with_good_answer(self, critic):
         task = AgentTask(
@@ -157,8 +159,14 @@ class TestCriticAgent:
                     "accuracy and can reduce hallucinations in many cases."
                 ),
                 "retrieved_context": [
-                    {"text": "RAG uses retrieval to ground LLM responses in external knowledge.", "score": 0.9},
-                    {"text": "Retrieval-augmented generation reduces hallucinations.", "score": 0.85},
+                    {
+                        "text": "RAG uses retrieval to ground LLM responses in external knowledge.",
+                        "score": 0.9,
+                    },
+                    {
+                        "text": "Retrieval-augmented generation reduces hallucinations.",
+                        "score": 0.85,
+                    },
                 ],
             },
         )
@@ -195,6 +203,7 @@ class TestCriticAgent:
 
 # ── Verifier Agent ─────────────────────────────────────────────────────────────
 
+
 class TestVerifierAgent:
     def test_verify_supported_claims(self, verifier):
         task = AgentTask(
@@ -202,7 +211,10 @@ class TestVerifierAgent:
             context={
                 "research_result": "RAG uses retrieval to ground LLM responses in external knowledge.",
                 "retrieved_context": [
-                    {"text": "RAG uses retrieval to ground LLM responses in external knowledge.", "score": 0.95},
+                    {
+                        "text": "RAG uses retrieval to ground LLM responses in external knowledge.",
+                        "score": 0.95,
+                    },
                 ],
             },
         )
@@ -221,7 +233,9 @@ class TestVerifierAgent:
             query="test",
             context={
                 "research_result": "This is a claim. Another claim here. Third claim.",
-                "retrieved_context": [{"text": "This is a claim with supporting evidence.", "score": 0.8}],
+                "retrieved_context": [
+                    {"text": "This is a claim with supporting evidence.", "score": 0.8}
+                ],
             },
         )
         result = verifier.process(task)
@@ -229,6 +243,7 @@ class TestVerifierAgent:
 
 
 # ── Consensus ──────────────────────────────────────────────────────────────────
+
 
 class TestConsensus:
     def _make_results(self, outputs_and_confidences):
@@ -244,11 +259,13 @@ class TestConsensus:
         ]
 
     def test_majority_vote_clear_winner(self):
-        results = self._make_results([
-            ("answer A", 0.8),
-            ("answer A", 0.7),
-            ("answer B", 0.9),
-        ])
+        results = self._make_results(
+            [
+                ("answer A", 0.8),
+                ("answer A", 0.7),
+                ("answer B", 0.9),
+            ]
+        )
         consensus = MajorityVote().aggregate(results)
         assert "answer a" in consensus.final_output.lower()
         assert consensus.agreement_score == pytest.approx(2 / 3, abs=0.01)
@@ -258,19 +275,25 @@ class TestConsensus:
         assert consensus.confidence == 0.0
 
     def test_weighted_confidence_selects_highest(self):
-        results = self._make_results([
-            ("low confidence answer", 0.3),
-            ("high confidence answer", 0.95),
-        ])
+        results = self._make_results(
+            [
+                ("low confidence answer", 0.3),
+                ("high confidence answer", 0.95),
+            ]
+        )
         consensus = WeightedConfidence().aggregate(results)
         assert "high confidence" in consensus.final_output
 
     def test_weighted_confidence_with_agent_weights(self):
-        results = self._make_results([
-            ("answer from trusted agent", 0.7),
-            ("answer from untrusted agent", 0.9),
-        ])
-        consensus = WeightedConfidence(agent_weights={"agent_0": 2.0, "agent_1": 0.5}).aggregate(results)
+        results = self._make_results(
+            [
+                ("answer from trusted agent", 0.7),
+                ("answer from untrusted agent", 0.9),
+            ]
+        )
+        consensus = WeightedConfidence(agent_weights={"agent_0": 2.0, "agent_1": 0.5}).aggregate(
+            results
+        )
         assert "trusted" in consensus.final_output
 
     def test_debate_refinement_runs(self):
@@ -291,6 +314,7 @@ class TestConsensus:
 
 
 # ── Memory ─────────────────────────────────────────────────────────────────────
+
 
 class TestMemory:
     def test_short_term_write_read(self):
@@ -346,6 +370,7 @@ class TestMemory:
 
 # ── Failure Handling ───────────────────────────────────────────────────────────
 
+
 class TestFailureHandling:
     def test_circuit_breaker_opens_after_threshold(self):
         cb = CircuitBreaker("test", CircuitBreakerConfig(failure_threshold=3))
@@ -362,7 +387,10 @@ class TestFailureHandling:
         assert cb.allow_call()
 
     def test_circuit_breaker_closes_after_success(self):
-        cb = CircuitBreaker("test", CircuitBreakerConfig(failure_threshold=1, timeout_seconds=0.01, success_threshold=1))
+        cb = CircuitBreaker(
+            "test",
+            CircuitBreakerConfig(failure_threshold=1, timeout_seconds=0.01, success_threshold=1),
+        )
         cb.record_failure()
         time.sleep(0.05)
         cb.allow_call()
@@ -371,6 +399,7 @@ class TestFailureHandling:
 
     def test_retry_policy_succeeds_on_third_attempt(self):
         attempts = [0]
+
         def flaky():
             attempts[0] += 1
             if attempts[0] < 3:
@@ -385,7 +414,9 @@ class TestFailureHandling:
     def test_retry_policy_raises_after_max_attempts(self):
         policy = RetryPolicy(RetryConfig(max_attempts=2, base_delay_seconds=0.001))
         with pytest.raises(RuntimeError, match="All 2 attempts failed"):
-            policy.execute(lambda: (_ for _ in ()).throw(ValueError("always fails")), context="test")
+            policy.execute(
+                lambda: (_ for _ in ()).throw(ValueError("always fails")), context="test"
+            )
 
     def test_graceful_degradation_uses_fallback(self):
         def primary(*args, **kwargs):
@@ -410,9 +441,13 @@ class TestFailureHandling:
 
 # ── Routing ────────────────────────────────────────────────────────────────────
 
+
 class TestRouting:
     def test_classify_complexity_high(self):
-        assert classify_complexity("Compare and analyze the tradeoffs between RAG and fine-tuning") == "high"
+        assert (
+            classify_complexity("Compare and analyze the tradeoffs between RAG and fine-tuning")
+            == "high"
+        )
 
     def test_classify_complexity_low(self):
         assert classify_complexity("What is RAG?") == "low"
@@ -444,6 +479,7 @@ class TestRouting:
 
 
 # ── Integration: Full Supervisor Pipeline ─────────────────────────────────────
+
 
 class TestSupervisorIntegration:
     def test_simple_query_returns_answer(self, supervisor, simple_task):

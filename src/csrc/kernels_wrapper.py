@@ -20,12 +20,11 @@ Usage:
     tokens = top_k_sampling(logits, k=50, temperature=0.9)
     normed = rms_norm_fused(hidden_states, weight)
 """
+
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -43,6 +42,7 @@ def _try_load_extension():
     # 1. Try pre-compiled wheel
     try:
         import llmops_kernels as _ext
+
         CUDA_KERNELS_AVAILABLE = True
         logger.info("LLMOps CUDA kernels loaded (pre-compiled)")
         return
@@ -77,6 +77,7 @@ _try_load_extension()
 # Public API — CUDA kernel or PyTorch fallback
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def fused_attention_score_clip(
     scores: torch.Tensor,
     clip_val: float = 50.0,
@@ -106,7 +107,7 @@ def top_k_sampling(
     logits: torch.Tensor,
     k: int = 50,
     temperature: float = 1.0,
-    rand_vals: Optional[torch.Tensor] = None,
+    rand_vals: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
     Top-k sampling from logit distributions.
@@ -165,6 +166,7 @@ def rms_norm_fused(
 # Benchmark: CUDA kernel vs PyTorch baseline
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def benchmark_kernels(device: str = "cuda", runs: int = 100) -> None:
     """Compare custom CUDA kernels against PyTorch baselines."""
     import time
@@ -197,8 +199,10 @@ def benchmark_kernels(device: str = "cuda", runs: int = 100) -> None:
 
     t_torch = timed(torch_attn_clip, scores)
     t_fused = timed(lambda s: fused_attention_score_clip(s, 50.0, 1.0), scores)
-    print(f"fused_attention_score_clip  torch={t_torch:.3f}ms  custom={t_fused:.3f}ms  "
-          f"speedup={t_torch/t_fused:.2f}x")
+    print(
+        f"fused_attention_score_clip  torch={t_torch:.3f}ms  custom={t_fused:.3f}ms  "
+        f"speedup={t_torch/t_fused:.2f}x"
+    )
 
     # 2. top_k_sampling
     B, V = 16, 32000
@@ -213,8 +217,10 @@ def benchmark_kernels(device: str = "cuda", runs: int = 100) -> None:
 
     t_torch = timed(torch_topk_sample, logits, rand_vals)
     t_fused = timed(lambda l, rv: top_k_sampling(l, k=50, rand_vals=rv), logits, rand_vals)
-    print(f"top_k_sampling              torch={t_torch:.3f}ms  custom={t_fused:.3f}ms  "
-          f"speedup={t_torch/t_fused:.2f}x")
+    print(
+        f"top_k_sampling              torch={t_torch:.3f}ms  custom={t_fused:.3f}ms  "
+        f"speedup={t_torch/t_fused:.2f}x"
+    )
 
     # 3. rms_norm_fused
     N, D = 512, 4096
@@ -227,8 +233,10 @@ def benchmark_kernels(device: str = "cuda", runs: int = 100) -> None:
 
     t_torch = timed(torch_rms_norm, x, w)
     t_fused = timed(rms_norm_fused, x, w)
-    print(f"rms_norm_fused              torch={t_torch:.3f}ms  custom={t_fused:.3f}ms  "
-          f"speedup={t_torch/t_fused:.2f}x")
+    print(
+        f"rms_norm_fused              torch={t_torch:.3f}ms  custom={t_fused:.3f}ms  "
+        f"speedup={t_torch/t_fused:.2f}x"
+    )
 
     print("-" * 70)
 

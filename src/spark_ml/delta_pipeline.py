@@ -16,12 +16,12 @@ Usage:
     silver_df = pipeline.transform_to_silver("bronze.raw_queries", "silver.query_features")
     gold_df = pipeline.build_gold_training_set("silver.query_features", "gold.training_set")
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,14 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DeltaLayerConfig:
     """Bronze/Silver/Gold lake house layer config."""
+
     bronze_path: str = "delta/bronze"
     silver_path: str = "delta/silver"
     gold_path: str = "delta/gold"
     checkpoint_path: str = "delta/checkpoints"
     enable_cdf: bool = True
     optimize_after_write: bool = True
-    zorder_cols: List[str] = None
+    zorder_cols: list[str] = None
 
     def __post_init__(self):
         if self.zorder_cols is None:
@@ -51,16 +52,16 @@ class DeltaPipeline:
     Gold:   aggregated training features, joined, business-ready
     """
 
-    def __init__(self, spark=None, config: Optional[DeltaLayerConfig] = None):
+    def __init__(self, spark=None, config: DeltaLayerConfig | None = None):
         self.config = config or DeltaLayerConfig()
         self.spark = spark or self._get_spark()
 
     def _get_spark(self):
         try:
             from pyspark.sql import SparkSession
+
             return (
-                SparkSession.builder
-                .appName("LLMOps-DeltaPipeline")
+                SparkSession.builder.appName("LLMOps-DeltaPipeline")
                 .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
                 .config(
                     "spark.sql.catalog.spark_catalog",
@@ -77,16 +78,15 @@ class DeltaPipeline:
     # Bronze: raw ingestion
     # ------------------------------------------------------------------
 
-    def ingest_raw(self, records: List[Dict], table_name: str, mode: str = "append") -> int:
+    def ingest_raw(self, records: list[dict], table_name: str, mode: str = "append") -> int:
         """
         Ingest raw records into Bronze Delta table.
         Schema-on-read: accept any structure, add _ingested_at timestamp.
         """
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         enriched = [{**r, "_ingested_at": now, "_source": table_name} for r in records]
 
         if hasattr(self.spark, "createDataFrame"):
-            from pyspark.sql import functions as F
             df = self.spark.createDataFrame(enriched)
             path = f"{self.config.bronze_path}/{table_name.replace('.', '/')}"
             (df.write.format("delta").mode(mode).option("mergeSchema", "true").save(path))
@@ -109,7 +109,7 @@ class DeltaPipeline:
         source_table: str,
         target_table: str,
         dedup_key: str = "event_id",
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Bronze -> Silver transformation:
         - Cast types, drop nulls on critical columns
@@ -139,18 +139,23 @@ class DeltaPipeline:
             if latency is not None and (latency < 0 or latency > 60_000):
                 issues.append(f"latency_out_of_range:{latency}")
 
-            silver_records.append({
-                **rec,
-                "_dq_passed": len(issues) == 0,
-                "_dq_issues": ",".join(issues) if issues else None,
-                "_silver_at": datetime.now(timezone.utc).isoformat(),
-            })
+            silver_records.append(
+                {
+                    **rec,
+                    "_dq_passed": len(issues) == 0,
+                    "_dq_issues": ",".join(issues) if issues else None,
+                    "_silver_at": datetime.now(UTC).isoformat(),
+                }
+            )
 
         self._write_table(target_table, silver_records)
         passed = sum(1 for r in silver_records if r["_dq_passed"])
         logger.info(
             "Silver transform: %d raw -> %d deduped, %d passed DQ (%.1f%%).",
-            len(raw), len(silver_records), passed, 100 * passed / max(len(silver_records), 1),
+            len(raw),
+            len(silver_records),
+            passed,
+            100 * passed / max(len(silver_records), 1),
         )
         return silver_records
 
@@ -164,7 +169,7 @@ class DeltaPipeline:
         target_table: str,
         group_by: str = "user_id",
         label_col: str = "is_relevant",
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Silver -> Gold: aggregate per-user features for ML training.
 
@@ -176,7 +181,7 @@ class DeltaPipeline:
         silver = self._read_table(source_table)
         silver = [r for r in silver if r.get("_dq_passed", True)]
 
-        groups: Dict[str, List[Dict]] = {}
+        groups: dict[str, list[dict]] = {}
         for rec in silver:
             key = rec.get(group_by, "unknown")
             groups.setdefault(key, []).append(rec)
@@ -188,18 +193,30 @@ class DeltaPipeline:
             relevancy = [r["ragas_relevancy"] for r in recs if r.get("ragas_relevancy")]
             labels = [r[label_col] for r in recs if r.get(label_col) is not None]
 
-            gold_records.append({
-                group_by: entity_id,
-                "query_count": len(recs),
-                "avg_latency_ms": round(sum(latencies) / len(latencies), 2) if latencies else None,
-                "p95_latency_ms": sorted(latencies)[int(0.95 * len(latencies))] if latencies else None,
-                "avg_faithfulness": round(sum(faithfulness) / len(faithfulness), 4) if faithfulness else None,
-                "avg_relevancy": round(sum(relevancy) / len(relevancy), 4) if relevancy else None,
-                "feedback_count": len(labels),
-                "positive_feedback_rate": round(sum(labels) / len(labels), 4) if labels else None,
-                label_col: round(sum(labels) / len(labels), 4) if labels else None,
-                "_gold_at": datetime.now(timezone.utc).isoformat(),
-            })
+            gold_records.append(
+                {
+                    group_by: entity_id,
+                    "query_count": len(recs),
+                    "avg_latency_ms": (
+                        round(sum(latencies) / len(latencies), 2) if latencies else None
+                    ),
+                    "p95_latency_ms": (
+                        sorted(latencies)[int(0.95 * len(latencies))] if latencies else None
+                    ),
+                    "avg_faithfulness": (
+                        round(sum(faithfulness) / len(faithfulness), 4) if faithfulness else None
+                    ),
+                    "avg_relevancy": (
+                        round(sum(relevancy) / len(relevancy), 4) if relevancy else None
+                    ),
+                    "feedback_count": len(labels),
+                    "positive_feedback_rate": (
+                        round(sum(labels) / len(labels), 4) if labels else None
+                    ),
+                    label_col: round(sum(labels) / len(labels), 4) if labels else None,
+                    "_gold_at": datetime.now(UTC).isoformat(),
+                }
+            )
 
         self._write_table(target_table, gold_records)
         logger.info("Gold aggregation: %d entities, %d features each.", len(gold_records), 9)
@@ -209,7 +226,7 @@ class DeltaPipeline:
     # Time travel
     # ------------------------------------------------------------------
 
-    def time_travel_query(self, table: str, as_of: str) -> List[Dict]:
+    def time_travel_query(self, table: str, as_of: str) -> list[dict]:
         """
         Point-in-time correct read using Delta time travel.
 
@@ -219,17 +236,17 @@ class DeltaPipeline:
         Here: filters by _ingested_at or _silver_at <= as_of.
         """
         records = self._read_table(table)
-        filtered = [
-            r for r in records
-            if r.get("_ingested_at", r.get("_silver_at", "")) <= as_of
-        ]
+        filtered = [r for r in records if r.get("_ingested_at", r.get("_silver_at", "")) <= as_of]
         logger.info(
             "Time travel '%s' AS OF %s: %d / %d records.",
-            table, as_of, len(filtered), len(records),
+            table,
+            as_of,
+            len(filtered),
+            len(records),
         )
         return filtered
 
-    def get_change_data_feed(self, table: str, start_version: int = 0) -> List[Dict]:
+    def get_change_data_feed(self, table: str, start_version: int = 0) -> list[dict]:
         """
         Delta Change Data Feed: returns inserts/updates/deletes since version N.
         In production: spark.read.format('delta').option('readChangeData', True)
@@ -242,7 +259,7 @@ class DeltaPipeline:
     # Optimization
     # ------------------------------------------------------------------
 
-    def optimize_table(self, table: str, zorder_cols: Optional[List[str]] = None) -> None:
+    def optimize_table(self, table: str, zorder_cols: list[str] | None = None) -> None:
         """
         Run OPTIMIZE + ZORDER for query acceleration.
         In production: spark.sql(f'OPTIMIZE {table} ZORDER BY ({cols})')
@@ -261,7 +278,7 @@ class DeltaPipeline:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _read_table(self, table: str) -> List[Dict]:
+    def _read_table(self, table: str) -> list[dict]:
         if hasattr(self.spark, "_store"):
             return self.spark._store.get(table, [])
         path = f"{self.config.bronze_path}/{table.replace('.', '/')}"
@@ -271,11 +288,10 @@ class DeltaPipeline:
         except Exception:
             return []
 
-    def _write_table(self, table: str, records: List[Dict]) -> None:
+    def _write_table(self, table: str, records: list[dict]) -> None:
         if hasattr(self.spark, "_store"):
             self.spark._store[table] = records
         else:
-            from pyspark.sql import functions as F
             df = self.spark.createDataFrame(records)
             path = f"{self.config.silver_path}/{table.replace('.', '/')}"
             df.write.format("delta").mode("overwrite").option("mergeSchema", "true").save(path)
@@ -283,8 +299,9 @@ class DeltaPipeline:
 
 class MockSparkSession:
     """Minimal Spark mock so this module runs without PySpark."""
+
     def __init__(self):
-        self._store: Dict[str, List[Dict]] = {}
+        self._store: dict[str, list[dict]] = {}
 
     def createDataFrame(self, records):
         return MockDataFrame(records)
@@ -307,18 +324,46 @@ if __name__ == "__main__":
     pipeline = DeltaPipeline()
 
     raw_records = [
-        {"event_id": "e001", "user_id": "u001", "query": "What is RAG?",
-         "latency_ms": 3200, "ragas_faithfulness": 0.847, "ragas_relevancy": 0.823,
-         "is_relevant": 1, "event_time": "2024-01-15T10:00:00Z"},
-        {"event_id": "e002", "user_id": "u002", "query": "Explain fine-tuning",
-         "latency_ms": 4100, "ragas_faithfulness": 0.791, "ragas_relevancy": 0.801,
-         "is_relevant": 1, "event_time": "2024-01-15T10:05:00Z"},
-        {"event_id": "e001", "user_id": "u001", "query": "What is RAG?",
-         "latency_ms": 3200, "ragas_faithfulness": 0.847, "ragas_relevancy": 0.823,
-         "is_relevant": 1, "event_time": "2024-01-15T10:00:00Z"},
-        {"event_id": "e003", "user_id": "u001", "query": "vLLM vs TGI?",
-         "latency_ms": 2800, "ragas_faithfulness": 0.862, "ragas_relevancy": 0.841,
-         "is_relevant": 1, "event_time": "2024-01-15T11:00:00Z"},
+        {
+            "event_id": "e001",
+            "user_id": "u001",
+            "query": "What is RAG?",
+            "latency_ms": 3200,
+            "ragas_faithfulness": 0.847,
+            "ragas_relevancy": 0.823,
+            "is_relevant": 1,
+            "event_time": "2024-01-15T10:00:00Z",
+        },
+        {
+            "event_id": "e002",
+            "user_id": "u002",
+            "query": "Explain fine-tuning",
+            "latency_ms": 4100,
+            "ragas_faithfulness": 0.791,
+            "ragas_relevancy": 0.801,
+            "is_relevant": 1,
+            "event_time": "2024-01-15T10:05:00Z",
+        },
+        {
+            "event_id": "e001",
+            "user_id": "u001",
+            "query": "What is RAG?",
+            "latency_ms": 3200,
+            "ragas_faithfulness": 0.847,
+            "ragas_relevancy": 0.823,
+            "is_relevant": 1,
+            "event_time": "2024-01-15T10:00:00Z",
+        },
+        {
+            "event_id": "e003",
+            "user_id": "u001",
+            "query": "vLLM vs TGI?",
+            "latency_ms": 2800,
+            "ragas_faithfulness": 0.862,
+            "ragas_relevancy": 0.841,
+            "is_relevant": 1,
+            "event_time": "2024-01-15T11:00:00Z",
+        },
     ]
 
     n = pipeline.ingest_raw(raw_records, "bronze.raw_queries")

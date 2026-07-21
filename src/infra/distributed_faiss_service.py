@@ -2,6 +2,7 @@
 Distributed FAISS microservice architecture.
 Each shard is a separate FastAPI process. Aggregator fans out with asyncio.gather.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -9,7 +10,6 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Dict, List
 
 import faiss
 import httpx
@@ -58,12 +58,12 @@ shard_app = FastAPI(lifespan=_shard_lifespan)
 
 
 class ShardSearchRequest(BaseModel):
-    query_vector: List[float]
+    query_vector: list[float]
     top_k: int = 10
 
 
 class ShardSearchResult(BaseModel):
-    chunks: List[Dict]
+    chunks: list[dict]
     shard_id: int
 
 
@@ -98,8 +98,12 @@ def health():
 
 aggregator_app = FastAPI()
 
-_DEFAULT_SHARD_URLS = "http://shard-0:8001,http://shard-1:8002,http://shard-2:8003,http://shard-3:8004"
-SHARD_URLS = [u.strip() for u in os.getenv("SHARD_URLS", _DEFAULT_SHARD_URLS).split(",") if u.strip()]
+_DEFAULT_SHARD_URLS = (
+    "http://shard-0:8001,http://shard-1:8002,http://shard-2:8003,http://shard-3:8004"
+)
+SHARD_URLS = [
+    u.strip() for u in os.getenv("SHARD_URLS", _DEFAULT_SHARD_URLS).split(",") if u.strip()
+]
 
 
 class AggregatorSearchRequest(BaseModel):
@@ -117,7 +121,7 @@ async def distributed_search(request: AggregatorSearchRequest):
 
     shard_request = {"query_vector": query_vec, "top_k": request.top_k}
 
-    async def search_one_shard(url: str, client: httpx.AsyncClient) -> List[Dict]:
+    async def search_one_shard(url: str, client: httpx.AsyncClient) -> list[dict]:
         try:
             response = await client.post(
                 f"{url}/search",
@@ -152,6 +156,7 @@ async def aggregator_health():
     """Check all shards are alive."""
 
     async with httpx.AsyncClient() as client:
+
         async def check(url):
             try:
                 r = await client.get(f"{url}/health", timeout=2.0)
@@ -170,7 +175,8 @@ async def aggregator_health():
 
 # ─── Index Builder (run once to partition + save shards) ──────
 
-def build_shard_indexes(embeddings: np.ndarray, metadata: List[Dict], n_shards: int = 4):
+
+def build_shard_indexes(embeddings: np.ndarray, metadata: list[dict], n_shards: int = 4):
     """Partition corpus into shards and save each independently."""
     os.makedirs("data/shards", exist_ok=True)
 

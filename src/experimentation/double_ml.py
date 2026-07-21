@@ -22,13 +22,13 @@ LLMOps application:
   "Does enabling cross-encoder reranking CAUSE higher RAGAS faithfulness,
    or do users who get reranking simply ask better questions?"
 """
+
 from __future__ import annotations
 
 import logging
 import math
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -76,9 +76,9 @@ class DoubleML:
 
     def estimate(
         self,
-        Y: List[float],
-        T: List[int],
-        X: List[List[float]],
+        Y: list[float],
+        T: list[int],
+        X: list[list[float]],
     ) -> DoubleMLResult:
         """
         Estimate ATE using Double ML.
@@ -97,7 +97,7 @@ class DoubleML:
 
         indices = list(range(n))
         random.shuffle(indices)
-        folds = [indices[i::self.n_folds] for i in range(self.n_folds)]
+        folds = [indices[i :: self.n_folds] for i in range(self.n_folds)]
 
         e_Y = np.zeros(n)
         e_T = np.zeros(n)
@@ -119,9 +119,7 @@ class DoubleML:
 
         ate = float(np.dot(e_T, e_Y) / (np.dot(e_T, e_T) + 1e-12))
         residuals = e_Y - ate * e_T
-        se = float(math.sqrt(
-            np.var(residuals) / (np.dot(e_T, e_T) ** 2 / n + 1e-12)
-        ))
+        se = float(math.sqrt(np.var(residuals) / (np.dot(e_T, e_T) ** 2 / n + 1e-12)))
 
         z = ate / max(se, 1e-9)
         p_value = float(2 * (1 - self._norm_cdf(abs(z))))
@@ -139,6 +137,7 @@ class DoubleML:
 
     def _ridge_predict(self, X_train, y_train, X_test):
         import numpy as np
+
         X_n = (X_train - X_train.mean(0)) / (X_train.std(0) + 1e-8)
         X_t = (X_test - X_train.mean(0)) / (X_train.std(0) + 1e-8)
         Xb = np.column_stack([np.ones(len(X_n)), X_n])
@@ -150,6 +149,7 @@ class DoubleML:
 
     def _logistic_predict(self, X_train, y_train, X_test):
         import numpy as np
+
         X_n = (X_train - X_train.mean(0)) / (X_train.std(0) + 1e-8)
         X_t = (X_test - X_train.mean(0)) / (X_train.std(0) + 1e-8)
         Xb = np.column_stack([np.ones(len(X_n)), X_n])

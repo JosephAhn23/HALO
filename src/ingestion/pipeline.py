@@ -1,6 +1,7 @@
 """
 Document ingestion pipeline - chunking, embedding, FAISS indexing.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -9,7 +10,7 @@ import logging
 import os
 import threading
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 import numpy as np
 
@@ -40,7 +41,7 @@ class EmbeddingModel:
     def __init__(self, model_name: str = EMBED_MODEL):
         import torch
         import torch.nn.functional as F
-        from transformers import AutoTokenizer, AutoModel
+        from transformers import AutoModel, AutoTokenizer
 
         self._torch = torch
         self._F = F
@@ -50,7 +51,7 @@ class EmbeddingModel:
         self.model.eval()
 
     @staticmethod
-    def _mean_pool(last_hidden_state, attention_mask) -> "torch.Tensor":
+    def _mean_pool(last_hidden_state, attention_mask) -> Any:
         import torch
 
         mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden_state.size()).float()
@@ -58,7 +59,7 @@ class EmbeddingModel:
             mask_expanded.sum(dim=1), min=1e-9
         )
 
-    def embed(self, texts: List[str], batch_size: int = 64) -> np.ndarray:
+    def embed(self, texts: list[str], batch_size: int = 64) -> np.ndarray:
         all_embeddings = []
         with self._torch.no_grad():
             for i in range(0, len(texts), batch_size):
@@ -75,10 +76,11 @@ class EmbeddingModel:
                 embeddings = self._F.normalize(embeddings, p=2, dim=1)
                 all_embeddings.append(embeddings.cpu().numpy())
         import numpy as _np
+
         return _np.vstack(all_embeddings).astype(np.float32)
 
 
-def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
+def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
     if overlap >= chunk_size:
         raise ValueError(
             f"overlap ({overlap}) must be less than chunk_size ({chunk_size}); "
@@ -98,10 +100,10 @@ class IngestionPipeline:
     def __init__(self):
         self.embedder = EmbeddingModel()
         self.index = None
-        self.metadata: List[Dict[str, Any]] = []
+        self.metadata: list[dict[str, Any]] = []
         Path("data").mkdir(exist_ok=True)
 
-    def ingest_documents(self, docs: List[Dict[str, str]]):
+    def ingest_documents(self, docs: list[dict[str, str]]):
         """docs: list of {"id": ..., "text": ..., "source": ...}"""
         all_chunks = []
         all_meta = []
@@ -111,13 +113,15 @@ class IngestionPipeline:
             for i, chunk in enumerate(chunks):
                 chunk_id = hashlib.sha256(f"{doc['id']}_{i}".encode()).hexdigest()
                 all_chunks.append(chunk)
-                all_meta.append({
-                    "chunk_id": chunk_id,
-                    "doc_id": doc["id"],
-                    "source": doc.get("source", ""),
-                    "chunk_index": i,
-                    "text": chunk,
-                })
+                all_meta.append(
+                    {
+                        "chunk_id": chunk_id,
+                        "doc_id": doc["id"],
+                        "source": doc.get("source", ""),
+                        "chunk_index": i,
+                        "text": chunk,
+                    }
+                )
 
         import faiss
 

@@ -18,12 +18,12 @@ Usage — add to api/main.py:
 
 Then scrape http://localhost:8000/metrics with Prometheus.
 """
+
 from __future__ import annotations
 
-import time
 import logging
-from contextlib import asynccontextmanager
-from typing import Callable
+import time
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -33,18 +33,20 @@ logger = logging.getLogger(__name__)
 
 try:
     from prometheus_client import (
+        CONTENT_TYPE_LATEST,
+        REGISTRY,
         Counter,
         Gauge,
         Histogram,
-        CollectorRegistry,
         generate_latest,
-        CONTENT_TYPE_LATEST,
-        REGISTRY,
     )
+
     _PROMETHEUS_AVAILABLE = True
 except ImportError:
     _PROMETHEUS_AVAILABLE = False
-    logger.warning("prometheus-client not installed — metrics disabled. pip install prometheus-client")
+    logger.warning(
+        "prometheus-client not installed — metrics disabled. pip install prometheus-client"
+    )
 
 
 def _make_metrics():
@@ -162,6 +164,7 @@ metrics = _make_metrics()
 # FastAPI middleware
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def instrument_app(app) -> None:
     """
     Add Prometheus instrumentation middleware to a FastAPI app.
@@ -188,9 +191,7 @@ def instrument_app(app) -> None:
                 status_code = response.status_code
                 return response
             except Exception as exc:
-                metrics.errors_total.labels(
-                    error_type=type(exc).__name__, endpoint=endpoint
-                ).inc()
+                metrics.errors_total.labels(error_type=type(exc).__name__, endpoint=endpoint).inc()
                 raise
             finally:
                 duration = time.perf_counter() - start
@@ -220,7 +221,9 @@ try:
     async def prometheus_metrics():
         """Prometheus scrape endpoint."""
         if not _PROMETHEUS_AVAILABLE:
-            return FastAPIResponse(content="# prometheus-client not installed\n", media_type="text/plain")
+            return FastAPIResponse(
+                content="# prometheus-client not installed\n", media_type="text/plain"
+            )
         return FastAPIResponse(
             content=generate_latest(REGISTRY),
             media_type=CONTENT_TYPE_LATEST,
@@ -242,6 +245,7 @@ except ImportError:
 # Context managers for timing blocks
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class track_inference:
     """
     Context manager that records inference latency and token counts.
@@ -252,6 +256,7 @@ class track_inference:
             t.prompt_tokens = len(prompt.split())
             t.completion_tokens = len(result.split())
     """
+
     def __init__(self, model: str = "unknown", backend: str = "unknown"):
         self.model = model
         self.backend = backend
@@ -267,9 +272,9 @@ class track_inference:
         if metrics is None:
             return
         duration = time.perf_counter() - self._start
-        metrics.inference_duration_seconds.labels(
-            model=self.model, backend=self.backend
-        ).observe(duration)
+        metrics.inference_duration_seconds.labels(model=self.model, backend=self.backend).observe(
+            duration
+        )
         if self.prompt_tokens:
             metrics.tokens_prompt_total.labels(model=self.model).inc(self.prompt_tokens)
         if self.completion_tokens:
@@ -289,6 +294,7 @@ class track_retrieval:
             docs = retriever.search(query, top_k=10)
             t.result_count = len(docs)
     """
+
     def __init__(self, backend: str = "faiss"):
         self.backend = backend
         self.result_count: int = 0
@@ -304,9 +310,7 @@ class track_retrieval:
         duration = time.perf_counter() - self._start
         metrics.retrieval_duration_seconds.labels(backend=self.backend).observe(duration)
         if self.result_count:
-            metrics.retrieval_results_count.labels(backend=self.backend).observe(
-                self.result_count
-            )
+            metrics.retrieval_results_count.labels(backend=self.backend).observe(self.result_count)
 
 
 def update_ragas_scores(scores: dict) -> None:

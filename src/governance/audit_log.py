@@ -17,16 +17,16 @@ Entries cover:
   - Human review decisions (HITL)
   - Fairness evaluation results
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-import time
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,23 +36,26 @@ class AuditEntry:
     entry_id: str
     event_type: str
     actor: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     timestamp: str
     prev_hash: str
     entry_hash: str = ""
 
     def compute_hash(self) -> str:
-        content = json.dumps({
-            "entry_id": self.entry_id,
-            "event_type": self.event_type,
-            "actor": self.actor,
-            "payload": self.payload,
-            "timestamp": self.timestamp,
-            "prev_hash": self.prev_hash,
-        }, sort_keys=True)
+        content = json.dumps(
+            {
+                "entry_id": self.entry_id,
+                "event_type": self.event_type,
+                "actor": self.actor,
+                "payload": self.payload,
+                "timestamp": self.timestamp,
+                "prev_hash": self.prev_hash,
+            },
+            sort_keys=True,
+        )
         return hashlib.sha256(content.encode()).hexdigest()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -72,8 +75,8 @@ class CryptoAuditLog:
 
     GENESIS_HASH = "0" * 64
 
-    def __init__(self, persist_path: Optional[str] = None):
-        self._entries: List[AuditEntry] = []
+    def __init__(self, persist_path: str | None = None):
+        self._entries: list[AuditEntry] = []
         self._persist_path = persist_path
         if persist_path:
             self._load(persist_path)
@@ -82,16 +85,14 @@ class CryptoAuditLog:
         self,
         event_type: str,
         actor: str,
-        payload: Dict[str, Any],
-        timestamp: Optional[str] = None,
+        payload: dict[str, Any],
+        timestamp: str | None = None,
     ) -> AuditEntry:
         """Append a new entry to the chain."""
         prev_hash = self._entries[-1].entry_hash if self._entries else self.GENESIS_HASH
-        ts = timestamp or datetime.now(timezone.utc).isoformat()
+        ts = timestamp or datetime.now(UTC).isoformat()
 
-        entry_id = hashlib.sha256(
-            f"{event_type}{actor}{ts}{prev_hash}".encode()
-        ).hexdigest()[:16]
+        entry_id = hashlib.sha256(f"{event_type}{actor}{ts}{prev_hash}".encode()).hexdigest()[:16]
 
         entry = AuditEntry(
             entry_id=entry_id,
@@ -109,11 +110,14 @@ class CryptoAuditLog:
 
         logger.debug(
             "Audit: [%s] %s by %s (hash=%s)",
-            event_type, entry_id, actor, entry.entry_hash[:12],
+            event_type,
+            entry_id,
+            actor,
+            entry.entry_hash[:12],
         )
         return entry
 
-    def verify_chain(self) -> tuple[bool, Optional[str]]:
+    def verify_chain(self) -> tuple[bool, str | None]:
         """
         Verify the integrity of the entire chain.
         Returns (is_valid, error_message).
@@ -142,10 +146,10 @@ class CryptoAuditLog:
 
     def get_entries(
         self,
-        event_type: Optional[str] = None,
-        actor: Optional[str] = None,
-        since: Optional[str] = None,
-    ) -> List[AuditEntry]:
+        event_type: str | None = None,
+        actor: str | None = None,
+        since: str | None = None,
+    ) -> list[AuditEntry]:
         results = self._entries
         if event_type:
             results = [e for e in results if e.event_type == event_type]
@@ -155,13 +159,10 @@ class CryptoAuditLog:
             results = [e for e in results if e.timestamp >= since]
         return results
 
-    def get_model_lineage(self, model_name: str) -> List[AuditEntry]:
-        return [
-            e for e in self._entries
-            if e.payload.get("model_name") == model_name
-        ]
+    def get_model_lineage(self, model_name: str) -> list[AuditEntry]:
+        return [e for e in self._entries if e.payload.get("model_name") == model_name]
 
-    def tail(self, n: int = 10) -> List[AuditEntry]:
+    def tail(self, n: int = 10) -> list[AuditEntry]:
         return self._entries[-n:]
 
     def export_jsonl(self, path: str) -> int:

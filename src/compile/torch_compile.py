@@ -29,12 +29,13 @@ Usage:
     # Drop-in compilation for the RAG pipeline
     compiled_models = compile_rag_components(embedding_model, reranker_model)
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -46,22 +47,24 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 # Config
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CompileConfig:
-    backend: str = "inductor"       # inductor | cudagraphs | onnxrt | eager
-    mode: str = "reduce-overhead"   # default | reduce-overhead | max-autotune
-    dynamic: bool = True            # handle variable sequence lengths without recompile
-    fullgraph: bool = False         # True = strict mode, fail on any graph break
-    disable: bool = False           # True = skip compilation (A/B baseline)
+    backend: str = "inductor"  # inductor | cudagraphs | onnxrt | eager
+    mode: str = "reduce-overhead"  # default | reduce-overhead | max-autotune
+    dynamic: bool = True  # handle variable sequence lengths without recompile
+    fullgraph: bool = False  # True = strict mode, fail on any graph break
+    disable: bool = False  # True = skip compilation (A/B baseline)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Benchmark result
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 @dataclass
 class CompileBenchmarkResult:
-    mode: str               # "eager" | "compiled"
+    mode: str  # "eager" | "compiled"
     backend: str
     compile_mode: str
     warmup_runs: int
@@ -89,6 +92,7 @@ class CompileBenchmarkResult:
 # Graph break detector
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class GraphBreakDetector:
     """
     Detect and log torch.compile graph breaks.
@@ -103,18 +107,19 @@ class GraphBreakDetector:
     """
 
     def __init__(self):
-        self.breaks: List[str] = []
+        self.breaks: list[str] = []
 
     def install_hook(self) -> None:
         """Enable verbose graph break logging via torch._dynamo."""
         try:
             import torch._dynamo as dynamo
+
             dynamo.config.verbose = True
             logger.info("Graph break detection enabled (torch._dynamo.config.verbose=True)")
         except Exception as e:
             logger.warning("Could not install graph break hook: %s", e)
 
-    def explain(self, model, *args, **kwargs) -> Dict:
+    def explain(self, model, *args, **kwargs) -> dict:
         """
         Use torch._dynamo.explain() to get a detailed compilation report.
 
@@ -136,8 +141,7 @@ class GraphBreakDetector:
             }
             if report["graph_breaks"] > 0:
                 logger.warning(
-                    "%d graph break(s) detected — speedup will be limited.\n"
-                    "Reasons: %s",
+                    "%d graph break(s) detected — speedup will be limited.\n" "Reasons: %s",
                     report["graph_breaks"],
                     report["break_reasons"],
                 )
@@ -154,6 +158,7 @@ class GraphBreakDetector:
 # Model compiler
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class ModelCompiler:
     """
     Wraps PyTorch models with torch.compile for inference and training speedup.
@@ -169,7 +174,7 @@ class ModelCompiler:
     def __init__(self, model, device: str = "cpu"):
         self.model = model
         self.device = device
-        self._compiled: Dict[str, Any] = {}
+        self._compiled: dict[str, Any] = {}
         self.detector = GraphBreakDetector()
 
     def compile(
@@ -198,7 +203,10 @@ class ModelCompiler:
 
             logger.info(
                 "Compiling: backend=%s  mode=%s  dynamic=%s  fullgraph=%s",
-                backend, mode, dynamic, fullgraph,
+                backend,
+                mode,
+                dynamic,
+                fullgraph,
             )
             t0 = time.perf_counter()
             compiled = torch.compile(
@@ -225,6 +233,7 @@ class ModelCompiler:
         m = model or self.model
         try:
             import torch
+
             return torch.compile(m, backend="inductor", mode="reduce-overhead", dynamic=True)
         except Exception:
             return m
@@ -238,11 +247,12 @@ class ModelCompiler:
         m = model or self.model
         try:
             import torch
+
             return torch.compile(m, backend="inductor", mode="max-autotune", dynamic=False)
         except Exception:
             return m
 
-    def warmup(self, compiled_model, inputs: Dict, n_warmup: int = 20) -> None:
+    def warmup(self, compiled_model, inputs: dict, n_warmup: int = 20) -> None:
         """
         Run warmup iterations to trigger JIT kernel compilation.
 
@@ -264,12 +274,10 @@ class ModelCompiler:
                     break
         logger.info("Warmup complete.")
 
-    def _run_latencies(
-        self, model, inputs: Dict, n_runs: int
-    ) -> List[float]:
+    def _run_latencies(self, model, inputs: dict, n_runs: int) -> list[float]:
         import torch
 
-        latencies: List[float] = []
+        latencies: list[float] = []
         with torch.no_grad():
             for _ in range(n_runs):
                 if torch.cuda.is_available():
@@ -283,12 +291,12 @@ class ModelCompiler:
 
     def benchmark(
         self,
-        inputs: Dict,
-        backends: Optional[List[str]] = None,
-        modes: Optional[List[str]] = None,
+        inputs: dict,
+        backends: list[str] | None = None,
+        modes: list[str] | None = None,
         n_warmup: int = 20,
         n_runs: int = 200,
-    ) -> List[CompileBenchmarkResult]:
+    ) -> list[CompileBenchmarkResult]:
         """
         Benchmark eager vs multiple compiled (backend, mode) combinations.
 
@@ -304,26 +312,28 @@ class ModelCompiler:
         """
         backends = backends or ["inductor"]
         modes = modes or ["reduce-overhead"]
-        results: List[CompileBenchmarkResult] = []
+        results: list[CompileBenchmarkResult] = []
 
         # Eager baseline
         self.warmup(self.model, inputs, n_warmup)
         eager_latencies = self._run_latencies(self.model, inputs, n_runs)
         eager_p50 = float(np.percentile(eager_latencies, 50))
 
-        results.append(CompileBenchmarkResult(
-            mode="eager",
-            backend="pytorch",
-            compile_mode="none",
-            warmup_runs=n_warmup,
-            bench_runs=n_runs,
-            p50_ms=eager_p50,
-            p90_ms=float(np.percentile(eager_latencies, 90)),
-            p99_ms=float(np.percentile(eager_latencies, 99)),
-            mean_ms=float(np.mean(eager_latencies)),
-            throughput_qps=float(1000 / np.mean(eager_latencies)),
-            speedup_vs_eager=1.0,
-        ))
+        results.append(
+            CompileBenchmarkResult(
+                mode="eager",
+                backend="pytorch",
+                compile_mode="none",
+                warmup_runs=n_warmup,
+                bench_runs=n_runs,
+                p50_ms=eager_p50,
+                p90_ms=float(np.percentile(eager_latencies, 90)),
+                p99_ms=float(np.percentile(eager_latencies, 99)),
+                mean_ms=float(np.mean(eager_latencies)),
+                throughput_qps=float(1000 / np.mean(eager_latencies)),
+                speedup_vs_eager=1.0,
+            )
+        )
 
         # Compiled variants
         for backend in backends:
@@ -336,28 +346,32 @@ class ModelCompiler:
                 latencies = self._run_latencies(compiled, inputs, n_runs)
                 p50 = float(np.percentile(latencies, 50))
 
-                results.append(CompileBenchmarkResult(
-                    mode="compiled",
-                    backend=backend,
-                    compile_mode=mode,
-                    warmup_runs=n_warmup,
-                    bench_runs=n_runs,
-                    p50_ms=p50,
-                    p90_ms=float(np.percentile(latencies, 90)),
-                    p99_ms=float(np.percentile(latencies, 99)),
-                    mean_ms=float(np.mean(latencies)),
-                    throughput_qps=float(1000 / np.mean(latencies)),
-                    speedup_vs_eager=eager_p50 / p50 if p50 > 0 else 1.0,
-                    compile_time_s=compile_time,
-                ))
+                results.append(
+                    CompileBenchmarkResult(
+                        mode="compiled",
+                        backend=backend,
+                        compile_mode=mode,
+                        warmup_runs=n_warmup,
+                        bench_runs=n_runs,
+                        p50_ms=p50,
+                        p90_ms=float(np.percentile(latencies, 90)),
+                        p99_ms=float(np.percentile(latencies, 99)),
+                        mean_ms=float(np.mean(latencies)),
+                        throughput_qps=float(1000 / np.mean(latencies)),
+                        speedup_vs_eager=eager_p50 / p50 if p50 > 0 else 1.0,
+                        compile_time_s=compile_time,
+                    )
+                )
                 logger.info(results[-1])
 
         return results
 
-    def print_benchmark(self, results: List[CompileBenchmarkResult]) -> None:
+    def print_benchmark(self, results: list[CompileBenchmarkResult]) -> None:
         print("\n" + "=" * 100)
-        print(f"{'Mode':10s} {'Backend':12s} {'CompileMode':18s} "
-              f"{'p50':>9s} {'p90':>9s} {'p99':>9s} {'QPS':>8s} {'Speedup':>9s} {'Compile':>9s}")
+        print(
+            f"{'Mode':10s} {'Backend':12s} {'CompileMode':18s} "
+            f"{'p50':>9s} {'p90':>9s} {'p99':>9s} {'QPS':>8s} {'Speedup':>9s} {'Compile':>9s}"
+        )
         print("=" * 100)
         for r in results:
             print(
@@ -369,12 +383,14 @@ class ModelCompiler:
         print("=" * 100)
         if len(results) > 1:
             best = max(results[1:], key=lambda r: r.speedup_vs_eager)
-            print(f"\nBest: {best.speedup_vs_eager:.2f}x speedup "
-                  f"({best.backend}/{best.compile_mode})")
+            print(
+                f"\nBest: {best.speedup_vs_eager:.2f}x speedup "
+                f"({best.backend}/{best.compile_mode})"
+            )
 
     def log_to_mlflow(
         self,
-        results: List[CompileBenchmarkResult],
+        results: list[CompileBenchmarkResult],
         experiment: str = "torch-compile-benchmark",
     ) -> None:
         try:
@@ -384,13 +400,15 @@ class ModelCompiler:
             with mlflow.start_run(run_name="compile-benchmark"):
                 for r in results:
                     prefix = f"{r.mode}.{r.backend}.{r.compile_mode}"
-                    mlflow.log_metrics({
-                        f"{prefix}.p50_ms": r.p50_ms,
-                        f"{prefix}.p99_ms": r.p99_ms,
-                        f"{prefix}.speedup": r.speedup_vs_eager,
-                        f"{prefix}.qps": r.throughput_qps,
-                        f"{prefix}.compile_s": r.compile_time_s,
-                    })
+                    mlflow.log_metrics(
+                        {
+                            f"{prefix}.p50_ms": r.p50_ms,
+                            f"{prefix}.p99_ms": r.p99_ms,
+                            f"{prefix}.speedup": r.speedup_vs_eager,
+                            f"{prefix}.qps": r.throughput_qps,
+                            f"{prefix}.compile_s": r.compile_time_s,
+                        }
+                    )
             logger.info("Benchmark results logged to MLflow: %s", experiment)
         except Exception as e:
             logger.warning("MLflow logging failed: %s", e)
@@ -399,6 +417,7 @@ class ModelCompiler:
 # ──────────────────────────────────────────────────────────────────────────────
 # AoT Autograd compiler
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class AoTAutogradCompiler:
     """
@@ -420,8 +439,8 @@ class AoTAutogradCompiler:
 
     def export(
         self,
-        example_inputs: Tuple,
-        dynamic_shapes: Optional[Dict] = None,
+        example_inputs: tuple,
+        dynamic_shapes: dict | None = None,
     ) -> Any:
         """
         Export model to a portable ExportedProgram.
@@ -477,8 +496,9 @@ class AoTAutogradCompiler:
     def save_exported(self, path: str, exported=None) -> None:
         """Serialise ExportedProgram to disk for deployment."""
         try:
-            import torch
             import os
+
+            import torch
 
             ep = exported or self._exported
             if ep is None:
@@ -501,7 +521,7 @@ class AoTAutogradCompiler:
             logger.warning("Export load failed: %s", e)
             return None
 
-    def aot_eager_trace(self, example_inputs: Tuple) -> Any:
+    def aot_eager_trace(self, example_inputs: tuple) -> Any:
         """
         Trace forward + backward graphs using AOT Autograd with the 'eager'
         backend — no kernel compilation, just graph inspection.
@@ -509,7 +529,6 @@ class AoTAutogradCompiler:
         """
         try:
             from torch._functorch.aot_autograd import aot_module_simplified
-            import torch
 
             def fw_compiler(fx_module, inputs):
                 n_ops = len([n for n in fx_module.graph.nodes if n.op == "call_function"])
@@ -540,6 +559,7 @@ class AoTAutogradCompiler:
 # Dynamic shape manager
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class DynamicShapeManager:
     """
     Manage dynamic shapes for torch.compile to avoid recompilation when
@@ -553,9 +573,9 @@ class DynamicShapeManager:
 
     @staticmethod
     def build_dynamic_shapes(
-        batch_range: Tuple[int, int] = (1, 32),
-        seq_range: Tuple[int, int] = (1, 2048),
-    ) -> Dict:
+        batch_range: tuple[int, int] = (1, 32),
+        seq_range: tuple[int, int] = (1, 2048),
+    ) -> dict:
         """
         Build dynamic shape spec for transformer models.
 
@@ -576,7 +596,7 @@ class DynamicShapeManager:
             return {}
 
     @staticmethod
-    def mark_dynamic(tensor, dims: List[int]) -> None:
+    def mark_dynamic(tensor, dims: list[int]) -> None:
         """
         Mark specific tensor dimensions as dynamic for torch.compile.
         Call before the first compiled forward pass.
@@ -594,6 +614,7 @@ class DynamicShapeManager:
         """Clear the torch.compile compilation cache (force recompile)."""
         try:
             import torch
+
             torch._dynamo.reset()
             logger.info("torch._dynamo cache cleared.")
         except Exception:
@@ -604,6 +625,7 @@ class DynamicShapeManager:
 # RAG pipeline integration
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 def compile_rag_components(
     embedding_model,
     reranker_model=None,
@@ -611,7 +633,7 @@ def compile_rag_components(
     device: str = "cpu",
     backend: str = "inductor",
     mode: str = "reduce-overhead",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Apply torch.compile to RAG pipeline components.
     Returns a dict of compiled models for drop-in replacement.
@@ -623,7 +645,7 @@ def compile_rag_components(
         retriever.model = compiled["embedding"]
         reranker.model  = compiled["reranker"]
     """
-    compiled: Dict[str, Any] = {}
+    compiled: dict[str, Any] = {}
 
     for name, model in [
         ("embedding", embedding_model),
@@ -647,22 +669,34 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="torch.compile benchmark suite")
-    parser.add_argument("--model", default="prajjwal1/bert-tiny",
-                        help="HuggingFace model name or local path")
-    parser.add_argument("--backends", nargs="+", default=["inductor"],
-                        choices=["inductor", "eager", "aot_eager", "cudagraphs"])
-    parser.add_argument("--modes", nargs="+", default=["default", "reduce-overhead"],
-                        choices=["default", "reduce-overhead", "max-autotune"])
+    parser.add_argument(
+        "--model", default="prajjwal1/bert-tiny", help="HuggingFace model name or local path"
+    )
+    parser.add_argument(
+        "--backends",
+        nargs="+",
+        default=["inductor"],
+        choices=["inductor", "eager", "aot_eager", "cudagraphs"],
+    )
+    parser.add_argument(
+        "--modes",
+        nargs="+",
+        default=["default", "reduce-overhead"],
+        choices=["default", "reduce-overhead", "max-autotune"],
+    )
     parser.add_argument("--n-runs", type=int, default=100)
     parser.add_argument("--n-warmup", type=int, default=20)
     parser.add_argument("--seq-len", type=int, default=128)
     parser.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
-    parser.add_argument("--export-aot", action="store_true",
-                        help="Export model with torch.export after benchmarking")
-    parser.add_argument("--graph-breaks", action="store_true",
-                        help="Run graph break analysis before benchmarking")
-    parser.add_argument("--mlflow", action="store_true",
-                        help="Log results to MLflow")
+    parser.add_argument(
+        "--export-aot",
+        action="store_true",
+        help="Export model with torch.export after benchmarking",
+    )
+    parser.add_argument(
+        "--graph-breaks", action="store_true", help="Run graph break analysis before benchmarking"
+    )
+    parser.add_argument("--mlflow", action="store_true", help="Log results to MLflow")
     args = parser.parse_args()
 
     import torch
@@ -693,7 +727,7 @@ if __name__ == "__main__":
         detector = GraphBreakDetector()
         report = detector.explain(model, **dummy)
         if report:
-            print(f"\nGraph break report:")
+            print("\nGraph break report:")
             print(f"  Graphs:       {report.get('graphs', '?')}")
             print(f"  Graph breaks: {report.get('graph_breaks', '?')}")
             for reason in report.get("break_reasons", []):

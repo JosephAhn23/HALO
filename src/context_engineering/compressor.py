@@ -99,7 +99,9 @@ class PromptCompressor:
 
         logger.info(
             "Compressed %d -> %d tokens (%.1f%%)",
-            orig_tokens, comp_tokens, 100 * comp_tokens / max(orig_tokens, 1),
+            orig_tokens,
+            comp_tokens,
+            100 * comp_tokens / max(orig_tokens, 1),
         )
 
         return CompressionResult(
@@ -109,15 +111,11 @@ class PromptCompressor:
             compressed_tokens=comp_tokens,
         )
 
-    def compress_chunks(
-        self, chunks: list[str], query: str = ""
-    ) -> list[CompressionResult]:
+    def compress_chunks(self, chunks: list[str], query: str = "") -> list[CompressionResult]:
         """Compress a list of retrieved chunks independently."""
         return [self.compress(chunk, query) for chunk in chunks]
 
-    def fit_to_budget(
-        self, chunks: list[str], token_budget: int, query: str = ""
-    ) -> list[str]:
+    def fit_to_budget(self, chunks: list[str], token_budget: int, query: str = "") -> list[str]:
         """
         Compress and select chunks to fit within a token budget.
         Prioritises chunks by their relevance score.

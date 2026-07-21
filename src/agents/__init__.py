@@ -15,6 +15,7 @@ def __getattr__(name):
     }
     if name in _lazy:
         import importlib
+
         module_name, attr = _lazy[name]
         module = importlib.import_module(module_name)
         return getattr(module, attr)
@@ -22,9 +23,15 @@ def __getattr__(name):
 
 
 __all__ = [
-    "Pipeline", "run_pipeline", "get_pipeline",
-    "RetrieverAgent", "RetrievedChunk",
-    "RerankerAgent", "CrossEncoderReranker",
+    "Pipeline",
+    "run_pipeline",
+    "get_pipeline",
+    "RetrieverAgent",
+    "RetrievedChunk",
+    "RerankerAgent",
+    "CrossEncoderReranker",
     "SynthesizerAgent",
-    "Retriever", "Reranker", "Synthesizer",
+    "Retriever",
+    "Reranker",
+    "Synthesizer",
 ]

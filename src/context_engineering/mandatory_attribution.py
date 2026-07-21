@@ -5,29 +5,31 @@ Assigns stable ``attribution_id`` values to retrieved chunks so UI / logs can li
 claims back to ingestion. ``grounding_confidence`` estimates how much of the
 answer is supported by retrieved text (vs. likely parametric knowledge).
 """
+
 from __future__ import annotations
 
 import hashlib
-from typing import Any, Dict, List, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from src.agents.attribution import attribute_answer_to_chunks
 
 
 def enrich_chunks_with_attribution_ids(
-    chunks: Sequence[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    chunks: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
     """Return new chunk dicts with ``attribution_id`` (stable given source index + text prefix)."""
-    out: List[Dict[str, Any]] = []
+    out: list[dict[str, Any]] = []
     for i, c in enumerate(chunks):
         src = str(c.get("source", f"chunk_{i}"))
         text = (c.get("text") or "")[:200]
-        h = hashlib.sha256(f"{src}|{i}|{text}".encode("utf-8")).hexdigest()[:16]
+        h = hashlib.sha256(f"{src}|{i}|{text}".encode()).hexdigest()[:16]
         cid = f"SRC-{h.upper()}"
         out.append({**dict(c), "attribution_id": cid, "source_index": i + 1})
     return out
 
 
-def compute_grounding_confidence(answer: str, chunks: Sequence[Dict[str, Any]]) -> float:
+def compute_grounding_confidence(answer: str, chunks: Sequence[dict[str, Any]]) -> float:
     """
     Fraction of substantive sentences that are not flagged speculative by lexical
     overlap (see :mod:`agents.attribution`). Returns 1.0 for empty answers.
@@ -41,7 +43,7 @@ def compute_grounding_confidence(answer: str, chunks: Sequence[Dict[str, Any]]) 
     return round(grounded / len(spans), 4)
 
 
-def build_attribution_footer(chunks: Sequence[Dict[str, Any]], max_lines: int = 12) -> str:
+def build_attribution_footer(chunks: Sequence[dict[str, Any]], max_lines: int = 12) -> str:
     """Human-readable map attribution_id → source for prompts or UI."""
     lines = ["[Source attribution map]"]
     for i, c in enumerate(chunks[:max_lines]):

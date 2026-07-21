@@ -4,6 +4,7 @@ covered separately in test_cost_classifier.py) via a fake stand-in — these
 tests are about routing/abstention logic and pricing math, not classifier
 accuracy, so they should stay fast and not load the embedding model.
 """
+
 from unittest.mock import MagicMock
 
 from src.agents.multi_agent.cost_router import (

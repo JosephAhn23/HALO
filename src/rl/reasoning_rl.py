@@ -15,13 +15,13 @@ Architecture:
   - build_reasoning_dataset     : chat-template prompt builder
   - ReasoningRLTrainer          : thin wrapper with MLflow tracking
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import List
 
 from datasets import Dataset, load_dataset
 
@@ -47,7 +47,8 @@ SYSTEM_PROMPT = (
 # (TRL GRPOTrainer calls these with completions + any extra dataset columns)
 # ---------------------------------------------------------------------------
 
-def reasoning_format_reward(completions: List[str], **kwargs) -> List[float]:
+
+def reasoning_format_reward(completions: list[str], **kwargs) -> list[float]:
     """
     Reward correct chain-of-thought formatting.
     Expects <think>...</think><answer>...</answer> structure.
@@ -66,10 +67,10 @@ def reasoning_format_reward(completions: List[str], **kwargs) -> List[float]:
 
 
 def math_correctness_reward(
-    completions: List[str],
-    ground_truths: List[str],
+    completions: list[str],
+    ground_truths: list[str],
     **kwargs,
-) -> List[float]:
+) -> list[float]:
     """
     Reward exact answer match for math/reasoning tasks.
     Extracts answer from <answer> tags and compares to ground truth.
@@ -100,10 +101,10 @@ def math_correctness_reward(
 
 
 def combined_reward(
-    completions: List[str],
-    ground_truths: List[str],
+    completions: list[str],
+    ground_truths: list[str],
     **kwargs,
-) -> List[float]:
+) -> list[float]:
     """Weighted combination: 0.3 × format + 0.7 × correctness."""
     format_scores = reasoning_format_reward(completions)
     correctness_scores = math_correctness_reward(completions, ground_truths)
@@ -114,7 +115,8 @@ def combined_reward(
 # Dataset builder
 # ---------------------------------------------------------------------------
 
-def build_reasoning_dataset(examples: List[dict]) -> Dataset:
+
+def build_reasoning_dataset(examples: list[dict]) -> Dataset:
     """
     Build a chat-template dataset for GRPO training.
 
@@ -124,6 +126,7 @@ def build_reasoning_dataset(examples: List[dict]) -> Dataset:
       "prompt"       — list of chat messages (system + user)
       "ground_truth" — expected answer string (passed to reward functions)
     """
+
     def format_prompt(ex):
         return {
             "prompt": [
@@ -151,18 +154,28 @@ def load_gsm8k_dataset(n: int = 500) -> Dataset:
         return build_reasoning_dataset(examples)
     except Exception:
         logger.warning("Could not load GSM8K — using synthetic math dataset")
-        return build_reasoning_dataset([
-            {"question": "What is 15% of 240?", "answer": "36"},
-            {"question": "If a train travels 120km in 2 hours, what is its speed in km/h?", "answer": "60"},
-            {"question": "What is the square root of 144?", "answer": "12"},
-            {"question": "A rectangle has length 8 and width 5. What is its area?", "answer": "40"},
-            {"question": "If x + 7 = 15, what is x?", "answer": "8"},
-        ] * 20)
+        return build_reasoning_dataset(
+            [
+                {"question": "What is 15% of 240?", "answer": "36"},
+                {
+                    "question": "If a train travels 120km in 2 hours, what is its speed in km/h?",
+                    "answer": "60",
+                },
+                {"question": "What is the square root of 144?", "answer": "12"},
+                {
+                    "question": "A rectangle has length 8 and width 5. What is its area?",
+                    "answer": "40",
+                },
+                {"question": "If x + 7 = 15, what is x?", "answer": "8"},
+            ]
+            * 20
+        )
 
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ReasoningRLConfig:
@@ -172,7 +185,7 @@ class ReasoningRLConfig:
     max_steps: int = 100
     learning_rate: float = 5e-6
     per_device_train_batch_size: int = 4
-    num_generations: int = 4        # G in GRPO — completions sampled per prompt
+    num_generations: int = 4  # G in GRPO — completions sampled per prompt
     max_new_tokens: int = 256
     temperature: float = 0.9
     experiment_name: str = "grpo-reasoning"
@@ -181,6 +194,7 @@ class ReasoningRLConfig:
 # ---------------------------------------------------------------------------
 # Trainer
 # ---------------------------------------------------------------------------
+
 
 class ReasoningRLTrainer:
     """
@@ -196,7 +210,8 @@ class ReasoningRLTrainer:
 
     def _check_trl(self) -> bool:
         try:
-            from trl import GRPOTrainer, GRPOConfig  # noqa: F401
+            from trl import GRPOConfig, GRPOTrainer  # noqa: F401
+
             return True
         except ImportError:
             logger.warning("TRL GRPOTrainer not available — using hand-rolled fallback")
@@ -206,15 +221,17 @@ class ReasoningRLTrainer:
         mlflow.set_experiment(self.config.experiment_name)
 
         with mlflow.start_run(run_name="grpo-reasoning"):
-            mlflow.log_params({
-                "base_model": self.config.base_model,
-                "num_generations": self.config.num_generations,
-                "learning_rate": self.config.learning_rate,
-                "max_steps": self.config.max_steps,
-                "per_device_train_batch_size": self.config.per_device_train_batch_size,
-                "max_new_tokens": self.config.max_new_tokens,
-                "temperature": self.config.temperature,
-            })
+            mlflow.log_params(
+                {
+                    "base_model": self.config.base_model,
+                    "num_generations": self.config.num_generations,
+                    "learning_rate": self.config.learning_rate,
+                    "max_steps": self.config.max_steps,
+                    "per_device_train_batch_size": self.config.per_device_train_batch_size,
+                    "max_new_tokens": self.config.max_new_tokens,
+                    "temperature": self.config.temperature,
+                }
+            )
 
             if self._trl_available:
                 self._train_trl(dataset)
@@ -234,7 +251,7 @@ class ReasoningRLTrainer:
             max_new_tokens=self.config.max_new_tokens,
             temperature=self.config.temperature,
             log_completions=True,
-            report_to="none",   # MLflow handled manually above
+            report_to="none",  # MLflow handled manually above
         )
 
         trainer = GRPOTrainer(
@@ -279,15 +296,13 @@ class ReasoningRLTrainer:
             row = rows[step % len(rows)]
             # Build plain-text prompt from chat messages
             messages = row["prompt"]
-            prompt = "\n".join(
-                f"{m['role'].upper()}: {m['content']}" for m in messages
-            ) + "\nASSISTANT:"
+            prompt = (
+                "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages) + "\nASSISTANT:"
+            )
             ground_truth = row["ground_truth"]
 
             # Sample G responses
-            enc = tokenizer(
-                prompt, return_tensors="pt", truncation=True, max_length=512
-            ).to(device)
+            enc = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(device)
             responses = []
             for _ in range(self.config.num_generations):
                 with torch.no_grad():
@@ -299,13 +314,11 @@ class ReasoningRLTrainer:
                         pad_token_id=tokenizer.pad_token_id,
                     )
                 responses.append(
-                    tokenizer.decode(out[0, enc["input_ids"].shape[1]:], skip_special_tokens=True)
+                    tokenizer.decode(out[0, enc["input_ids"].shape[1] :], skip_special_tokens=True)
                 )
 
             # Score and normalise within group
-            raw_rewards = combined_reward(
-                responses, [ground_truth] * len(responses)
-            )
+            raw_rewards = combined_reward(responses, [ground_truth] * len(responses))
             reward_t = torch.tensor(raw_rewards, dtype=torch.float)
             if reward_t.std() > 1e-8:
                 advantages = (reward_t - reward_t.mean()) / (reward_t.std() + 1e-8)
@@ -317,9 +330,9 @@ class ReasoningRLTrainer:
             kl_sum = 0.0
             for resp, adv in zip(responses, advantages):
                 full = prompt + resp
-                full_enc = tokenizer(
-                    full, return_tensors="pt", truncation=True, max_length=512
-                ).to(device)
+                full_enc = tokenizer(full, return_tensors="pt", truncation=True, max_length=512).to(
+                    device
+                )
                 prompt_len = enc["input_ids"].shape[1]
                 logits = policy(**full_enc).logits
                 with torch.no_grad():
@@ -328,7 +341,7 @@ class ReasoningRLTrainer:
                 pol_lp = F.log_softmax(logits[:, :-1], dim=-1)
                 ref_lp = F.log_softmax(ref_logits[:, :-1], dim=-1)
                 tok_lp = pol_lp.gather(2, labels.unsqueeze(-1)).squeeze(-1)
-                resp_lp = tok_lp[:, prompt_len - 1:].mean()
+                resp_lp = tok_lp[:, prompt_len - 1 :].mean()
                 kl = (pol_lp - ref_lp).mean().clamp(min=0)
                 kl_sum += float(kl)
                 total_loss = total_loss + (-(adv * resp_lp - 0.01 * kl))
@@ -340,19 +353,25 @@ class ReasoningRLTrainer:
             optimizer.step()
 
             fmt_score = sum(reasoning_format_reward(responses)) / len(responses)
-            mlflow.log_metrics({
-                "reward_mean": float(reward_t.mean()),
-                "reward_max": float(reward_t.max()),
-                "format_reward": fmt_score,
-                "kl_mean": kl_sum / self.config.num_generations,
-                "loss": float(total_loss),
-            }, step=step)
+            mlflow.log_metrics(
+                {
+                    "reward_mean": float(reward_t.mean()),
+                    "reward_max": float(reward_t.max()),
+                    "format_reward": fmt_score,
+                    "kl_mean": kl_sum / self.config.num_generations,
+                    "loss": float(total_loss),
+                },
+                step=step,
+            )
 
             if step % 10 == 0:
                 logger.info(
                     "Step %d | reward=%.3f | format=%.2f | kl=%.4f | loss=%.4f",
-                    step, float(reward_t.mean()), fmt_score,
-                    kl_sum / self.config.num_generations, float(total_loss),
+                    step,
+                    float(reward_t.mean()),
+                    fmt_score,
+                    kl_sum / self.config.num_generations,
+                    float(total_loss),
                 )
 
         os.makedirs(self.config.output_dir, exist_ok=True)
@@ -365,10 +384,14 @@ class ReasoningRLTrainer:
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
     examples = [
         {"question": "What is 15% of 240?", "answer": "36"},
-        {"question": "If a train travels 120km in 2 hours, what is its speed in km/h?", "answer": "60"},
+        {
+            "question": "If a train travels 120km in 2 hours, what is its speed in km/h?",
+            "answer": "60",
+        },
         {"question": "What is the square root of 144?", "answer": "12"},
         {"question": "A rectangle has length 8 and width 5. What is its area?", "answer": "40"},
         {"question": "If x + 7 = 15, what is x?", "answer": "8"},

@@ -267,7 +267,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ragas-eval, safety]
     if: |
-      github.ref == 'refs/heads/main' && (
+      github.ref == 'refs/heads/main' &&
+      secrets.AWS_ACCESS_KEY_ID != '' && (
         needs.ragas-eval.outputs.passed == 'true' ||
         github.event.inputs.force_deploy == 'true'
       )
@@ -319,6 +320,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     environment: production
+    if: secrets.KUBECONFIG != ''
 
     steps:
       - uses: actions/checkout@v4

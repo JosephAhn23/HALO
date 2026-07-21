@@ -5,18 +5,20 @@ Triton Kernel Injection + Hardware Dispatch
 This is production-ready. Test on MI300X when GPU credits arrive.
 """
 
+import logging
+from collections.abc import Callable
+
 import torch
 import torch.fx
-from typing import Callable, List, Dict, Any
-import logging
 
-logging.basicConfig(level=logging.INFO, format='%(message)s')
+logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 # Try to import Triton (optional, falls back to PyTorch ops if not available)
 try:
     import triton
     import triton.language as tl
+
     TRITON_AVAILABLE = True
 except ImportError:
     TRITON_AVAILABLE = False
@@ -27,9 +29,9 @@ except ImportError:
 # ============================================================================
 
 if TRITON_AVAILABLE:
+
     @triton.jit
-    def triton_add(x_ptr, y_ptr, output_ptr, n_elements,
-                   BLOCK_SIZE: tl.constexpr):
+    def triton_add(x_ptr, y_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
         """Element-wise addition. Compiles to CUDA/ROCm/CPU."""
         pid = tl.program_id(0)
         block_start = pid * BLOCK_SIZE
@@ -43,8 +45,7 @@ if TRITON_AVAILABLE:
         tl.store(output_ptr + offsets, output, mask=mask)
 
     @triton.jit
-    def triton_mul(x_ptr, y_ptr, output_ptr, n_elements,
-                   BLOCK_SIZE: tl.constexpr):
+    def triton_mul(x_ptr, y_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
         """Element-wise multiplication."""
         pid = tl.program_id(0)
         block_start = pid * BLOCK_SIZE
@@ -58,8 +59,7 @@ if TRITON_AVAILABLE:
         tl.store(output_ptr + offsets, output, mask=mask)
 
     @triton.jit
-    def triton_relu(x_ptr, output_ptr, n_elements,
-                    BLOCK_SIZE: tl.constexpr):
+    def triton_relu(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
         """ReLU activation: max(0, x)"""
         pid = tl.program_id(0)
         block_start = pid * BLOCK_SIZE
@@ -72,8 +72,7 @@ if TRITON_AVAILABLE:
         tl.store(output_ptr + offsets, output, mask=mask)
 
     @triton.jit
-    def triton_gelu(x_ptr, output_ptr, n_elements,
-                    BLOCK_SIZE: tl.constexpr):
+    def triton_gelu(x_ptr, output_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
         """GELU activation (approximate)."""
         pid = tl.program_id(0)
         block_start = pid * BLOCK_SIZE
@@ -134,6 +133,7 @@ HARDWARE_KERNELS = {
 # PHASE 3: TRITON KERNEL INJECTOR
 # ============================================================================
 
+
 class TritonKernelInjector:
     """Injects Triton kernels into the computation graph."""
 
@@ -144,8 +144,7 @@ class TritonKernelInjector:
         return op_name in triton_suitable and TRITON_AVAILABLE
 
     @staticmethod
-    def inject_for_hardware(gm: torch.fx.GraphModule,
-                           target_hardware: str) -> torch.fx.GraphModule:
+    def inject_for_hardware(gm: torch.fx.GraphModule, target_hardware: str) -> torch.fx.GraphModule:
         """
         Modify the graph to use hardware-optimized kernels.
 
@@ -172,7 +171,9 @@ class TritonKernelInjector:
                         kernel_choices[node.name] = f"PyTorch ({op_name})"
                 else:
                     # Hardware-specific or fallback
-                    hw_kernel = HARDWARE_KERNELS.get(op_name, {}).get(target_hardware, "torch_fallback")
+                    hw_kernel = HARDWARE_KERNELS.get(op_name, {}).get(
+                        target_hardware, "torch_fallback"
+                    )
                     kernel_choices[node.name] = hw_kernel
 
         # Log the injection plan
@@ -190,8 +191,10 @@ class TritonKernelInjector:
 # PHASE 3: MORPHOS BACKEND WITH TRITON
 # ============================================================================
 
-def morphos_backend_phase3(gm: torch.fx.GraphModule,
-                           example_inputs: List[torch.Tensor]) -> Callable:
+
+def morphos_backend_phase3(
+    gm: torch.fx.GraphModule, example_inputs: list[torch.Tensor]
+) -> Callable:
     """
     Complete MorphOS Phase 3 backend.
 
@@ -211,21 +214,21 @@ def morphos_backend_phase3(gm: torch.fx.GraphModule,
         target_hardware = "cuda"
         device_name = torch.cuda.get_device_name(0)
         print(f"\n📍 Target Hardware: CUDA ({device_name})")
-    elif hasattr(torch.version, 'hip'):
+    elif hasattr(torch.version, "hip"):
         target_hardware = "rocm"
-        print(f"\n📍 Target Hardware: ROCm (AMD)")
+        print("\n📍 Target Hardware: ROCm (AMD)")
     else:
         target_hardware = "cpu"
-        print(f"\n📍 Target Hardware: CPU")
+        print("\n📍 Target Hardware: CPU")
 
     # Step 2: Check Triton availability
     if TRITON_AVAILABLE:
         print(f"✓ Triton available: Will compile to {target_hardware} backend")
     else:
-        print(f"⚠️  Triton not available: Using PyTorch fallback")
+        print("⚠️  Triton not available: Using PyTorch fallback")
 
     # Step 3: Analyze graph
-    print(f"\n📊 Graph Analysis:")
+    print("\n📊 Graph Analysis:")
     print(f"  Nodes in graph: {len(list(gm.graph.nodes))}")
 
     # Step 4: Categorize operations
@@ -258,23 +261,23 @@ def morphos_backend_phase3(gm: torch.fx.GraphModule,
             print(f"    - {op}")
 
     # Step 5: Inject kernels
-    print(f"\n🔧 Kernel Injection:")
+    print("\n🔧 Kernel Injection:")
     gm_optimized = TritonKernelInjector.inject_for_hardware(gm, target_hardware)
 
     # Step 6: Compilation strategy
-    print(f"\n📦 Compilation Strategy:")
+    print("\n📦 Compilation Strategy:")
     if target_hardware == "rocm":
-        print(f"  1. Triton kernels: Compile via Triton's ROCm backend ✓ NEW")
-        print(f"  2. Hardware-specific: Use rocBLAS + MIOpen")
-        print(f"  3. Fallback: CPU implementations")
+        print("  1. Triton kernels: Compile via Triton's ROCm backend ✓ NEW")
+        print("  2. Hardware-specific: Use rocBLAS + MIOpen")
+        print("  3. Fallback: CPU implementations")
     elif target_hardware == "cuda":
-        print(f"  1. Triton kernels: Compile via Triton's CUDA backend")
-        print(f"  2. Hardware-specific: Use cuBLAS + cuDNN")
-        print(f"  3. Fallback: CPU implementations")
+        print("  1. Triton kernels: Compile via Triton's CUDA backend")
+        print("  2. Hardware-specific: Use cuBLAS + cuDNN")
+        print("  3. Fallback: CPU implementations")
     else:
-        print(f"  1. All operations: PyTorch CPU implementations")
+        print("  1. All operations: PyTorch CPU implementations")
 
-    print(f"\n✅ Graph ready for execution")
+    print("\n✅ Graph ready for execution")
     print("=" * 80 + "\n")
 
     return gm_optimized.forward
@@ -284,6 +287,7 @@ def morphos_backend_phase3(gm: torch.fx.GraphModule,
 # TESTS
 # ============================================================================
 
+
 def test_phase3_simple():
     """Test Phase 3 on simple operations."""
     print("\n" + "#" * 80)
@@ -292,8 +296,8 @@ def test_phase3_simple():
 
     class Model(torch.nn.Module):
         def forward(self, x):
-            x = x + 1.0      # Triton candidate
-            x = x * 2.0      # Triton candidate
+            x = x + 1.0  # Triton candidate
+            x = x * 2.0  # Triton candidate
             x = torch.relu(x)  # Triton candidate
             return x
 
@@ -306,9 +310,9 @@ def test_phase3_simple():
     expected = torch.relu((x + 1.0) * 2.0)
     assert torch.allclose(output, expected, atol=1e-5)
 
-    print(f"\n✓ Test 1 PASSED")
+    print("\n✓ Test 1 PASSED")
     print(f"  Input: {x.shape}, Output: {output.shape}")
-    print(f"  Result matches expected ✓\n")
+    print("  Result matches expected ✓\n")
 
 
 def test_phase3_model():
@@ -338,9 +342,9 @@ def test_phase3_model():
     x = torch.randn(32, 100)
     output = compiled(x)
 
-    print(f"\n✓ Test 2 PASSED")
+    print("\n✓ Test 2 PASSED")
     print(f"  Input: {x.shape}, Output: {output.shape}")
-    print(f"  Model executed successfully ✓\n")
+    print("  Model executed successfully ✓\n")
 
 
 def test_phase3_attention():
@@ -367,9 +371,9 @@ def test_phase3_attention():
     x = torch.randn(2, 16, 64)
     output = compiled(x)
 
-    print(f"\n✓ Test 3 PASSED")
+    print("\n✓ Test 3 PASSED")
     print(f"  Input: {x.shape}, Output: {output.shape}")
-    print(f"  Attention model executed successfully ✓\n")
+    print("  Attention model executed successfully ✓\n")
 
 
 # ============================================================================
@@ -408,4 +412,5 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n✗ TEST FAILED: {e}")
         import traceback
+
         traceback.print_exc()

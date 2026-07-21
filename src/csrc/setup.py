@@ -24,6 +24,7 @@ Requirements:
     - PyTorch >= 2.0 (matching CUDA version)
     - C++17 compiler (gcc >= 9 on Linux, MSVC 2019+ on Windows)
 """
+
 import os
 import sys
 from pathlib import Path
@@ -33,9 +34,9 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 # Detect CUDA architectures from environment or use sensible defaults
 cuda_arch_list = os.environ.get(
-    "TORCH_CUDA_ARCH_LIST",
-    "7.0;7.5;8.0;8.6;8.9;9.0"   # V100, T4, A100, A10, L4, H100
+    "TORCH_CUDA_ARCH_LIST", "7.0;7.5;8.0;8.6;8.9;9.0"  # V100, T4, A100, A10, L4, H100
 )
+
 
 # Convert "8.0;8.6" → ["-gencode=arch=compute_80,code=sm_80", ...]
 def arch_flags(arch_list: str):
@@ -57,16 +58,21 @@ extra_compile_args = {
         "-std=c++17",
         "--expt-relaxed-constexpr",
         "--expt-extended-lambda",
-        "-Xcompiler", "-fPIC",
-    ] + arch_flags(cuda_arch_list),
+        "-Xcompiler",
+        "-fPIC",
+    ]
+    + arch_flags(cuda_arch_list),
 }
 
 # On Windows, replace -fPIC with /O2
 if sys.platform == "win32":
     extra_compile_args["cxx"] = ["/O2", "/std:c++17"]
     extra_compile_args["nvcc"] = [
-        "-O3", "--use_fast_math", "-std=c++17",
-        "--expt-relaxed-constexpr", "--expt-extended-lambda",
+        "-O3",
+        "--use_fast_math",
+        "-std=c++17",
+        "--expt-relaxed-constexpr",
+        "--expt-extended-lambda",
     ] + arch_flags(cuda_arch_list)
 
 csrc_dir = Path(__file__).parent

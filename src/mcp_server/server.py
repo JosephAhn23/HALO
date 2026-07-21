@@ -5,6 +5,7 @@ Closes gap: MCP server experience
 Exposes RAG pipeline capabilities as MCP tools so any MCP-compatible
 AI agent (Claude, Cursor, etc.) can call retrieve, ingest, and evaluate.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -126,9 +127,7 @@ async def list_tools() -> list[types.Tool]:
 
 
 @app.call_tool()
-async def call_tool(
-    name: str, arguments: dict[str, Any]
-) -> list[types.TextContent]:
+async def call_tool(name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
     """Route MCP tool calls to the appropriate pipeline component."""
     try:
         if name == "retrieve":
@@ -147,9 +146,7 @@ async def call_tool(
         logger.exception("Tool %s failed", name)
         result = {"error": f"Tool {name} failed: {type(exc).__name__}: {exc}"}
 
-    return [
-        types.TextContent(type="text", text=json.dumps(result, indent=2))
-    ]
+    return [types.TextContent(type="text", text=json.dumps(result, indent=2))]
 
 
 async def _handle_retrieve(args: dict) -> dict:
@@ -194,15 +191,18 @@ async def _handle_evaluate(args: dict) -> dict:
     is offloaded to a thread to avoid blocking the MCP server event loop.
     """
     import asyncio
+
     from datasets import Dataset
     from ragas import evaluate
     from ragas.metrics import answer_relevancy, context_precision, faithfulness
 
-    data = Dataset.from_dict({
-        "question": [args["question"]],
-        "answer": [args["answer"]],
-        "contexts": [args["contexts"]],
-    })
+    data = Dataset.from_dict(
+        {
+            "question": [args["question"]],
+            "answer": [args["answer"]],
+            "contexts": [args["contexts"]],
+        }
+    )
     metrics = [faithfulness, answer_relevancy, context_precision]
     result = await asyncio.to_thread(evaluate, data, metrics=metrics)
     return {
@@ -215,6 +215,7 @@ async def _handle_evaluate(args: dict) -> dict:
 async def _handle_list_models() -> dict:
     """List all registered models from SageMaker model registry (paginated)."""
     import asyncio
+
     import boto3
 
     def _fetch_all() -> list:
@@ -227,12 +228,14 @@ async def _handle_list_models() -> dict:
             SortOrder="Descending",
         ):
             for pkg in page["ModelPackageSummaryList"]:
-                models.append({
-                    "arn": pkg["ModelPackageArn"],
-                    "version": pkg["ModelPackageVersion"],
-                    "status": pkg["ModelApprovalStatus"],
-                    "created": str(pkg["CreationTime"]),
-                })
+                models.append(
+                    {
+                        "arn": pkg["ModelPackageArn"],
+                        "version": pkg["ModelPackageVersion"],
+                        "status": pkg["ModelApprovalStatus"],
+                        "created": str(pkg["CreationTime"]),
+                    }
+                )
         return models
 
     models = await asyncio.to_thread(_fetch_all)
@@ -255,9 +258,7 @@ async def _handle_benchmark(args: dict) -> dict:
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream, write_stream, app.create_initialization_options()
-        )
+        await app.run(read_stream, write_stream, app.create_initialization_options())
 
 
 if __name__ == "__main__":

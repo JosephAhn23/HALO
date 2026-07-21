@@ -4,12 +4,12 @@ Constitutional research gate — LLM-as-judge against explicit research principl
 If the grade is below the pass threshold (default 90), callers should regenerate
 the answer (see ``agents.orchestrator`` synthesis loop).
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
-from typing import List
 
 from pydantic import BaseModel, Field
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PASS_THRESHOLD = 90.0
 
-RESEARCH_PRINCIPLES: List[str] = [
+RESEARCH_PRINCIPLES: list[str] = [
     "Do not present a formula or numeric result as fact without derivation, citation, or explicit assumptions.",
     "Do not simplify complex mathematics or physics for brevity when the user asked for rigor.",
     "Distinguish established results from conjecture; label uncertainty clearly.",
@@ -26,7 +26,8 @@ RESEARCH_PRINCIPLES: List[str] = [
     "Flag when retrieved context is insufficient instead of filling gaps speculatively.",
 ]
 
-CONSTITUTIONAL_JUDGE_PROMPT = """You are a strict research-ethics reviewer grading an assistant answer.
+CONSTITUTIONAL_JUDGE_PROMPT = (
+    """You are a strict research-ethics reviewer grading an assistant answer.
 
 Apply ONLY these principles (violate none):
 {principles}
@@ -46,12 +47,13 @@ Scoring guide:
 - 70-89: Minor issues (e.g. one soft claim without caveat).
 - Below 70: Serious principle violations (fabricated rigor, hidden assumptions, oversimplification of math).
 """.strip()
+)
 
 
 class ConstitutionalResult(BaseModel):
     score: float = Field(ge=0, le=100)
     passed: bool
-    violations: List[str] = Field(default_factory=list)
+    violations: list[str] = Field(default_factory=list)
     rationale: str = ""
     raw_response: str = ""
 
@@ -66,7 +68,7 @@ class ConstitutionalClassifier:
         model: str | None = None,
         *,
         pass_threshold: float = DEFAULT_PASS_THRESHOLD,
-        principles: List[str] | None = None,
+        principles: list[str] | None = None,
     ) -> None:
         self.model = model or os.getenv("CONSTITUTION_JUDGE_MODEL", "gpt-4o-mini")
         self.pass_threshold = pass_threshold
@@ -137,7 +139,7 @@ def _parse_score(raw: str) -> float:
     return min(100.0, max(0.0, float(m.group(1))))
 
 
-def _parse_violations(raw: str) -> List[str]:
+def _parse_violations(raw: str) -> list[str]:
     m = re.search(r"VIOLATIONS:\s*(.+?)(?:\n|RATIONALE:)", raw, re.IGNORECASE | re.DOTALL)
     if not m:
         return []

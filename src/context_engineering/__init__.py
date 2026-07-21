@@ -9,31 +9,30 @@ Techniques for maximising LLM performance through context construction:
   - ChainOfThought     : structured CoT prompt builder
 """
 
-from src.context_engineering.compressor import PromptCompressor, CompressionResult
-from src.context_engineering.few_shot import DynamicFewShot, FewShotExample
-from src.context_engineering.window_manager import ContextWindowManager, WindowResult, Priority, ContextSlot
 from src.context_engineering.chain_of_thought import (
     ChainOfThoughtBuilder,
     ChainOfThoughtConfig,
     CoTExample,
     CoTResult,
 )
-from src.context_engineering.symbol_map import (
-    build_prompt_injection_block,
-    generate_symbol_map_text,
-    try_pyright_symbol_dump,
-)
+from src.context_engineering.compressor import CompressionResult, PromptCompressor
 from src.context_engineering.context_manager import (
-    ContextManager,
     ContextBudget,
+    ContextManager,
     QueryRewriter,
     RetrievalCompressor,
     TokenCostOptimizer,
 )
+from src.context_engineering.few_shot import DynamicFewShot, FewShotExample
 from src.context_engineering.mandatory_attribution import (
     build_attribution_footer,
     compute_grounding_confidence,
     enrich_chunks_with_attribution_ids,
+)
+from src.context_engineering.symbol_map import (
+    build_prompt_injection_block,
+    generate_symbol_map_text,
+    try_pyright_symbol_dump,
 )
 from src.context_engineering.traceable_rag import (
     append_paragraph_provenance,
@@ -42,6 +41,12 @@ from src.context_engineering.traceable_rag import (
     format_chunks_for_prompt,
     low_confidence_human_review_message,
     normalize_chunk_provenance,
+)
+from src.context_engineering.window_manager import (
+    ContextSlot,
+    ContextWindowManager,
+    Priority,
+    WindowResult,
 )
 
 __all__ = [

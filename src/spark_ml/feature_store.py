@@ -18,14 +18,15 @@ Usage:
     store.register_feature_group("user_query_stats", df, primary_key="user_id")
     training_df = store.get_training_dataset(entity_df, feature_groups=["user_query_stats"])
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +35,14 @@ logger = logging.getLogger(__name__)
 # Feature Group Schema
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class FeatureSchema:
     name: str
     dtype: str
     nullable: bool = True
     description: str = ""
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -48,17 +50,15 @@ class FeatureGroup:
     name: str
     primary_key: str
     event_time_col: str
-    features: List[FeatureSchema]
+    features: list[FeatureSchema]
     description: str = ""
     version: int = 1
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     owner: str = "llmops"
-    tags: Dict[str, str] = field(default_factory=dict)
+    tags: dict[str, str] = field(default_factory=dict)
 
     def schema_hash(self) -> str:
-        schema_repr = json.dumps(
-            [asdict(f) for f in self.features], sort_keys=True
-        )
+        schema_repr = json.dumps([asdict(f) for f in self.features], sort_keys=True)
         return hashlib.sha256(schema_repr.encode()).hexdigest()[:12]
 
     def to_dict(self) -> dict:
@@ -70,6 +70,7 @@ class FeatureGroup:
 # ---------------------------------------------------------------------------
 # Feature Store
 # ---------------------------------------------------------------------------
+
 
 class FeatureStore:
     """
@@ -86,16 +87,17 @@ class FeatureStore:
         self,
         offline_path: str = "delta/feature_store",
         online_backend: str = "memory",
-        mlflow_tracking_uri: Optional[str] = None,
+        mlflow_tracking_uri: str | None = None,
     ):
         self.offline_path = offline_path
         self.online_backend = online_backend
-        self._registry: Dict[str, FeatureGroup] = {}
-        self._online_store: Dict[str, Dict[str, Any]] = {}
-        self._lineage: List[Dict] = []
+        self._registry: dict[str, FeatureGroup] = {}
+        self._online_store: dict[str, dict[str, Any]] = {}
+        self._lineage: list[dict] = []
 
         try:
             from src.mlops.compat import mlflow
+
             if mlflow_tracking_uri:
                 mlflow.set_tracking_uri(mlflow_tracking_uri)
             self._mlflow = mlflow
@@ -109,6 +111,7 @@ class FeatureStore:
     def _connect_redis(self):
         try:
             import redis
+
             r = redis.Redis(host="localhost", port=6379, decode_responses=True)
             r.ping()
             logger.info("Connected to Redis for online feature serving.")
@@ -124,19 +127,23 @@ class FeatureStore:
     def register_feature_group(
         self,
         name: str,
-        features: List[FeatureSchema],
+        features: list[FeatureSchema],
         primary_key: str,
         event_time_col: str = "event_time",
         description: str = "",
-        tags: Optional[Dict[str, str]] = None,
+        tags: dict[str, str] | None = None,
     ) -> FeatureGroup:
         """Register a feature group. Increments version if schema changes."""
         existing = self._registry.get(name)
         version = 1
         if existing:
             new_group = FeatureGroup(
-                name=name, primary_key=primary_key, event_time_col=event_time_col,
-                features=features, description=description, version=existing.version,
+                name=name,
+                primary_key=primary_key,
+                event_time_col=event_time_col,
+                features=features,
+                description=description,
+                version=existing.version,
                 tags=tags or {},
             )
             if new_group.schema_hash() != existing.schema_hash():
@@ -146,27 +153,35 @@ class FeatureStore:
                 version = existing.version
 
         group = FeatureGroup(
-            name=name, primary_key=primary_key, event_time_col=event_time_col,
-            features=features, description=description, version=version,
+            name=name,
+            primary_key=primary_key,
+            event_time_col=event_time_col,
+            features=features,
+            description=description,
+            version=version,
             tags=tags or {},
         )
         self._registry[name] = group
 
         if self._mlflow:
             with self._mlflow.start_run(run_name=f"feature-group-{name}-v{version}"):
-                self._mlflow.log_params({
-                    "feature_group": name,
-                    "version": version,
-                    "primary_key": primary_key,
-                    "n_features": len(features),
-                    "schema_hash": group.schema_hash(),
-                })
+                self._mlflow.log_params(
+                    {
+                        "feature_group": name,
+                        "version": version,
+                        "primary_key": primary_key,
+                        "n_features": len(features),
+                        "schema_hash": group.schema_hash(),
+                    }
+                )
                 self._mlflow.set_tags(tags or {})
 
-        logger.info("Registered feature group '%s' v%d (%d features).", name, version, len(features))
+        logger.info(
+            "Registered feature group '%s' v%d (%d features).", name, version, len(features)
+        )
         return group
 
-    def list_feature_groups(self) -> List[Dict]:
+    def list_feature_groups(self) -> list[dict]:
         return [g.to_dict() for g in self._registry.values()]
 
     # ------------------------------------------------------------------
@@ -176,7 +191,7 @@ class FeatureStore:
     def write_features(
         self,
         group_name: str,
-        records: List[Dict[str, Any]],
+        records: list[dict[str, Any]],
         mode: str = "append",
     ) -> None:
         """
@@ -186,7 +201,9 @@ class FeatureStore:
         """
         group = self._registry.get(group_name)
         if not group:
-            raise KeyError(f"Feature group '{group_name}' not registered. Call register_feature_group first.")
+            raise KeyError(
+                f"Feature group '{group_name}' not registered. Call register_feature_group first."
+            )
 
         feature_names = {f.name for f in group.features} | {group.primary_key, group.event_time_col}
         for rec in records:
@@ -208,10 +225,12 @@ class FeatureStore:
 
             if self._redis:
                 redis_key = f"fs:{group_name}:{key}"
-                self._redis.hset(redis_key, mapping={
-                    k: json.dumps(v) if not isinstance(v, str) else v
-                    for k, v in rec.items()
-                })
+                self._redis.hset(
+                    redis_key,
+                    mapping={
+                        k: json.dumps(v) if not isinstance(v, str) else v for k, v in rec.items()
+                    },
+                )
 
         logger.info("Wrote %d records to feature group '%s'.", len(records), group_name)
 
@@ -222,9 +241,9 @@ class FeatureStore:
     def get_online_features(
         self,
         group_name: str,
-        entity_ids: List[str],
-        feature_names: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
+        entity_ids: list[str],
+        feature_names: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Low-latency feature lookup for online inference.
         Redis path: O(1) per entity. Memory path: dict lookup.
@@ -246,10 +265,10 @@ class FeatureStore:
 
     def get_training_dataset(
         self,
-        entity_df: List[Dict[str, Any]],
-        feature_groups: List[str],
-        label_col: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        entity_df: list[dict[str, Any]],
+        feature_groups: list[str],
+        label_col: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Point-in-time correct feature join for training.
 
@@ -264,7 +283,7 @@ class FeatureStore:
         joined = []
         for entity_row in entity_df:
             combined = dict(entity_row)
-            entity_time = entity_row.get("event_time", datetime.now(timezone.utc).isoformat())
+            entity_time = entity_row.get("event_time", datetime.now(UTC).isoformat())
 
             for group_name in feature_groups:
                 group = self._registry.get(group_name)
@@ -281,7 +300,9 @@ class FeatureStore:
                 if feat_time and feat_time > entity_time:
                     logger.debug(
                         "Skipping future feature for entity %s (feat_time=%s > entity_time=%s)",
-                        entity_id, feat_time, entity_time,
+                        entity_id,
+                        feat_time,
+                        entity_time,
                     )
                     continue
 
@@ -290,7 +311,11 @@ class FeatureStore:
             joined.append(combined)
 
         self._log_lineage(entity_df, feature_groups, label_col)
-        logger.info("Generated training dataset: %d rows, %d feature groups.", len(joined), len(feature_groups))
+        logger.info(
+            "Generated training dataset: %d rows, %d feature groups.",
+            len(joined),
+            len(feature_groups),
+        )
         return joined
 
     # ------------------------------------------------------------------
@@ -299,17 +324,15 @@ class FeatureStore:
 
     def _log_lineage(
         self,
-        entity_df: List[Dict],
-        feature_groups: List[str],
-        label_col: Optional[str],
+        entity_df: list[dict],
+        feature_groups: list[str],
+        label_col: str | None,
     ) -> None:
         entry = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "n_entities": len(entity_df),
             "feature_groups": {
-                g: self._registry[g].to_dict()
-                for g in feature_groups
-                if g in self._registry
+                g: self._registry[g].to_dict() for g in feature_groups if g in self._registry
             },
             "label_col": label_col,
         }
@@ -317,16 +340,18 @@ class FeatureStore:
 
         if self._mlflow:
             with self._mlflow.start_run(run_name="feature-store-training-dataset"):
-                self._mlflow.log_params({
-                    "n_entities": len(entity_df),
-                    "feature_groups": ",".join(feature_groups),
-                    "label_col": label_col or "none",
-                })
+                self._mlflow.log_params(
+                    {
+                        "n_entities": len(entity_df),
+                        "feature_groups": ",".join(feature_groups),
+                        "label_col": label_col or "none",
+                    }
+                )
 
-    def get_lineage(self) -> List[Dict]:
+    def get_lineage(self) -> list[dict]:
         return self._lineage
 
-    def feature_importance_report(self, group_name: str) -> Dict[str, Any]:
+    def feature_importance_report(self, group_name: str) -> dict[str, Any]:
         """Basic feature stats for data quality monitoring."""
         group = self._registry.get(group_name)
         if not group:
@@ -335,7 +360,7 @@ class FeatureStore:
         if not records:
             return {"group": group_name, "n_records": 0}
 
-        report: Dict[str, Any] = {"group": group_name, "n_records": len(records)}
+        report: dict[str, Any] = {"group": group_name, "n_records": len(records)}
         for feat in group.features:
             vals = [r.get(feat.name) for r in records if r.get(feat.name) is not None]
             if not vals:
@@ -355,6 +380,7 @@ class FeatureStore:
 # Convenience: build a sample RAG feature group
 # ---------------------------------------------------------------------------
 
+
 def build_rag_feature_group() -> FeatureGroup:
     """Standard feature group for RAG query analytics."""
     return FeatureGroup(
@@ -363,14 +389,28 @@ def build_rag_feature_group() -> FeatureGroup:
         event_time_col="event_time",
         description="Per-user RAG query statistics for personalisation and quality monitoring.",
         features=[
-            FeatureSchema("avg_retrieval_latency_ms", "float", description="Rolling avg retrieval latency"),
-            FeatureSchema("avg_ragas_faithfulness", "float", description="Rolling avg faithfulness score"),
-            FeatureSchema("avg_ragas_relevancy", "float", description="Rolling avg answer relevancy"),
+            FeatureSchema(
+                "avg_retrieval_latency_ms", "float", description="Rolling avg retrieval latency"
+            ),
+            FeatureSchema(
+                "avg_ragas_faithfulness", "float", description="Rolling avg faithfulness score"
+            ),
+            FeatureSchema(
+                "avg_ragas_relevancy", "float", description="Rolling avg answer relevancy"
+            ),
             FeatureSchema("query_count_7d", "int", description="Query count in last 7 days"),
             FeatureSchema("preferred_top_k", "int", description="Preferred top-k from feedback"),
             FeatureSchema("avg_chunk_score", "float", description="Avg retrieved chunk relevance"),
-            FeatureSchema("rerank_improvement_rate", "float", description="Fraction of queries where rerank improved result"),
-            FeatureSchema("domain_affinity", "string", description="Primary query domain (tech/finance/science)"),
+            FeatureSchema(
+                "rerank_improvement_rate",
+                "float",
+                description="Fraction of queries where rerank improved result",
+            ),
+            FeatureSchema(
+                "domain_affinity",
+                "string",
+                description="Primary query domain (tech/finance/science)",
+            ),
         ],
         tags={"domain": "rag", "team": "llmops"},
     )
@@ -391,18 +431,35 @@ if __name__ == "__main__":
         tags=group.tags,
     )
 
-    store.write_features("rag_query_stats", [
-        {"user_id": "u001", "event_time": "2024-01-15T10:00:00Z",
-         "avg_retrieval_latency_ms": 42.3, "avg_ragas_faithfulness": 0.847,
-         "avg_ragas_relevancy": 0.823, "query_count_7d": 23,
-         "preferred_top_k": 5, "avg_chunk_score": 0.78,
-         "rerank_improvement_rate": 0.61, "domain_affinity": "tech"},
-        {"user_id": "u002", "event_time": "2024-01-15T11:00:00Z",
-         "avg_retrieval_latency_ms": 38.1, "avg_ragas_faithfulness": 0.791,
-         "avg_ragas_relevancy": 0.801, "query_count_7d": 7,
-         "preferred_top_k": 3, "avg_chunk_score": 0.71,
-         "rerank_improvement_rate": 0.52, "domain_affinity": "finance"},
-    ])
+    store.write_features(
+        "rag_query_stats",
+        [
+            {
+                "user_id": "u001",
+                "event_time": "2024-01-15T10:00:00Z",
+                "avg_retrieval_latency_ms": 42.3,
+                "avg_ragas_faithfulness": 0.847,
+                "avg_ragas_relevancy": 0.823,
+                "query_count_7d": 23,
+                "preferred_top_k": 5,
+                "avg_chunk_score": 0.78,
+                "rerank_improvement_rate": 0.61,
+                "domain_affinity": "tech",
+            },
+            {
+                "user_id": "u002",
+                "event_time": "2024-01-15T11:00:00Z",
+                "avg_retrieval_latency_ms": 38.1,
+                "avg_ragas_faithfulness": 0.791,
+                "avg_ragas_relevancy": 0.801,
+                "query_count_7d": 7,
+                "preferred_top_k": 3,
+                "avg_chunk_score": 0.71,
+                "rerank_improvement_rate": 0.52,
+                "domain_affinity": "finance",
+            },
+        ],
+    )
 
     online = store.get_online_features("rag_query_stats", ["u001", "u002"])
     print("Online features:", json.dumps(online, indent=2))
@@ -411,7 +468,9 @@ if __name__ == "__main__":
         {"user_id": "u001", "event_time": "2024-01-15T12:00:00Z", "label": 1},
         {"user_id": "u002", "event_time": "2024-01-15T12:00:00Z", "label": 0},
     ]
-    training = store.get_training_dataset(entity_df, feature_groups=["rag_query_stats"], label_col="label")
+    training = store.get_training_dataset(
+        entity_df, feature_groups=["rag_query_stats"], label_col="label"
+    )
     print("\nTraining dataset:")
     for row in training:
         print(" ", {k: v for k, v in row.items() if k != "event_time"})

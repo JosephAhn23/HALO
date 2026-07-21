@@ -9,16 +9,16 @@ Production dataset engineering for LLM pipelines:
   - FeatureStore     : lightweight feature registry with versioning
 """
 
-from src.dataset_engineering.versioning import DatasetVersion, DatasetLineage
-from src.dataset_engineering.quality import QualityChecker, QualityReport, QualityIssue
-from src.dataset_engineering.synthetic import SyntheticQAGenerator, SyntheticDataset, SyntheticQA
 from src.dataset_engineering.feature_store import (
-    FeatureStore,
     FeatureDefinition,
     FeatureSnapshot,
-    FeatureSpec,      # alias for FeatureDefinition
-    FeatureVector,    # alias for FeatureSnapshot
+    FeatureSpec,  # alias for FeatureDefinition
+    FeatureStore,
+    FeatureVector,  # alias for FeatureSnapshot
 )
+from src.dataset_engineering.quality import QualityChecker, QualityIssue, QualityReport
+from src.dataset_engineering.synthetic import SyntheticDataset, SyntheticQA, SyntheticQAGenerator
+from src.dataset_engineering.versioning import DatasetLineage, DatasetVersion
 
 # Backwards-compatible aliases
 DataQualityChecker = QualityChecker

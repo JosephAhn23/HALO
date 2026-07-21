@@ -2,19 +2,19 @@
 Diffusion model integration - text-to-image generation with RAG grounding.
 Covers: Diffusion models, multimodal generation, post-training
 """
+
 import time
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import mlflow
 import numpy as np
 import torch
-from PIL import Image
 from diffusers import (
     DPMSolverMultistepScheduler,
     StableDiffusionImg2ImgPipeline,
     StableDiffusionPipeline,
 )
+from PIL import Image
 from transformers import CLIPTextModel, CLIPTokenizer
 
 MODEL_ID = "runwayml/stable-diffusion-v1-5"
@@ -60,12 +60,12 @@ class RAGGroundedDiffusion:
     def generate_from_rag_context(
         self,
         query: str,
-        retrieved_chunks: List[Dict],
+        retrieved_chunks: list[dict],
         n_images: int = 4,
         guidance_scale: float = 7.5,
         n_steps: int = 20,
         negative_prompt: str = "blurry, low quality, distorted, ugly",
-    ) -> Dict:
+    ) -> dict:
         """
         Generate images conditioned on RAG-retrieved context.
         Synthesizes prompt from retrieved chunks + original query.
@@ -111,7 +111,7 @@ class RAGGroundedDiffusion:
             "n_steps": n_steps,
         }
 
-    def benchmark_scheduler_comparison(self) -> Dict:
+    def benchmark_scheduler_comparison(self) -> dict:
         """
         Compare schedulers: DDPM vs DPM-Solver++ vs PNDM.
         Covers: Diffusion model latency reduction
@@ -197,8 +197,8 @@ class MultimodalRAGPipeline:
 
     def multimodal_query(
         self,
-        text_query: Optional[str] = None,
-        image_path: Optional[str] = None,
+        text_query: str | None = None,
+        image_path: str | None = None,
         alpha: float = 0.5,
     ) -> np.ndarray:
         """

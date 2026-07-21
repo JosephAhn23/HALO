@@ -1,7 +1,6 @@
 """Quality gates + MLflow tracking for physics simulations."""
 
 import logging
-from typing import Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +13,7 @@ class QualityGates:
     MU_DEVIATION_THRESHOLD = 0.01  # < 1% magnetic moment deviation
 
     @staticmethod
-    def validate(diagnostics: Dict) -> Tuple[bool, str, float]:
+    def validate(diagnostics: dict) -> tuple[bool, str, float]:
         """
         Validate physics simulation quality.
 
@@ -31,13 +30,19 @@ class QualityGates:
         failures = []
 
         if energy_drift > QualityGates.ENERGY_DRIFT_THRESHOLD:
-            failures.append(f"Energy drift {energy_drift:.4f}% > {QualityGates.ENERGY_DRIFT_THRESHOLD}%")
+            failures.append(
+                f"Energy drift {energy_drift:.4f}% > {QualityGates.ENERGY_DRIFT_THRESHOLD}%"
+            )
 
         if spin_norm_drift > QualityGates.SPIN_NORM_DRIFT_THRESHOLD:
-            failures.append(f"Spin norm drift {spin_norm_drift:.6f}% > {QualityGates.SPIN_NORM_DRIFT_THRESHOLD}%")
+            failures.append(
+                f"Spin norm drift {spin_norm_drift:.6f}% > {QualityGates.SPIN_NORM_DRIFT_THRESHOLD}%"
+            )
 
         if mu_max_rel_dev > QualityGates.MU_DEVIATION_THRESHOLD:
-            failures.append(f"Magnetic moment deviation {mu_max_rel_dev:.4f} > {QualityGates.MU_DEVIATION_THRESHOLD}")
+            failures.append(
+                f"Magnetic moment deviation {mu_max_rel_dev:.4f} > {QualityGates.MU_DEVIATION_THRESHOLD}"
+            )
 
         gates_passed = len(failures) == 0
         reason = "; ".join(failures) if failures else "All gates passed"
@@ -47,7 +52,7 @@ class QualityGates:
         return gates_passed, reason, quality_score
 
 
-def track_to_mlflow(run_id: str, results: Dict, hardware_info: Dict, wall_clock_time: float):
+def track_to_mlflow(run_id: str, results: dict, hardware_info: dict, wall_clock_time: float):
     """Log simulation results to MLflow."""
     try:
         import mlflow

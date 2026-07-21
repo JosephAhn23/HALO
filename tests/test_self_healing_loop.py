@@ -1,6 +1,6 @@
 """Self-healing pytest loop (Docker path mocked)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.sandbox.code_sandbox import ExecutionResult
 from src.sandbox.self_healing_loop import SelfHealingLoop
@@ -11,6 +11,7 @@ def test_self_healing_stops_on_green() -> None:
     good = ExecutionResult(exit_code=0, stdout="1 passed", stderr="", language="bash")
 
     with patch.object(loop, "_docker_pytest", return_value=good):
+
         def revise(files, fb):
             raise AssertionError("no revise on green")
 
@@ -36,6 +37,8 @@ def test_self_healing_calls_revise_on_red() -> None:
             calls.append(fb[:30])
             return {**files, "t.py": "def test_x(): assert True\n"}
 
-        r = loop.run_until_pytest_green({"t.py": "def test_x(): assert False"}, revise, max_rounds=4)
+        r = loop.run_until_pytest_green(
+            {"t.py": "def test_x(): assert False"}, revise, max_rounds=4
+        )
     assert r.success is True
     assert len(calls) == 1

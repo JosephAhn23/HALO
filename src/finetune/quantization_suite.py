@@ -21,14 +21,15 @@ Terminology:
 Run locally (CPU, no GPU needed for PTQ demo):
     python finetune/quantization_suite.py
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -40,14 +41,15 @@ logger = logging.getLogger(__name__)
 # Config
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class QuantizationConfig:
-    model_name: str = "facebook/opt-125m"       # small model for demos
+    model_name: str = "facebook/opt-125m"  # small model for demos
     output_dir: str = "outputs/quantized"
     calibration_samples: int = 128
     calibration_seq_len: int = 512
     # PTQ
-    ptq_bits: int = 8                           # 4 or 8
+    ptq_bits: int = 8  # 4 or 8
     # GPTQ
     gptq_bits: int = 4
     gptq_group_size: int = 128
@@ -60,8 +62,8 @@ class QuantizationConfig:
     qat_lr: float = 1e-5
     qat_batch_size: int = 4
     # Sparsity
-    sparsity_ratio: float = 0.5                 # fraction of weights to zero
-    structured_sparsity: bool = False           # True = channel pruning
+    sparsity_ratio: float = 0.5  # fraction of weights to zero
+    structured_sparsity: bool = False  # True = channel pruning
     # Benchmark
     benchmark_prompt: str = "Explain retrieval-augmented generation in detail."
     benchmark_max_tokens: int = 128
@@ -71,6 +73,7 @@ class QuantizationConfig:
 # ---------------------------------------------------------------------------
 # Post-Training Quantization (PTQ)
 # ---------------------------------------------------------------------------
+
 
 class PostTrainingQuantizer:
     """
@@ -86,7 +89,7 @@ class PostTrainingQuantizer:
     def __init__(self, config: QuantizationConfig):
         self.config = config
 
-    def quantize_bnb_int8(self, model_name: Optional[str] = None) -> Any:
+    def quantize_bnb_int8(self, model_name: str | None = None) -> Any:
         """
         Load model in INT8 using bitsandbytes LLM.int8().
         Reduces memory by ~2x vs FP16 with minimal quality loss.
@@ -108,7 +111,7 @@ class PostTrainingQuantizer:
 
     def quantize_bnb_nf4(
         self,
-        model_name: Optional[str] = None,
+        model_name: str | None = None,
         double_quant: bool = True,
     ) -> Any:
         """
@@ -187,7 +190,7 @@ class PostTrainingQuantizer:
         try:
             params = sum(p.numel() * p.element_size() for p in model.parameters())
             buffers = sum(b.numel() * b.element_size() for b in model.buffers())
-            return (params + buffers) / (1024 ** 3)
+            return (params + buffers) / (1024**3)
         except Exception:
             return 0.0
 
@@ -195,6 +198,7 @@ class PostTrainingQuantizer:
 # ---------------------------------------------------------------------------
 # GPTQ Quantization
 # ---------------------------------------------------------------------------
+
 
 class GPTQQuantizer:
     """
@@ -213,9 +217,9 @@ class GPTQQuantizer:
 
     def quantize(
         self,
-        model_name: Optional[str] = None,
-        output_dir: Optional[str] = None,
-        calibration_texts: Optional[List[str]] = None,
+        model_name: str | None = None,
+        output_dir: str | None = None,
+        calibration_texts: list[str] | None = None,
     ) -> str:
         """
         Quantise a model to GPTQ 4-bit and save to disk.
@@ -234,7 +238,6 @@ class GPTQQuantizer:
             raise ImportError("Install auto-gptq: pip install auto-gptq")
 
         from transformers import AutoTokenizer
-        from datasets import Dataset
 
         model_name = model_name or self.config.model_name
         output_dir = output_dir or os.path.join(self.config.output_dir, "gptq")
@@ -287,7 +290,7 @@ class GPTQQuantizer:
         return model, tokenizer
 
     @staticmethod
-    def _default_calibration_texts() -> List[str]:
+    def _default_calibration_texts() -> list[str]:
         return [
             "Retrieval-augmented generation combines a retrieval system with a generative model.",
             "Large language models are trained on vast corpora of text data.",
@@ -300,6 +303,7 @@ class GPTQQuantizer:
 # ---------------------------------------------------------------------------
 # AWQ Quantization
 # ---------------------------------------------------------------------------
+
 
 class AWQQuantizer:
     """
@@ -319,8 +323,8 @@ class AWQQuantizer:
 
     def quantize(
         self,
-        model_name: Optional[str] = None,
-        output_dir: Optional[str] = None,
+        model_name: str | None = None,
+        output_dir: str | None = None,
     ) -> str:
         """
         Quantise a model to AWQ 4-bit and save to disk.
@@ -373,6 +377,7 @@ class AWQQuantizer:
 # Quantization-Aware Training (QAT)
 # ---------------------------------------------------------------------------
 
+
 class QATTrainer:
     """
     Quantization-Aware Training (QAT) via PyTorch FX graph mode.
@@ -404,7 +409,7 @@ class QATTrainer:
         self,
         model: nn.Module,
         train_loader,
-        optimizer: Optional[torch.optim.Optimizer] = None,
+        optimizer: torch.optim.Optimizer | None = None,
     ) -> nn.Module:
         """
         Run QAT training loop with fake-quantisation active.
@@ -436,7 +441,12 @@ class QATTrainer:
                 total_loss += loss.item()
                 steps += 1
 
-            logger.info("QAT epoch %d/%d — loss=%.4f", epoch + 1, self.config.qat_epochs, total_loss / max(steps, 1))
+            logger.info(
+                "QAT epoch %d/%d — loss=%.4f",
+                epoch + 1,
+                self.config.qat_epochs,
+                total_loss / max(steps, 1),
+            )
 
         return model
 
@@ -456,6 +466,7 @@ class QATTrainer:
 # ---------------------------------------------------------------------------
 # Sparsity / Pruning
 # ---------------------------------------------------------------------------
+
 
 class SparsityPruner:
     """
@@ -477,8 +488,8 @@ class SparsityPruner:
     def prune_unstructured(
         self,
         model: nn.Module,
-        sparsity: Optional[float] = None,
-        layers: Optional[List[type]] = None,
+        sparsity: float | None = None,
+        layers: list[type] | None = None,
     ) -> nn.Module:
         """
         Global magnitude pruning — zeroes the smallest weights globally.
@@ -490,9 +501,7 @@ class SparsityPruner:
         layers = layers or [nn.Linear]
 
         parameters_to_prune = [
-            (module, "weight")
-            for module in model.modules()
-            if isinstance(module, tuple(layers))
+            (module, "weight") for module in model.modules() if isinstance(module, tuple(layers))
         ]
 
         prune.global_unstructured(
@@ -508,14 +517,15 @@ class SparsityPruner:
         actual_sparsity = self._compute_sparsity(model)
         logger.info(
             "Unstructured pruning complete. Target=%.1f%%, Actual=%.1f%%",
-            sparsity * 100, actual_sparsity * 100,
+            sparsity * 100,
+            actual_sparsity * 100,
         )
         return model
 
     def prune_structured(
         self,
         model: nn.Module,
-        sparsity: Optional[float] = None,
+        sparsity: float | None = None,
     ) -> nn.Module:
         """
         Structured (channel/neuron) pruning — removes entire output channels.
@@ -527,15 +537,14 @@ class SparsityPruner:
 
         for module in model.modules():
             if isinstance(module, nn.Linear) and module.out_features > 1:
-                prune.ln_structured(
-                    module, name="weight", amount=sparsity, n=2, dim=0
-                )
+                prune.ln_structured(module, name="weight", amount=sparsity, n=2, dim=0)
                 prune.remove(module, "weight")
 
         actual_sparsity = self._compute_sparsity(model)
         logger.info(
             "Structured pruning complete. Target=%.1f%%, Actual=%.1f%%",
-            sparsity * 100, actual_sparsity * 100,
+            sparsity * 100,
+            actual_sparsity * 100,
         )
         return model
 
@@ -548,13 +557,12 @@ class SparsityPruner:
         Requires: torch >= 2.1 with CUDA 11.8+
         """
         try:
-            from torch.sparse import to_sparse_semi_structured, SparseSemiStructuredTensor
+            from torch.sparse import to_sparse_semi_structured
+
             logger.info("Applying NVIDIA 2:4 semi-structured sparsity")
-            for name, module in model.named_modules():
+            for _name, module in model.named_modules():
                 if isinstance(module, nn.Linear):
-                    module.weight = nn.Parameter(
-                        to_sparse_semi_structured(module.weight)
-                    )
+                    module.weight = nn.Parameter(to_sparse_semi_structured(module.weight))
             logger.info("2:4 sparsity applied")
         except (ImportError, AttributeError) as e:
             logger.warning("2:4 sparsity not available (requires PyTorch 2.1+ with CUDA): %s", e)
@@ -570,7 +578,7 @@ class SparsityPruner:
         return zeros / total if total > 0 else 0.0
 
     @staticmethod
-    def sparsity_report(model: nn.Module) -> Dict[str, float]:
+    def sparsity_report(model: nn.Module) -> dict[str, float]:
         """Per-layer sparsity report."""
         report = {}
         for name, module in model.named_modules():
@@ -584,6 +592,7 @@ class SparsityPruner:
 # ---------------------------------------------------------------------------
 # Quantization Benchmark
 # ---------------------------------------------------------------------------
+
 
 class QuantizationBenchmark:
     """
@@ -600,7 +609,7 @@ class QuantizationBenchmark:
         tokenizer,
         label: str,
         mlflow_run: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Measure latency, throughput, and model size for a single model variant.
 
@@ -643,6 +652,7 @@ class QuantizationBenchmark:
                 tokens_generated.append(out.shape[1] - inputs["input_ids"].shape[1])
 
         import numpy as np
+
         times_arr = np.array(times)
         tok_arr = np.array(tokens_generated)
 
@@ -655,22 +665,27 @@ class QuantizationBenchmark:
             "n_runs": self.config.benchmark_n_runs,
         }
 
-        logger.info("Benchmark [%s]: p50=%.0fms, %.1f tok/s, %.2f GB",
-                    label, metrics["p50_latency_ms"],
-                    metrics["mean_tok_per_sec"], metrics["model_size_gb"])
+        logger.info(
+            "Benchmark [%s]: p50=%.0fms, %.1f tok/s, %.2f GB",
+            label,
+            metrics["p50_latency_ms"],
+            metrics["mean_tok_per_sec"],
+            metrics["model_size_gb"],
+        )
 
         if mlflow_run:
             try:
                 with mlflow.start_run(run_name=f"quant-{label}"):
                     mlflow.log_params({"label": label, "model": self.config.model_name})
-                    mlflow.log_metrics({k: v for k, v in metrics.items()
-                                        if isinstance(v, (int, float))})
+                    mlflow.log_metrics(
+                        {k: v for k, v in metrics.items() if isinstance(v, (int, float))}
+                    )
             except Exception as e:
                 logger.warning("MLflow logging failed: %s", e)
 
         return metrics
 
-    def compare(self, variants: List[Tuple[Any, Any, str]]) -> List[Dict]:
+    def compare(self, variants: list[tuple[Any, Any, str]]) -> list[dict]:
         """
         Run benchmarks across multiple model variants and print a comparison table.
 
@@ -690,8 +705,10 @@ class QuantizationBenchmark:
         print(f"{'Method':<20} {'p50 (ms)':<12} {'tok/s':<10} {'Size (GB)':<12}")
         print("-" * 70)
         for r in results:
-            print(f"{r['label']:<20} {r['p50_latency_ms']:<12.0f} "
-                  f"{r['mean_tok_per_sec']:<10.1f} {r['model_size_gb']:<12.2f}")
+            print(
+                f"{r['label']:<20} {r['p50_latency_ms']:<12.0f} "
+                f"{r['mean_tok_per_sec']:<10.1f} {r['model_size_gb']:<12.2f}"
+            )
         print("=" * 70)
 
         return results
@@ -732,4 +749,6 @@ if __name__ == "__main__":
     logger.info("To run full quantisation pipelines:")
     logger.info("  GPTQ: GPTQQuantizer(config).quantize()  # requires auto-gptq + GPU")
     logger.info("  AWQ:  AWQQuantizer(config).quantize()   # requires autoawq + GPU")
-    logger.info("  NF4:  PostTrainingQuantizer(config).quantize_bnb_nf4()  # requires bitsandbytes + GPU")
+    logger.info(
+        "  NF4:  PostTrainingQuantizer(config).quantize_bnb_nf4()  # requires bitsandbytes + GPU"
+    )

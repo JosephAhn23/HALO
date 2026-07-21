@@ -14,7 +14,9 @@ def test_extract_floats_basic() -> None:
 
 
 def test_numeric_relative_conflict_agrees() -> None:
-    bad, msg = numeric_relative_conflict("result 100.0 units", "equals 100.0", relative_tolerance=0.001)
+    bad, msg = numeric_relative_conflict(
+        "result 100.0 units", "equals 100.0", relative_tolerance=0.001
+    )
     assert bad is False
     assert msg == ""
 

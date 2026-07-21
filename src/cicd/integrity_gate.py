@@ -12,6 +12,7 @@ Usage:
 ``chunks.json`` format: list of {\"text\": \"...\", \"source\": \"...\"} in order
 so ``[source_1]`` maps to index 0 (ingestion-aligned).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -19,7 +20,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
@@ -29,7 +30,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def _load_chunks(path: Optional[str]) -> Optional[List[dict[str, Any]]]:
+def _load_chunks(path: str | None) -> list[dict[str, Any]] | None:
     if not path:
         return None
     p = Path(path)

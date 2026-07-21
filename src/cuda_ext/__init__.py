@@ -1,8 +1,8 @@
 from src.cuda_ext.cuda_kernels import (
     fused_softmax_temperature,
-    topk_sample,
-    top_p_sample,
     rope_embedding,
+    top_p_sample,
+    topk_sample,
 )
 
 __all__ = [

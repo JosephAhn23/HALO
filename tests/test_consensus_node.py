@@ -1,10 +1,14 @@
 """Tests for ConsensusNode (mocked committee)."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
 from src.agents.multi_agent.consensus_node import ConsensusNode, ConsensusState
-from src.agents.multi_agent.cross_provider_consensus import CrossProviderConsensusResult, ProviderAnswer
+from src.agents.multi_agent.cross_provider_consensus import (
+    CrossProviderConsensusResult,
+    ProviderAnswer,
+)
 
 
 def _result(

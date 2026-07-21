@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from statistics import mean
-from typing import Dict, List
 
-
-DEFAULT_MODEL_RATES_USD_PER_1K: Dict[str, Dict[str, float]] = {
+DEFAULT_MODEL_RATES_USD_PER_1K: dict[str, dict[str, float]] = {
     "gpt-4o": {"input": 0.0050, "output": 0.0150},
     "gpt-4o-mini": {"input": 0.00015, "output": 0.00060},
 }
@@ -32,7 +30,7 @@ class CostTracker:
 
     def __init__(self, self_hosted_rate_per_1k_tokens: float = 0.00010) -> None:
         self.self_hosted_rate_per_1k_tokens = self_hosted_rate_per_1k_tokens
-        self._records: List[QueryCostRecord] = []
+        self._records: list[QueryCostRecord] = []
 
     def log_query(
         self,
@@ -55,10 +53,9 @@ class CostTracker:
         input_rate, output_rate = self._resolve_rates(model)
 
         retrieval_cost = (retrieval_tokens / 1000.0) * input_rate
-        generation_cost = (
-            (generation_input_tokens / 1000.0) * input_rate
-            + (generation_output_tokens / 1000.0) * output_rate
-        )
+        generation_cost = (generation_input_tokens / 1000.0) * input_rate + (
+            generation_output_tokens / 1000.0
+        ) * output_rate
         total_cost = retrieval_cost + generation_cost + reranking_compute_usd
 
         record = QueryCostRecord(
@@ -74,7 +71,7 @@ class CostTracker:
         self._records.append(record)
         return record
 
-    def summarize(self, n_qps: float) -> Dict[str, float]:
+    def summarize(self, n_qps: float) -> dict[str, float]:
         """
         Summarize tracked costs and project monthly spend at target QPS.
 
@@ -105,7 +102,7 @@ class CostTracker:
             "projected_monthly_cost_usd": round(projected_monthly_cost, 2),
         }
 
-    def records(self) -> List[QueryCostRecord]:
+    def records(self) -> list[QueryCostRecord]:
         """Return a shallow copy of tracked records."""
         return list(self._records)
 
@@ -116,15 +113,12 @@ class CostTracker:
         if model == "self_hosted":
             rate = self.self_hosted_rate_per_1k_tokens
             return rate, rate
-        raise ValueError(
-            "Unsupported model. Use 'gpt-4o', 'gpt-4o-mini', or 'self_hosted'."
-        )
+        raise ValueError("Unsupported model. Use 'gpt-4o', 'gpt-4o-mini', or 'self_hosted'.")
 
     @staticmethod
-    def _quantile(sorted_vals: List[float], q: float) -> float:
+    def _quantile(sorted_vals: list[float], q: float) -> float:
         """Compute quantile with nearest-rank behavior for dashboard reporting."""
         if not sorted_vals:
             return 0.0
         idx = int(round((len(sorted_vals) - 1) * q))
         return sorted_vals[idx]
-

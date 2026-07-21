@@ -1,8 +1,9 @@
 """
 Tests for FastAPI endpoints - realtime, batch, health, retrieve, ingest, auth.
 """
+
 import importlib
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,14 +11,17 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
-    with patch("api.main.run_pipeline") as mock_run, \
-         patch("api.batch.redis_client") as mock_redis, \
-         patch("api.batch._get_cw", return_value=MagicMock()):
+    with (
+        patch("api.main.run_pipeline") as mock_run,
+        patch("api.batch.redis_client") as mock_redis,
+        patch("api.batch._get_cw", return_value=MagicMock()),
+    ):
         mock_run.return_value = {"response": {}, "error": "", "reranked_chunks": []}
         mock_redis.ping.return_value = True
         mock_redis.hgetall.return_value = {}
 
         from src.api.main import app
+
         yield TestClient(app)
 
 
@@ -27,13 +31,19 @@ def authed_client(monkeypatch):
     monkeypatch.setenv("API_KEY", "test-secret")
     # Force re-evaluation of the module-level _API_KEY constant.
     import src.api.main as main_mod
+
     importlib.reload(main_mod)
     # Patch run_pipeline on the *reloaded* module so authenticated /query
     # requests don't hit the real pipeline (no FAISS index / OpenAI key in CI).
-    with patch.object(main_mod, "run_pipeline",
-                      return_value={"response": {}, "error": "", "reranked_chunks": []}), \
-         patch("api.batch.redis_client") as mock_redis, \
-         patch("api.batch._get_cw", return_value=MagicMock()):
+    with (
+        patch.object(
+            main_mod,
+            "run_pipeline",
+            return_value={"response": {}, "error": "", "reranked_chunks": []},
+        ),
+        patch("api.batch.redis_client") as mock_redis,
+        patch("api.batch._get_cw", return_value=MagicMock()),
+    ):
         mock_redis.ping.return_value = True
         mock_redis.hgetall.return_value = {}
         yield TestClient(main_mod.app)
@@ -67,7 +77,9 @@ class TestRealtimeEndpoint:
         assert "sources" in data
 
     def test_query_endpoint_error_returns_502(self, client):
-        with patch("api.main.run_pipeline", return_value={"error": "index not loaded", "response": {}}):
+        with patch(
+            "api.main.run_pipeline", return_value={"error": "index not loaded", "response": {}}
+        ):
             response = client.post("/query", json={"query": "test query"})
         assert response.status_code == 502
 

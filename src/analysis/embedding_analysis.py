@@ -2,7 +2,6 @@
 High-dimensional embedding analysis + UMAP visualization.
 Covers: High-dimensional data analysis, dimensionality reduction
 """
-from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import mlflow
@@ -31,7 +30,7 @@ class EmbeddingAnalyzer:
         self.scaler = StandardScaler()
         self.n_clusters = n_clusters
 
-    def analyze(self, embeddings: np.ndarray, metadata: List[Dict]) -> Dict:
+    def analyze(self, embeddings: np.ndarray, metadata: list[dict]) -> dict:
         """Full analysis: UMAP reduction + clustering + quality metrics."""
         print(f"Analyzing {embeddings.shape[0]} embeddings of dim {embeddings.shape[1]}...")
 
@@ -40,7 +39,9 @@ class EmbeddingAnalyzer:
 
         kmeans = KMeans(n_clusters=self.n_clusters, random_state=42, n_init=10)
         cluster_labels = kmeans.fit_predict(embeddings_scaled)
-        sil_score = silhouette_score(embeddings_scaled, cluster_labels, sample_size=min(5000, len(embeddings)))
+        sil_score = silhouette_score(
+            embeddings_scaled, cluster_labels, sample_size=min(5000, len(embeddings))
+        )
 
         cov = np.cov(embeddings.T)
         eigenvalues = np.linalg.eigvalsh(cov)
@@ -75,7 +76,7 @@ class EmbeddingAnalyzer:
         self,
         reduced: np.ndarray,
         cluster_labels: np.ndarray,
-        metadata: List[Dict],
+        metadata: list[dict],
         output_path: str = "outputs/embedding_space.png",
     ):
         """Visualize embedding clusters."""
@@ -88,7 +89,9 @@ class EmbeddingAnalyzer:
             for spine in ax.spines.values():
                 spine.set_edgecolor("#333")
 
-        scatter = axes[0].scatter(reduced[:, 0], reduced[:, 1], c=cluster_labels, cmap="tab20", alpha=0.6, s=2)
+        scatter = axes[0].scatter(
+            reduced[:, 0], reduced[:, 1], c=cluster_labels, cmap="tab20", alpha=0.6, s=2
+        )
         axes[0].set_title("Embedding Space (UMAP)", color="white", fontsize=13)
         axes[0].set_xlabel("UMAP-1", color="#aaa")
         axes[0].set_ylabel("UMAP-2", color="#aaa")

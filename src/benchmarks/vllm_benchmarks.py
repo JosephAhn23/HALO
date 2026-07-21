@@ -3,13 +3,13 @@ vLLM inference benchmarks - latency, throughput, quantization comparison.
 Generates real numbers for resume.
 Covers: vLLM benchmark weakness
 """
+
 import argparse
 import json
 import statistics
 import threading
 import time
 from pathlib import Path
-from typing import Dict
 
 BENCHMARK_PROMPTS = [
     "Explain how transformer attention mechanisms work in detail.",
@@ -44,7 +44,7 @@ class VLLMBenchmark:
         n_requests: int = 100,
         max_tokens: int = 256,
         temperature: float = 0.2,
-    ) -> Dict:
+    ) -> dict:
         """Benchmark vLLM throughput + latency."""
         from vllm import LLM, SamplingParams
 
@@ -82,9 +82,7 @@ class VLLMBenchmark:
         batch_outputs = llm.generate(prompts, sampling_params)
         batch_time = time.perf_counter() - start_batch
 
-        tokens_generated = sum(
-            len(o.outputs[0].token_ids) for o in batch_outputs
-        )
+        tokens_generated = sum(len(o.outputs[0].token_ids) for o in batch_outputs)
         tokens_per_second = tokens_generated / batch_time
 
         latencies.sort()
@@ -101,7 +99,7 @@ class VLLMBenchmark:
             "total_tokens": tokens_generated,
         }
 
-    def _run_quantization_comparison(self) -> Dict:
+    def _run_quantization_comparison(self) -> dict:
         """Compare fp16 vs int8 vs int4 quantization."""
         from vllm import LLM, SamplingParams
 
@@ -134,7 +132,7 @@ class VLLMBenchmark:
 
         return results
 
-    def _run_continuous_batching_benchmark(self, concurrent_users: int = 10) -> Dict:
+    def _run_continuous_batching_benchmark(self, concurrent_users: int = 10) -> dict:
         """
         Benchmark vLLM continuous batching under concurrent load.
         vLLM's PagedAttention handles this more efficiently than naive batching.

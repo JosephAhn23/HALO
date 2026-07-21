@@ -1,8 +1,8 @@
 """Scheduling metrics and observability for fleet dispatch plans."""
 
 import logging
-from typing import Dict, Any, List
 from datetime import datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ class SchedulingMetrics:
     """Extract metrics from reconciliation output for MLflow + Prometheus."""
 
     @staticmethod
-    def extract_metrics(plan: Dict[str, Any]) -> Dict[str, float]:
+    def extract_metrics(plan: dict[str, Any]) -> dict[str, float]:
         """
         Extract quantitative metrics from a dispatch plan.
 
@@ -69,7 +69,7 @@ class SchedulingMetrics:
         return metrics
 
     @staticmethod
-    def dispatch_quality_score(plan: Dict[str, Any]) -> float:
+    def dispatch_quality_score(plan: dict[str, Any]) -> float:
         """
         Score dispatch plan quality: 1.0 if all jobs succeeded, 0.0 if any failed or missed.
 
@@ -96,7 +96,7 @@ class SchedulingMetrics:
         return min(1.0, succeeded / total)
 
 
-def track_dispatch_plan(run_id: str, plan: Dict[str, Any], window_start: str, window_end: str):
+def track_dispatch_plan(run_id: str, plan: dict[str, Any], window_start: str, window_end: str):
     """
     Log a dispatch plan to MLflow.
 
