@@ -10,6 +10,8 @@ LLMOps platform with batched physics simulation and deterministic fleet scheduli
 [![AWS](https://img.shields.io/badge/AWS-FF9900?style=for-the-badge&logo=amazonaws&logoColor=white)](https://aws.amazon.com)
 [![Azure](https://img.shields.io/badge/Azure-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white)](https://azure.microsoft.com)
 
+**[→ Threshold: a SaaS concept built on this repo's RAGAS gate + cost router](https://landing-zeta-beige-21.vercel.app)**
+
 <br>
 
 ![Pipeline Architecture](assets/pipeline_flow.png)
